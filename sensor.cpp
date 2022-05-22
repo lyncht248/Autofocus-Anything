@@ -9,8 +9,8 @@
 #include <valarray>
 #include <chrono>
 //#include "matplotlibcpp.h"
-#include <autofocus.h>
-
+#include "autofocus.h"
+#include <fstream>
 //namespace plt = matplotlibcpp;
 using namespace cv;
 using namespace std;
@@ -59,7 +59,7 @@ vector<int> compute_tene_grad(Mat img, int size) {
 
 }
 
-int sharpness(Mat img, double scale) {
+int sharpness(Mat img, double scale, ofstream &outputFile) {
     // This code resizes the image to 1/2, then multiplies the final value by 2
 
     int height = round(img.rows * scale);
@@ -78,12 +78,15 @@ int sharpness(Mat img, double scale) {
 
     vector<int> vec = compute_tene_grad(resized, 16);
 
-    
-    cv::Point p1(vec[vec.size() - 1] / scale, 0), p2(vec[vec.size() - 1] / scale, 979);
-    cv::line(resized, p1, p2, cv::Scalar(0, 0, 255), 2);
+    //WORKING ON THIS LINE
+    std::ostream_iterator<int> output_iterator(outputFile, "\n");
+    std::copy(vec.begin(), vec.end(), output_iterator);
 
-    cv::imshow("Window1", resized);
-    cv::waitKey(1);
+    //cv::Point p1(vec[vec.size() - 1] / scale, 0), p2(vec[vec.size() - 1] / scale, 979);
+    //cv::line(resized, p1, p2, cv::Scalar(0, 0, 255), 2);
+
+    //cv::imshow("Window1", resized);
+    //cv::waitKey(1);
 
 
     return vec[vec.size() -1]/ scale; //get last value from vector (This is location of max focus)

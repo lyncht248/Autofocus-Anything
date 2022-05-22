@@ -2,6 +2,7 @@
 //
 
 #include <iostream>
+#include <fstream>
 #include <windows.h>
 #include "tchar.h"
 #include "autofocus.h"
@@ -9,7 +10,6 @@
 #include <filesystem>
 // #include <atlstr.h>
 
-#include <iostream>
 #include<thread>
 #include <iomanip>
 #include <sstream>
@@ -29,10 +29,9 @@ unsigned char img_data[307200]; //480 * 640
 cv::Mat img;
 cv::Mat TempImg;
 ASI_CONTROL_TYPE ControlType;
-bool bNewImage = 0;
+std::atomic<bool> bNewImage = 0;
 bool bAutofocusing = 0;
 int imgCount = 0;
-
 
 ////Uncomment if using 960 * 1280 image
 //double scale = 1;
@@ -42,30 +41,32 @@ std::mutex mtx;
 std::condition_variable cond_var;
 
 // part of MULTITHREADING ATTEMPT
-//void CaptureVideo(void) {
-//    while (bAutofocusing)
-//    {
-//        if (ASIGetVideoData(0, img_data, img_size, -1) == ASI_SUCCESS)
-//        {
-//            imgCount++;
-//            {
-//                std::unique_lock<std::mutex> lock(mtx);
-//                img = cv::Mat(480, 640, CV_8U, img_data);
-//                bNewImage = 1;
-//            }
-//            cond_var.notify_all();
-//        }
-//        else {
-//            std::cout << "Error getting image from camera!\n";
-//        }
-//    }
-//
-//    ASIStopVideoCapture(0);
-//    if (ASICloseCamera(0) == ASI_SUCCESS)
-//    {
-//        std::cout << "closed\n";
-//    }
-//}
+void CaptureVideo(void) {
+    while (bAutofocusing)
+    {
+        if (ASIGetVideoData(0, img_data, img_size, -1) == ASI_SUCCESS)
+        {
+            imgCount++;
+            {
+                //std::unique_lock<std::mutex> lock(mtx);
+                mtx.lock();
+                img = cv::Mat(480, 640, CV_8U, img_data);
+                mtx.unlock();
+                bNewImage = 1;
+            }
+            //cond_var.notify_all();
+        }
+        else {
+            std::cout << "Error getting image from camera!\n";
+        }
+    }
+
+    ASIStopVideoCapture(0);
+    if (ASICloseCamera(0) == ASI_SUCCESS)
+    {
+        std::cout << "closed\n";
+    }
+}
 
 int main()
 {
@@ -98,12 +99,17 @@ int main()
 
     }
 
-    int frames = 0;
-    while (TRUE) {
-        std::cout << "How many frames?\n";
-        std::cin >> frames;
+    // CREATE FOLDER CALLED HVI_DATA to store things!
+    std::string TextFile = "C:\\Users\\HVI\\Desktop\\HVI_Data\\" + FileName + ".txt";
+    std::ofstream outputFile(TextFile);
 
-        if (frames != 0) {
+
+    int time_autofocusing_s = 0;
+    while (TRUE) {
+        std::cout << "How long should the code run for (s)?\n";
+        std::cin >> time_autofocusing_s;
+
+        if (time_autofocusing_s != 0) {
             break;
         }
 
@@ -120,9 +126,6 @@ int main()
 
     }
 
-
-
-    //Test removing these and see how that affects the resulting images.
 
     if (scale == 0.5) {
         ASISetROIFormat(0, 640, 480, 2, ASI_IMG_RAW8); //Switches to 640*480 at hardware level. Need to check ASI_IMG_RAW8 using GetROIFormat below.
@@ -167,8 +170,6 @@ int main()
     //cv::Mat previmg;
     //previmg = cv::Mat::zeros(height, width, CV_8U);
 
-
-
     using std::chrono::high_resolution_clock;
     using std::chrono::duration_cast;
     using std::chrono::duration;
@@ -184,17 +185,22 @@ int main()
     //cv::namedWindow("Window1");
 
     int timeout = 0;
-    auto t1 = high_resolution_clock::now();
+    auto t1 = std::chrono::steady_clock::now();
+    Sleep(10);
+    auto t2 = std::chrono::steady_clock::now();
+    auto s_int = duration_cast<seconds>(t2 - t1);
 
-    //// MULTITHREADING ATTEMPT
-    //bAutofocusing = 1;
-    //std::thread tCaptureVideo(CaptureVideo);
+    // MULTITHREADING ATTEMPT
+    bAutofocusing = 1;
+    std::thread tCaptureVideo(CaptureVideo);
+    int i = 0;
 
-    for (int i = 0; i < frames; ++i) {
-        if (ASIGetVideoData(0, img_data, size, -1) != ASI_SUCCESS)
-        {
-        	std::cout << "Error getting image from camera!\n";
-        };
+    while(bAutofocusing) {
+//    for (int i = 0; i < frames; ++i) {
+        //if (ASIGetVideoData(0, img_data, size, -1) != ASI_SUCCESS)
+        //{
+        //	std::cout << "Error getting image from camera!\n";
+        //};
 
             // MULTITHREADING ATTEMPT #1
             
@@ -213,130 +219,137 @@ int main()
              //previmg = img.clone();
              //
              //cv::waitKey(0);
+        t2 = std::chrono::steady_clock::now();
+        s_int = duration_cast<seconds>(t2 - t1);
 
+        if (s_int.count() > time_autofocusing_s) {
+            break; // breaks when code runs longer than duration
+        }
         
         // MULTITHREADING ATTEMPT #2
-        //{
-        //    std::unique_lock<std::mutex> lock(mtx);
-        //    cond_var.wait(lock, [] {return bNewImage == 1; });
-        //    TempImg = img;
-        //    bNewImage = 0;
-        //}
 
-        int location = sharpness(TempImg, 0.5);
-        std::cout << location << ", ";
-
-
-        cv::Point p1(location, 0), p2(location, 979);
-        cv::line(TempImg, p1, p2, cv::Scalar(0, 0, 255), 2);
-
-
-        cv::imwrite("C:\\Users\\HVI\\Desktop\\HVI_Images\\" + FileName + "\\img" + std::to_string(i) + "_" + std::to_string(location) + ".png", TempImg);
-
-        if (i < 5) {
-            //ignores the first few images which can sometimes be blank
-        }
-
-        else if (moved == 0 && blink == 0 && abs(location - previous) > (300 * scale)) { // if location of best focus changes by more than 200 pixels with no move, is a blink
-            //Blink starts
-            std::cout << "Frame ignored; blink detected\n";
-            blink = 1;
-        }
-
-        else if (blink == 1) {
-            std::cout << "Frame ignored; blink detected\n";
-            blinkframes--;
-            if (blinkframes == 0) {
-                blinkframes = 3;
-                blink = 0;
-            }
-        }
-
-        else {
-
-            if (abs(location - center) < tol) { // tol
-                std::cout << "No movement; centered\n";
-                moved = 0;
+        if (bNewImage) {
+            i++;
+            {
+                //std::unique_lock<std::mutex> lock(mtx);
+                mtx.lock();
+                TempImg = img;
+                mtx.unlock();
+                bNewImage = 0;
             }
 
-            else if (moved == 1 && abs(location - previous) < 4 && timeout < 3) { //best-focus hasn't moved 5 pixels from previous lens move, so still a delay
-                //Picture hasn't updated from previous move
-                std::cout << "Waiting for picture to update\n";
-                timeout++;
+            int location = sharpness(TempImg, 0.5, outputFile);
+            std::cout << location << ", ";
+
+
+            cv::Point p1(location, 0), p2(location, 979);
+            cv::line(TempImg, p1, p2, cv::Scalar(0, 0, 255), 2);
+
+
+            cv::imwrite("C:\\Users\\HVI\\Desktop\\HVI_Images\\" + FileName + "\\img" + std::to_string(i) + "_" + std::to_string(location) + ".png", TempImg);
+
+            if (i < 5) {
+                //ignores the first few images which can sometimes be blank
             }
 
-            //else {
-            //   mmToMove = (location - center) * slope + intercept;
-            //   mov_rel(mmToMove);
-
-            //   std::cout << "Moved " << mmToMove << "mm\n";
-            //   moved = 1;
-            //   timeout = 0;
-            //} 
-
-
-            else if (abs(location - center) < (200 * scale)) {
-                if (location > center) {
-                    mov_rel(0.05);
-                    std::cout << "Moved left; zone 1\n";
-                }
-                else {
-                    mov_rel(-0.05);
-                    std::cout << "Moved right; zone 1\n";
-                }
-                moved = 1;
-                timeout = 0;
+            else if (moved == 0 && blink == 0 && abs(location - previous) > (300 * scale)) { // if location of best focus changes by more than 200 pixels with no move, is a blink
+                //Blink starts
+                std::cout << "Frame ignored; blink detected\n";
+                blink = 1;
             }
 
-            else if (abs(location - center) < (300 * scale)) {
-                if (location > center) {
-                    mov_rel(0.2);
-                    std::cout << "Moved left; zone 2\n";
+            else if (blink == 1) {
+                std::cout << "Frame ignored; blink detected\n";
+                blinkframes--;
+                if (blinkframes == 0) {
+                    blinkframes = 3;
+                    blink = 0;
                 }
-                else {
-                    mov_rel(-0.2);
-                    std::cout << "Moved right; zone 2\n";
-                }
-                moved = 1;
-                timeout = 0;
-            }
-
-            else if (abs(location - center) < (500 * scale)) {
-                if (location > center) {
-                    mov_rel(0.3);
-                    std::cout << "Moved left; zone 3\n";
-                }
-                else {
-                    mov_rel(-0.3);
-                    std::cout << "Moved right; zone 3\n";
-                }
-                moved = 1;
-                timeout = 0;
             }
 
             else {
-                if (location > center) {
-                    mov_rel(0.5);
-                    std::cout << "Moved left; zone 4\n";
+
+                if (abs(location - center) < tol) { // tol
+                    std::cout << "No movement; centered\n";
+                    moved = 0;
                 }
+
+                else if (moved == 1 && abs(location - previous) < 4 && timeout < 3) { //best-focus hasn't moved 5 pixels from previous lens move, so still a delay
+                    //Picture hasn't updated from previous move
+                    std::cout << "Waiting for picture to update\n";
+                    timeout++;
+                }
+
+                //else {
+                //   mmToMove = (location - center) * slope + intercept;
+                //   mov_rel(mmToMove);
+
+                //   std::cout << "Moved " << mmToMove << "mm\n";
+                //   moved = 1;
+                //   timeout = 0;
+                //} 
+
+
+                else if (abs(location - center) < (200 * scale)) {
+                    if (location > center) {
+                        mov_rel(0.05);
+                        std::cout << "Moved left; zone 1\n";
+                    }
+                    else {
+                        mov_rel(-0.05);
+                        std::cout << "Moved right; zone 1\n";
+                    }
+                    moved = 1;
+                    timeout = 0;
+                }
+
+                else if (abs(location - center) < (300 * scale)) {
+                    if (location > center) {
+                        mov_rel(0.2);
+                        std::cout << "Moved left; zone 2\n";
+                    }
+                    else {
+                        mov_rel(-0.2);
+                        std::cout << "Moved right; zone 2\n";
+                    }
+                    moved = 1;
+                    timeout = 0;
+                }
+
+                else if (abs(location - center) < (500 * scale)) {
+                    if (location > center) {
+                        mov_rel(0.3);
+                        std::cout << "Moved left; zone 3\n";
+                    }
+                    else {
+                        mov_rel(-0.3);
+                        std::cout << "Moved right; zone 3\n";
+                    }
+                    moved = 1;
+                    timeout = 0;
+                }
+
                 else {
-                    mov_rel(-0.5);
-                    std::cout << "Moved right; zone 4\n";
+                    if (location > center) {
+                        mov_rel(0.5);
+                        std::cout << "Moved left; zone 4\n";
+                    }
+                    else {
+                        mov_rel(-0.5);
+                        std::cout << "Moved right; zone 4\n";
+                    }
+                    moved = 1;
+                    timeout = 0;
                 }
-                moved = 1;
-                timeout = 0;
             }
+
+            previous = location;
         }
-
-        previous = location;
-
     }
 
-    auto t2 = high_resolution_clock::now();
 
     /* Getting number of milliseconds, seconds as an integer. */
     auto ms_int = duration_cast<milliseconds>(t2 - t1);
-    auto s_int = duration_cast<seconds>(t2 - t1);
 
     std::cout << ms_int.count() << "ms\n";
     std::cout << s_int.count() << "s\n";
@@ -345,11 +358,12 @@ int main()
     close_motor();
     
     // MULTITHREADING ATTEMPT
-    //bAutofocusing = 0;
-    //tCaptureVideo.join();
-         
-    
-    //cv::destroyWindow("Window1");
+    bAutofocusing = 0;
+    tCaptureVideo.join();
+
+
+    outputFile.close();
+
 
     return 0;
 }

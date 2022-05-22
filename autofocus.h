@@ -7,6 +7,7 @@
 #include "tchar.h"
 #include <iostream>
 #include <iomanip>
+#include <fstream>
 
 #include "C:\opencv-4.2.0\opencv\build\include\opencv2\opencv.hpp"
 
@@ -36,6 +37,6 @@ void close_motor();
 //cv::Mat video_frame(CString FilePath);
 // 
 //Functions from sensor.cpp that we need
-int sharpness(cv::Mat img, double scale);
+int sharpness(cv::Mat img, double scale, std::ofstream& outputFile);
 
 #endif
