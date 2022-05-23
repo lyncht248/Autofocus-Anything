@@ -56,7 +56,7 @@ VOID __init__() {
     }
     //const char* pszBuf = "0so00000400\r\n";
     //port.Write(pszBuf, static_cast<DWORD>(strlen(pszBuf)));
-    Sleep(2000);
+    Sleep(100);
     const char* pszBuf2 = "0ho0\r\n";
     port.Write(pszBuf2, static_cast<DWORD>(strlen(pszBuf2)));
     Sleep(2000);
@@ -65,7 +65,7 @@ VOID __init__() {
     Sleep(2000);
     const char* pszBuf4 = "0vv25\r\n";
     port.Write(pszBuf4, static_cast<DWORD>(strlen(pszBuf4)));
-    Sleep(1500);
+    Sleep(1000);
 
 
 }

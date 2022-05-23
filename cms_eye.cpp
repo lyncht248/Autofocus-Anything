@@ -26,6 +26,8 @@
 double scale = 0.5; 
 const long img_size = 640 * 480;
 unsigned char img_data[307200]; //480 * 640
+unsigned char img_data_temp[307200]; //480 * 640
+
 cv::Mat img;
 cv::Mat TempImg;
 ASI_CONTROL_TYPE ControlType;
@@ -35,29 +37,23 @@ int imgCount = 0;
 
 ////Uncomment if using 960 * 1280 image
 //double scale = 1;
+//const long img_size = 960 * 1280;
 //unsigned char img_data[1228800]; //960 * 1280
- 
-std::mutex mtx;
-std::condition_variable cond_var;
+//unsigned char img_data_temp[1228800]; //480 * 640
+
 
 // part of MULTITHREADING ATTEMPT
 void CaptureVideo(void) {
     while (bAutofocusing)
     {
-        if (ASIGetVideoData(0, img_data, img_size, -1) == ASI_SUCCESS)
+        if (ASIGetVideoData(0, img_data, img_size, -1) != ASI_SUCCESS)
         {
-            imgCount++;
-            {
-                //std::unique_lock<std::mutex> lock(mtx);
-                mtx.lock();
-                img = cv::Mat(480, 640, CV_8U, img_data);
-                mtx.unlock();
-                bNewImage = 1;
-            }
-            //cond_var.notify_all();
+            std::cout << "Error getting image from camera!\n";
+
         }
         else {
-            std::cout << "Error getting image from camera!\n";
+            bNewImage = 1;
+            imgCount++;
         }
     }
 
@@ -128,7 +124,7 @@ int main()
 
 
     if (scale == 0.5) {
-        ASISetROIFormat(0, 640, 480, 2, ASI_IMG_RAW8); //Switches to 640*480 at hardware level. Need to check ASI_IMG_RAW8 using GetROIFormat below.
+        ASISetROIFormat(0, 640, 480, 2, ASI_IMG_RAW8); //Switches to 640*480 at hardware level
     }
     else if (scale == 1) {
         ASISetROIFormat(0, 1280, 960, 1, ASI_IMG_RAW8);
@@ -190,63 +186,43 @@ int main()
     auto t2 = std::chrono::steady_clock::now();
     auto s_int = duration_cast<seconds>(t2 - t1);
 
-    // MULTITHREADING ATTEMPT
+    // MULTITHREADING 
     bAutofocusing = 1;
     std::thread tCaptureVideo(CaptureVideo);
     int i = 0;
 
     while(bAutofocusing) {
-//    for (int i = 0; i < frames; ++i) {
         //if (ASIGetVideoData(0, img_data, size, -1) != ASI_SUCCESS)
         //{
         //	std::cout << "Error getting image from camera!\n";
-        //};
+        //}
+        //else {
+        //    bNewImage = 1;
+        //}
 
-            // MULTITHREADING ATTEMPT #1
-            
-            //mtx.lock();
-            //cv::Mat img = cv::Mat(height, width, CV_8U, img_data);
-            //cv::imshow("Window1", img);
-            //cv::waitKey(1);
-            //mtx.unlock();
-            //bNewImage = 0;
-        
-             //// clone check 
-             //bool eq = cv::countNonZero(previmg != img);        // checking for repeated images
-             //if (eq == 0) {
-             //    std::cout << "Repeated Image\n";
-             //}
-             //previmg = img.clone();
-             //
-             //cv::waitKey(0);
         t2 = std::chrono::steady_clock::now();
         s_int = duration_cast<seconds>(t2 - t1);
 
-        if (s_int.count() > time_autofocusing_s) {
+        if (s_int.count() > time_autofocusing_s-1) {
             break; // breaks when code runs longer than duration
         }
         
-        // MULTITHREADING ATTEMPT #2
-
         if (bNewImage) {
-            i++;
-            {
-                //std::unique_lock<std::mutex> lock(mtx);
-                mtx.lock();
-                TempImg = img;
-                mtx.unlock();
-                bNewImage = 0;
-            }
+            //memcpy(img_data_temp, &img_data, sizeof img_data);
+            i++;            
 
-            int location = sharpness(TempImg, 0.5, outputFile);
+            img = cv::Mat(480, 640, CV_8U, img_data);
+            bNewImage = 0;
+
+            int location = sharpness(img, 0.5, outputFile);
             std::cout << location << ", ";
 
 
-            cv::Point p1(location, 0), p2(location, 979);
-            cv::line(TempImg, p1, p2, cv::Scalar(0, 0, 255), 2);
+            //cv::Point p1(location, 0), p2(location, 979);
+            //cv::line(img, p1, p2, cv::Scalar(0, 0, 255), 2);
 
 
-            cv::imwrite("C:\\Users\\HVI\\Desktop\\HVI_Images\\" + FileName + "\\img" + std::to_string(i) + "_" + std::to_string(location) + ".png", TempImg);
+            cv::imwrite("C:\\Users\\HVI\\Desktop\\HVI_Images\\" + FileName + "\\img" + std::to_string(i) + "_" + std::to_string(location) + ".png", img);
 
             if (i < 5) {
                 //ignores the first few images which can sometimes be blank
@@ -354,7 +330,9 @@ int main()
     std::cout << ms_int.count() << "ms\n";
     std::cout << s_int.count() << "s\n";
 
-    std::cout << imgCount;
+    std::cout << imgCount << " number of images \n";
+    std::cout << i << " iterations of sharpness calculation \n";
+
     close_motor();
     
     // MULTITHREADING ATTEMPT

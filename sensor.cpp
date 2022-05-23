@@ -78,9 +78,10 @@ int sharpness(Mat img, double scale, ofstream &outputFile) {
 
     vector<int> vec = compute_tene_grad(resized, 16);
 
-    //WORKING ON THIS LINE
-    std::ostream_iterator<int> output_iterator(outputFile, "\n");
-    std::copy(vec.begin(), vec.end(), output_iterator);
+    ////WORKING ON THIS LINE
+    //std::ostream_iterator<int> output_iterator(outputFile, ", ");
+    //std::copy(vec.begin(), vec.end(), output_iterator);
+    //outputFile << "\n";
 
     //cv::Point p1(vec[vec.size() - 1] / scale, 0), p2(vec[vec.size() - 1] / scale, 979);
     //cv::line(resized, p1, p2, cv::Scalar(0, 0, 255), 2);
