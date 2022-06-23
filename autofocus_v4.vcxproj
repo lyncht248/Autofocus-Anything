@@ -152,6 +152,7 @@
     <ClCompile Include="cam_obj.cpp" />
     <ClCompile Include="cms_eye.cpp" />
     <ClCompile Include="ctrl_obj.cpp" />
+    <ClCompile Include="pid.cpp" />
     <ClCompile Include="sensor.cpp" />
     <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="Will_motorvids.cpp" />
@@ -160,6 +161,7 @@
     <ClInclude Include="..\..\..\..\..\opencv-4.2.0\opencv\sources\include\opencv2\opencv.hpp" />
     <ClInclude Include="ASICamera2.h" />
     <ClInclude Include="autofocus.h" />
+    <ClInclude Include="pid.h" />
     <ClInclude Include="SerialPort.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />

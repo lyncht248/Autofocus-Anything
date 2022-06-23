@@ -37,6 +37,6 @@ void close_motor();
 //cv::Mat video_frame(CString FilePath);
 // 
 //Functions from sensor.cpp that we need
-int sharpness(cv::Mat img, double scale, std::ofstream& outputFile);
+int sharpness(cv::Mat img, double scale, std::ofstream& outputFile, std::ofstream& outputFile2);
 
 #endif
