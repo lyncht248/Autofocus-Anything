@@ -218,10 +218,10 @@ vector<double> compute_tene_grad(Mat img, int size, ofstream& outputFile2) {
     //outputFile4 << "\n";
 
 
-    //outputs RobertCross curve to OUTPUTFILE
-    std::ostream_iterator<double> output_iterator2(outputFile2, ", ");
-    std::copy(grad_RobertCross.begin(), grad_RobertCross.end(), output_iterator2);
-    outputFile2 << "\n";
+    ////outputs RobertCross curve to OUTPUTFILE
+    //std::ostream_iterator<double> output_iterator2(outputFile2, ", ");
+    //std::copy(grad_RobertCross.begin(), grad_RobertCross.end(), output_iterator2);
+    //outputFile2 << "\n";
 
 
     //returns norm_curve with location of max focus at the end
@@ -258,9 +258,9 @@ int sharpness(Mat img, double scale, ofstream &outputFile, ofstream& outputFile2
     vector<double> vec = compute_tene_grad(blurred, 16, outputFile2);
 
     ////OUTPUT NORMAL CURVE
-    std::ostream_iterator<double> output_iterator(outputFile, ", ");
-    std::copy(vec.begin(), vec.end(), output_iterator);
-    outputFile << "\n";
+    //std::ostream_iterator<double> output_iterator(outputFile, ", ");
+    //std::copy(vec.begin(), vec.end(), output_iterator);
+    //outputFile << "\n";
 
     //cv::imshow("Window1", resized);
     //cv::waitKey(1);

@@ -54,8 +54,8 @@ VOID __init__() {
         std::cout << "Serial port failed to initialize";
 
     }
-    //const char* pszBuf = "0so00000400\r\n";
-    //port.Write(pszBuf, static_cast<DWORD>(strlen(pszBuf)));
+    const char* pszBuf = "0so00000400\r\n";
+    port.Write(pszBuf, static_cast<DWORD>(strlen(pszBuf)));
     Sleep(100);
     const char* pszBuf2 = "0ho0\r\n";
     port.Write(pszBuf2, static_cast<DWORD>(strlen(pszBuf2)));

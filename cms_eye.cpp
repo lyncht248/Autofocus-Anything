@@ -190,13 +190,13 @@ int main()
     double mmToMove;
 
     //// PID CONTROLLER
-    double dt = 1.0 / 30.0; //time per frame
+    double dt = 1.0 / 50.0; //time per frame. Assumes about 50Hz... 
     double max = 3;  //maximum relative move the lens can be ordered to make. Set to 3mm
     double min = -3; 
-    double Kp = 0.001;
-    double Ki = 0.0001;
+    double Kp = 0.0018;
+    double Ki = 0;
     double Kd = 0;
-    PID pid = PID(dt, max, min, Kp, Ki, Kd);
+    PID pid = PID(dt, max, min, Kp, Kd, Ki);
 
 
 
@@ -221,7 +221,7 @@ int main()
     auto t1 = std::chrono::steady_clock::now();
     Sleep(10);
     auto t2 = std::chrono::steady_clock::now();
-    auto s_int = duration_cast<seconds>(t2 - t1);
+    auto s_int = duration_cast<milliseconds>(t2 - t1);
 
     // MULTITHREADING 
     bAutofocusing = 1;
@@ -237,12 +237,12 @@ int main()
 
     int i = 0;
 
-    while(bAutofocusing) {
+    while (bAutofocusing) {
 
         if (!Multihreading_f) {
             if (ASIGetVideoData(0, img_data_next_read_buf, size, -1) != ASI_SUCCESS)
             {
-        	    std::cout << "Error getting image from camera!\n";
+                std::cout << "Error getting image from camera!\n";
             }
             else {
                 std::cout << "ERROR\n";
@@ -252,12 +252,12 @@ int main()
 
 
         t2 = std::chrono::steady_clock::now();
-        s_int = duration_cast<seconds>(t2 - t1);
+        s_int = duration_cast<milliseconds>(t2 - t1);
 
-        if (s_int.count() > time_autofocusing_s-1) {
+        if (s_int.count() > (time_autofocusing_s*1000) - 1000) {
             break; // breaks when code runs longer than duration
         }
-        
+
         if (bNewImage) {
             {
                 std::lock_guard<std::mutex> lck{ mtx };
@@ -286,134 +286,136 @@ int main()
                     previous = center;
                 }
             }
-            
+
             //else if (i < 5) {
             //    //ignores the first few images which can sometimes be blank
             //}
 
             //// BLINK DETECTION
 
-        //    else if (moved == 0 && blink == 0 && abs(location - previous) > (400 * scale)) { // if location of best focus changes by more than 200 pixels with no move, is a blink
-        //        //Blink starts
-        //        std::cout << "Frame ignored; blink detected\n";
-        //        blink = 1;
-        //    }
+            else if (moved == 0 && blink == 0 && abs(location - previous) > (400 * scale)) { // if location of best focus changes by more than 200 pixels with no move, is a blink
+                //Blink starts
+                std::cout << "Frame ignored; blink detected\n";
+                blink = 1;
+            }
 
-        //    else if (blink == 1) {
-        //        std::cout << "Frame ignored; blink detected\n";
-        //        blinkframes--;
-        //        if (blinkframes == 0) {
-        //            blinkframes = 10;
-        //            blink = 0;
-        //        }
-        //    }
-
-
+            else if (blink == 1) {
+                std::cout << "Frame ignored; blink detected\n";
+                blinkframes--;
+                if (blinkframes == 0) {
+                    blinkframes = 15;
+                    blink = 0;
+                }
+            }
 
 
 
-        //    else {
-
-        //        if (abs(location - center) <= tol) { // tol
-        //            std::cout << "No movement; centered\n";
-        //            moved = 0;
-        //        }
-
-        //        else {
-        //            bMotorMoved = 1;
-        //            //// PID CONTROLLER
-        //            //double inc = pid.calculate(center, location);
-        //            //inc = inc * -1.0;
-        //            //mov_rel(inc);
-        //            //std::cout << "Moved " << inc << "mm (PID)";
-
-        //            moved = 1;
-        //            timeout = 0;
 
 
+            else {
 
-        //            //// PROPORTIONAL CONTROLLER
+                if (abs(location - center) <= tol) { // tol
+                    std::cout << s_int.count() << ", ";
+                    std::cout << "0\n";
+                    moved = 0;
+                }
+
+                else {
+                    // PID CONTROLLER
+                    double inc = pid.calculate(center, location);
+                    inc = inc * -1.0;
+                    mov_rel(inc);
+                    std::cout << s_int.count() << ", ";
+                    std::cout << inc << "\n";
+                    moved = 1;
+                    timeout = 0;
+
+                }
+
+                //            //// PROPORTIONAL CONTROLLER
 
 
-        //            /*
-        //            //// Overshoot guard
-        //            //else if (moved == 1 && abs(location - previous) < 10 && timeout < 6) { //best-focus hasn't moved 5 pixels from previous lens move, so still a delay
-        //            //    //Picture hasn't updated from previous move
-        //            //    std::cout << "Waiting for picture to update\n";
-        //            //    timeout++;
-        //            //}
+                //            /*
+                //            //// Overshoot guard
+                //            //else if (moved == 1 && abs(location - previous) < 10 && timeout < 6) { //best-focus hasn't moved 5 pixels from previous lens move, so still a delay
+                //            //    //Picture hasn't updated from previous move
+                //            //    std::cout << "Waiting for picture to update\n";
+                //            //    timeout++;
+                //            //}
 
 
-        //            else {*/
-        //            mmToMove = (location - center) * slope + intercept;
-        //            //mov_rel(mmToMove);
+                //            else {*/
+                //            mmToMove = (location - center) * slope + intercept;
+                //            //mov_rel(mmToMove);
 
-        //            std::cout << "vs. " << mmToMove << "mm (P)\n";
-        //            moved = 1;
-        //            timeout = 0;
-        //            //} 
-        //        }
+                //            std::cout << "vs. " << mmToMove << "mm (P)\n";
+                //            moved = 1;
+                //            timeout = 0;
+                //            //} 
+                //        }
 
-        //        //// ZONING SYSTEM 
+                //        //// ZONING SYSTEM 
 
-        //        /*else if (abs(location - center) < (200 * scale)) {
-        //            if (location > center) {
-        //                mov_rel(0.05);
-        //                std::cout << "Moved left; zone 1\n";
-        //            }
-        //            else {
-        //                mov_rel(-0.05);
-        //                std::cout << "Moved right; zone 1\n";
-        //            }
-        //            moved = 1;
-        //            timeout = 0;
-        //        }
+                //        /*else if (abs(location - center) < (200 * scale)) {
+                //            if (location > center) {
+                //                mov_rel(0.05);
+                //                std::cout << "Moved left; zone 1\n";
+                //            }
+                //            else {
+                //                mov_rel(-0.05);
+                //                std::cout << "Moved right; zone 1\n";
+                //            }
+                //            moved = 1;
+                //            timeout = 0;
+                //        }
 
-        //        else if (abs(location - center) < (300 * scale)) {
-        //            if (location > center) {
-        //                mov_rel(0.2);
-        //                std::cout << "Moved left; zone 2\n";
-        //            }
-        //            else {
-        //                mov_rel(-0.2);
-        //                std::cout << "Moved right; zone 2\n";
-        //            }
-        //            moved = 1;
-        //            timeout = 0;
-        //        }
+                //        else if (abs(location - center) < (300 * scale)) {
+                //            if (location > center) {
+                //                mov_rel(0.2);
+                //                std::cout << "Moved left; zone 2\n";
+                //            }
+                //            else {
+                //                mov_rel(-0.2);
+                //                std::cout << "Moved right; zone 2\n";
+                //            }
+                //            moved = 1;
+                //            timeout = 0;
+                //        }
 
-        //        else if (abs(location - center) < (500 * scale)) {
-        //            if (location > center) {
-        //                mov_rel(0.3);
-        //                std::cout << "Moved left; zone 3\n";
-        //            }
-        //            else {
-        //                mov_rel(-0.3);
-        //                std::cout << "Moved right; zone 3\n";
-        //            }
-        //            moved = 1;
-        //            timeout = 0;
-        //        }
+                //        else if (abs(location - center) < (500 * scale)) {
+                //            if (location > center) {
+                //                mov_rel(0.3);
+                //                std::cout << "Moved left; zone 3\n";
+                //            }
+                //            else {
+                //                mov_rel(-0.3);
+                //                std::cout << "Moved right; zone 3\n";
+                //            }
+                //            moved = 1;
+                //            timeout = 0;
+                //        }
 
-        //        else {
-        //            if (location > center) {
-        //                mov_rel(0.5);
-        //                std::cout << "Moved left; zone 4\n";
-        //            }
-        //            else {
-        //                mov_rel(-0.5);
-        //                std::cout << "Moved right; zone 4\n";
-        //            }
-        //            moved = 1;
-        //            timeout = 0;
-        //        }*/
-        //    }
-        //    bMotorMoved = 0;
-        //    previous = location;
-        
-        } 
+                //        else {
+                //            if (location > center) {
+                //                mov_rel(0.5);
+                //                std::cout << "Moved left; zone 4\n";
+                //            }
+                //            else {
+                //                mov_rel(-0.5);
+                //                std::cout << "Moved right; zone 4\n";
+                //            }
+                //            moved = 1;
+                //            timeout = 0;
+                //        }*/
+                //    }
+                //    bMotorMoved = 0;
+
+            }
+            previous = location;
+
+        }
     }
-
+ 
 
     /* Getting number of milliseconds, seconds as an integer. */
     auto ms_int = duration_cast<milliseconds>(t2 - t1);
