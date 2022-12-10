@@ -1,0 +1,88 @@
+---------
+Building
+---------
+
+Requirements
+-------------
+Package dependencies: cmake pkg-config libgtkmm-3.0-dev libtoon-dev libcvd-dev freeglut3-dev libblas-dev liblapack-dev
+
+Other libraries 
+Vimba: Copy the .so files in Vimba_6_0/VimbaCPP/DynamicLib/x86_64bit to your systems library path (e.g. /usr/lib/)
+
+Build Commands
+---------------
+
+$ cmake
+This command will ensure all requirements are present and accounted for and generate an appropriate Makefile
+
+$ make
+Build the binary
+
+Important
+----------
+
+If moving the app to another location, ensure you have read-write privileges there and make sure the VimbaGigETL.cti file is present alongside the hvi-gtk executable.
+
+
+File Descriptions
+----------
+
+$ main.hpp
+Nearly empy file which defines HVIGTK_RECORD_FRAMECOUNT = 1800
+
+$ main.cpp
+int main() entry point. Creates the Gtk::Application, and runs 
+app->run(system.getWindow()), which pauses execution until the app is closed. 
+
+$ system.hpp: includes mainwindow.hpp, cond.hpp, thread.hpp, recorder.hpp, tsqueue.hpp, logfile.hpp, vidframe.hpp
+    System class: Starts/stops streaming. Handles logic for X, Y, and Z axis stabilization buttons, 
+    and video playback buttons. 
+    FrameProcessor class: Creates thread that either processes frames through a filter, or passes them to putFrame().
+
+$ vidframe.hpp: 
+Data structures for frames (ie. struct Frame), definitions in system.cpp
+
+$ system.cpp: includes version.hpp
+Creates/destroys app, starts/stops camera, and handles logic for when buttons are pushed. 
+Definitions of methods in vidframe.hpp and system.hpp. 
+    FrameObserver class: gets attributes of the recieved frame and prepares window. 
+
+$ mainwindow.hpp: includes cond.hpp, vidframe.hpp
+    ScaleWidget class: Defines the slider widget. See getValue() and setValue().
+    MainWindow class: Creates the GUI layout, and handles all the GUI-level logic. 
+
+$ mainwindow.cpp: includes version.hpp, main.hpp, logfile.hpp
+Defines the GUI layout (by attaching widgets to controlGrid), GUI-level logic, file selection,
+and renders images to the window using Cairo.  
+
+$ recorder.hpp: includes thread.hpp, vidframe.hpp
+    Recorder class: handles video frame saving and loading from a specific file.
+
+$ recorder.cpp: includes main.hpp, system.hpp, logfile.hpp, recorder.hpp
+Defines for the recorder class. 
+
+$ cond.hpp: 
+    Condition class: used in conjunction with mutexes to signal other threads that a variable 
+    state has changed. Signal is 'value', which can be true or false. Each cond (together 'conds')
+    is given a unique ID. 
+    OpCondition class: (operator condition) Similar to above but allows AND, OR, and NOT functions.
+
+$ cond.cpp:
+    Defines Condition and OpCondition classes. Glib::Cond represents conditions that threads can 
+    use to block execution and continue again once the condition changes. (ex. running is a condition)
+
+$ logfile.hpp:
+Allows other files to refer to std::ofstream hvigtk_logfile
+
+$ version.hpp:
+Defines the version number of the software
+
+$ tsqueue.hpp:
+TSQueue is a temporary storage queue, which is used to hold images that are ready for processing 
+
+
+
+Note: 
+set_sensitive(false) is what makes things grey
+
+	// glTexImage2D (GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, surface_data[0]);
