@@ -4,7 +4,7 @@ Building
 
 Requirements
 -------------
-Package dependencies: cmake pkg-config libgtkmm-3.0-dev libtoon-dev libcvd-dev freeglut3-dev libblas-dev liblapack-dev
+Package dependencies: cmake pkg-config libgtkmm-3.0-dev libtoon-dev libcvd-dev freeglut3-dev libblas-dev liblapack-dev 
 
 Other libraries 
 Vimba: Copy the .so files in Vimba_6_0/VimbaCPP/DynamicLib/x86_64bit to your systems library path (e.g. /usr/lib/)
@@ -80,9 +80,4 @@ Defines the version number of the software
 $ tsqueue.hpp:
 TSQueue is a temporary storage queue, which is used to hold images that are ready for processing 
 
-
-
-Note: 
-set_sensitive(false) is what makes things grey
-
-	// glTexImage2D (GL_TEXTURE_RECTANGLE_ARB, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, surface_data[0]);
+(Other file descriptions to be added later)
