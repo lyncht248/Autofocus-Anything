@@ -622,10 +622,12 @@ void System::whenFindFocusToggled(bool findingFocus)
 		hvigtk_logfile << "Finding focus" << std::endl;
 		imgcount = 0;
 		bFindFocus = 1;
-		usleep(500000); //half a second
 		
-		// untoggle the button
-		window.getFindFocus().setValue(false);
+		
+		// usleep(500000); //half a second
+		
+		// // untoggle the button
+		// window.getFindFocusActive().setValue(false);
 
 	}
 	else

@@ -921,10 +921,12 @@ void MainWindow::whenFindFocusToggled(bool findingFocus)
 {
 	if (findingFocus)
 	{
-		bestFocusScale.set_sensitive(true);
-
 		holdFocusToggle.set_sensitive(false);
 		tdStabToggle.set_sensitive(false);
+
+		//Wait 2 seconds and then disable the toggle, making it a button
+		usleep(2000000);
+		findFocusToggle.set_active(false);
 
 		//GUI CHANGES WHEN "FINDING FOCUS" IS ENABLED GO HERE
 	}
