@@ -1,0 +1,67 @@
+#include "main.hpp"
+#include <fstream>
+#include <iostream>
+#include <gtkmm.h>
+#include <unistd.h>
+
+#include "glibmm/main.h"
+#include "sdlwindow.hpp"
+#include "version.hpp"
+#include "system.hpp"
+#include "logfile.hpp"
+#include "autofocus.hpp"
+
+#include <thread>
+
+char workingdir[4096] = "";
+const char *hvigtk_startdir = workingdir;
+
+std::ofstream hvigtk_logfile("hvigtk.log");
+
+SDLWindow::SDLWin *childwin = nullptr;
+int center;
+
+int main(int argc, char **argv) 
+{
+
+    // Spawns the SDL window, which is done in a separate process
+	childwin = SDLWindow::sdlwin_open();
+	if (!childwin)
+		return 1;
+    if ( !getcwd(workingdir, 4096) )
+    {
+        workingdir[0] = 0;
+    }
+
+    // Creates a GTK application object
+    auto app = Gtk::Application::create(argc, argv, HVIGTK_APPID); 
+
+    // Initializes the GTK thread system and sets the GTK thread to default (?)
+	if(!Glib::thread_supported() ) Glib::thread_init();
+	Glib::MainContext::get_default()->push_thread_default();
+
+    // Creates a System object to run the logic behind the app's main window
+    System system(argc, argv);
+
+    // Creates an Autofocus object to run the autofocusing logic (should be done in system object)
+    autofocus AF;
+
+    //Starts an autofocusing thread (should be replaced by constructor for the AF object, I believe)
+    std::thread tAutofocus(&autofocus::run, &AF);
+
+    //Opens the GTK application GUI and stops main() execution. system.getWindow() returns a pointer to the MainWindow object created in system.cc
+    int out = app->run(system.getWindow() );
+
+    //Closes logfile when GTK application exits
+	hvigtk_logfile.close();
+
+    //Closes the SDL window
+	SDLWindow::sdlwin_close(childwin);
+
+    // Stops the autofocus thread. This should be a destructor in the autofocus object
+    tAutofocus.join(); // Stops the CaptureVideo thread too. This should be a destructor in the autofocus object instead
+
+    //Returns the exit code of the GTK application
+	return out;
+}
+

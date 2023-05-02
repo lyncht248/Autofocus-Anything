@@ -1,0 +1,25 @@
+{
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "C_Cpp.loggingLevel": "Debug",
+    "C_Cpp.intelliSenseEngine": "default",
+    "C_Cpp.autocomplete": "default",
+    "window.autoDetectColorScheme": false,
+    "C_Cpp.errorSquiggles": "enabled",
+    "C_Cpp.enhancedColorization": "enabled",
+    "C_Cpp.foldingRanges": "enabled",
+    "C_Cpp.intelliSenseEngineFallback": "enabled",
+    "C_Cpp.intelliSenseCachePath": "${workspaceFolder}/.vscode/.ipch",
+    "files.associations": {
+        "thread": "cpp",
+        "atomic": "cpp",
+        "*.tcc": "cpp",
+        "istream": "cpp",
+        "ostream": "cpp",
+        "stop_token": "cpp",
+        "typeinfo": "cpp",
+        "chrono": "cpp",
+        "vector": "cpp",
+        "iostream": "cpp"
+    }
+}
