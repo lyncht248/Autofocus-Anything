@@ -190,6 +190,7 @@ private:
     Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, findFocusToggle, holdFocusToggle, tdStabToggle;
     Gtk::Label fpsLabel;
 
+
 	VidFrame *drawFrame;
 	bool newDrawFrame;
 	int countFrames;

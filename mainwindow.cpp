@@ -28,7 +28,10 @@ struct MainWindow::Private
     Gtk::Grid controlGrid;
     Gtk::VBox rootBox;
     
-    Gtk::Label space4[8];
+    Gtk::Label space4[16];
+	//Gtk::Label verticalLine[8];
+	Gtk::Label autofocusTitle, stabilizationTitle, playbackTitle, cameraSettingsTitle, fileTitle;
+	Gtk::Separator verticalSeparator1, verticalSeparator2, verticalSeparator3, verticalSeparator4;
     
     Gtk::HBox mediaBox, fileChooserBox;
 	Gtk::Box displayBox;
@@ -37,6 +40,7 @@ struct MainWindow::Private
         Private();
 };
 
+// For GUI elements that are static
 MainWindow::Private::Private() :
     gainLabel("Gain: "),
     exposeLabel("Expose: "),
@@ -47,10 +51,20 @@ MainWindow::Private::Private() :
 	//waitLabel("Optimize: "),
 	recordingSizeLabel("Rec. Size: "),
     bestFocusLabel("Best-Focal Plane"),
+	autofocusTitle("Autofocus"),
+	stabilizationTitle("2D Stabilization"),
+	playbackTitle("Playback Controls"),
+	cameraSettingsTitle("Camera Settings"),
+	fileTitle("File Load and Save"),
 	controlFrame(),
     controlGrid(),
+	verticalSeparator1(),
+	verticalSeparator2(),
+	verticalSeparator3(),
+	verticalSeparator4(),
     rootBox(),
-    space4{Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    ")},
+    space4{Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    "), Gtk::Label("    ")},
+    //verticalLine{Gtk::Label(" | "), Gtk::Label("  |  "), Gtk::Label("  |  "), Gtk::Label("  |  "), Gtk::Label("  |  "), Gtk::Label("  |  "), Gtk::Label("  |  "), Gtk::Label("  |  ")},
 	mediaBox(Gtk::Orientation::ORIENTATION_HORIZONTAL),
     fileChooserBox(),
 	displayBox()
@@ -74,8 +88,9 @@ MainWindow::Private::Private() :
     
     controlGrid.set_hexpand();
     controlGrid.set_halign(Gtk::Align::ALIGN_FILL);
+    //controlGrid.set_row_spacing(10);
     controlGrid.set_row_spacing(3);
-    
+
     rootBox.set_hexpand();
     rootBox.set_halign(Gtk::Align::ALIGN_FILL);
 
@@ -84,10 +99,54 @@ MainWindow::Private::Private() :
     
     for (Gtk::Label &label : space4)
         label.set_justify(Gtk::Justification::JUSTIFY_CENTER);
-    
+	    
     mediaBox.set_hexpand(false);
     mediaBox.set_halign(Gtk::Align::ALIGN_CENTER);
+
+   	autofocusTitle.set_justify(Gtk::Justification::JUSTIFY_CENTER);
+    autofocusTitle.set_halign(Gtk::Align::ALIGN_CENTER);
+   	stabilizationTitle.set_justify(Gtk::Justification::JUSTIFY_CENTER);
+    stabilizationTitle.set_halign(Gtk::Align::ALIGN_CENTER);
+   	playbackTitle.set_justify(Gtk::Justification::JUSTIFY_CENTER);
+    playbackTitle.set_halign(Gtk::Align::ALIGN_CENTER);
+   	cameraSettingsTitle.set_justify(Gtk::Justification::JUSTIFY_CENTER);
+    cameraSettingsTitle.set_halign(Gtk::Align::ALIGN_CENTER);
+   	fileTitle.set_justify(Gtk::Justification::JUSTIFY_CENTER);
+    fileTitle.set_halign(Gtk::Align::ALIGN_CENTER);
+
+	autofocusTitle.set_margin_top(6);
+	stabilizationTitle.set_margin_top(6);
+	playbackTitle.set_margin_top(6);
+	cameraSettingsTitle.set_margin_top(6);
+	fileTitle.set_margin_top(6);
+
+	autofocusTitle.set_margin_bottom(6);
+	stabilizationTitle.set_margin_bottom(6);
+	playbackTitle.set_margin_bottom(6);
+	cameraSettingsTitle.set_margin_bottom(6);
+	fileTitle.set_margin_bottom(6);
+
+	// verticalLine[0].override_color (Gdk::RGBA("grey"), Gtk::STATE_FLAG_NORMAL);
+	// verticalLine[1].override_color (Gdk::RGBA("grey"), Gtk::STATE_FLAG_NORMAL);
+	// verticalLine[2].override_color (Gdk::RGBA("grey"), Gtk::STATE_FLAG_NORMAL);
+	// verticalLine[3].override_color (Gdk::RGBA("grey"), Gtk::STATE_FLAG_NORMAL);
+	// verticalLine[4].override_color (Gdk::RGBA("grey"), Gtk::STATE_FLAG_NORMAL);
+	// verticalLine[5].override_color (Gdk::RGBA("grey"), Gtk::STATE_FLAG_NORMAL);
+	// verticalLine[6].override_color (Gdk::RGBA("grey"), Gtk::STATE_FLAG_NORMAL);
+	// verticalLine[7].override_color (Gdk::RGBA("grey"), Gtk::STATE_FLAG_NORMAL);
+	// verticalLine[8].override_color (Gdk::RGBA("grey"), Gtk::STATE_FLAG_NORMAL);
+
+    verticalSeparator1.set_orientation(Gtk::ORIENTATION_VERTICAL);
+    verticalSeparator2.set_orientation(Gtk::ORIENTATION_VERTICAL);
+    verticalSeparator3.set_orientation(Gtk::ORIENTATION_VERTICAL);
+    verticalSeparator4.set_orientation(Gtk::ORIENTATION_VERTICAL);
 	
+	verticalSeparator1.override_color (Gdk::RGBA("black"), Gtk::STATE_FLAG_NORMAL);
+	verticalSeparator2.override_color (Gdk::RGBA("black"), Gtk::STATE_FLAG_NORMAL);
+	verticalSeparator3.override_color (Gdk::RGBA("black"), Gtk::STATE_FLAG_NORMAL);
+	verticalSeparator4.override_color (Gdk::RGBA("black"), Gtk::STATE_FLAG_NORMAL);
+
+
 	/*
 	displayBox.set_hexpand(true);
 	displayBox.set_vexpand(true);
@@ -475,59 +534,78 @@ MainWindow::MainWindow() : Gtk::Window(),
 
 	//ATTACHING
 
-    priv->fileChooserBox.add(fileNameEntry);
-    priv->fileChooserBox.add(fileChooseButton);
-    
-    priv->controlGrid.attach(priv->gainLabel, 12, 0);
-    priv->controlGrid.attach(gainScale, 13, 0);
-    
-    priv->controlGrid.attach(priv->exposeLabel, 12, 1);
-    priv->controlGrid.attach(exposeScale, 13, 1);
-    
-    priv->controlGrid.attach(priv->gammaLabel, 12, 2);
-    priv->controlGrid.attach(gammaScale, 13, 2);
-    
     priv->controlGrid.attach(priv->space4[0], 0, 0);
-    priv->controlGrid.attach(priv->mediaBox, 10, 0);
-    priv->controlGrid.attach(frameSlider, 10, 1);
-    
-    priv->controlGrid.attach(priv->space4[1], 2, 0);
-    priv->controlGrid.attach(priv->fileChooserBox, 15, 0, 2, 1);
-    
-    priv->controlGrid.attach(fileLoadButton, 15, 1);
-    priv->controlGrid.attach(fileSaveButton, 16, 1);
-    
-    priv->controlGrid.attach(priv->space4[2], 4, 0);
-    priv->controlGrid.attach(makeMapToggle, 5, 0);
-    priv->controlGrid.attach(stabiliseToggle, 5, 1);
-    priv->controlGrid.attach(showMapToggle, 5, 2);
-    
-    priv->controlGrid.attach(priv->space4[3], 6, 0);
-    priv->controlGrid.attach(priv->thresLabel, 7, 0);
-    priv->controlGrid.attach(thresScale, 8, 0);
-    priv->controlGrid.attach(priv->scaleLabel, 7, 1);
-    priv->controlGrid.attach(scaleScale, 8, 1);
-    
-    priv->controlGrid.attach(priv->space4[4], 9, 0);
+
+	priv->controlGrid.attach(priv->autofocusTitle, 1, 3, 3);
     priv->controlGrid.attach(findFocusToggle, 1, 0);
     priv->controlGrid.attach(holdFocusToggle, 1, 1);
     priv->controlGrid.attach(tdStabToggle, 1, 2);
-    
-    priv->controlGrid.attach(priv->space4[5], 11, 0);
+
+    priv->controlGrid.attach(priv->space4[1], 2, 0);
+
     priv->controlGrid.attach(priv->bestFocusLabel, 3, 0);
     priv->controlGrid.attach(bestFocusScale, 3, 1);
-    priv->controlGrid.attach(fpsLabel, 10, 2);
-    priv->controlGrid.attach(priv->space4[6], 14, 0);
-    priv->controlGrid.attach(priv->space4[7], 17, 0);
 
-	priv->controlGrid.attach(priv->frameRateLabel, 12, 3);
-	priv->controlGrid.attach(frameRateScale, 13, 3);
+	priv->controlGrid.attach(priv->space4[2], 4, 0);
+    priv->controlGrid.attach(priv->verticalSeparator1, 5, 0, 1, 4);
+	priv->controlGrid.attach(priv->space4[3], 6, 0);
+
+	priv->controlGrid.attach(priv->stabilizationTitle, 7, 3, 4);
+    priv->controlGrid.attach(makeMapToggle, 7, 0);
+    priv->controlGrid.attach(stabiliseToggle, 7, 1);
+    priv->controlGrid.attach(showMapToggle, 7, 2);
+
+    priv->controlGrid.attach(priv->space4[4], 8, 0);
+
+    priv->controlGrid.attach(priv->thresLabel, 9, 0);
+    priv->controlGrid.attach(priv->scaleLabel, 9, 1);
+    priv->controlGrid.attach(priv->recordingSizeLabel, 9, 2);
+
+    priv->controlGrid.attach(thresScale, 10, 0);
+    priv->controlGrid.attach(scaleScale, 10, 1);
+    priv->controlGrid.attach(recordingSizeScale, 10, 2);
+
+	priv->controlGrid.attach(priv->space4[5], 11, 0);
+	priv->controlGrid.attach(priv->verticalSeparator2, 12, 0, 1, 4);
+	priv->controlGrid.attach(priv->space4[6], 13, 0);
+
+	priv->controlGrid.attach(priv->playbackTitle, 14, 3, 1);
+    priv->controlGrid.attach(priv->mediaBox, 14, 0);
+    priv->controlGrid.attach(frameSlider, 14, 1);
+    priv->controlGrid.attach(fpsLabel, 14, 2);
+
+	priv->controlGrid.attach(priv->space4[7], 15, 0);
+	priv->controlGrid.attach(priv->verticalSeparator3, 16, 0, 1, 4);
+	priv->controlGrid.attach(priv->space4[8], 17, 0);
+
+	priv->controlGrid.attach(priv->cameraSettingsTitle, 18, 3, 2);
+    priv->controlGrid.attach(priv->gainLabel, 18, 0);
+    priv->controlGrid.attach(priv->exposeLabel, 18, 1);
+    // priv->controlGrid.attach(priv->gammaLabel, 18, 3);
+	priv->controlGrid.attach(priv->frameRateLabel, 18, 2);
+ 
+    priv->controlGrid.attach(gainScale, 19, 0);
+    priv->controlGrid.attach(exposeScale, 19, 1);
+    // priv->controlGrid.attach(gammaScale, 19, 2);
+	priv->controlGrid.attach(frameRateScale, 19, 2);
+
+	priv->controlGrid.attach(priv->space4[9], 20, 0);
+	priv->controlGrid.attach(priv->verticalSeparator4, 21, 0, 1, 4);
+	priv->controlGrid.attach(priv->space4[10], 22, 0);
+
+	priv->controlGrid.attach(priv->fileTitle, 23, 3, 2);
+    priv->fileChooserBox.add(fileNameEntry);
+    priv->fileChooserBox.add(fileChooseButton);
+    priv->controlGrid.attach(priv->fileChooserBox, 23, 0, 2, 1);
+    priv->controlGrid.attach(fileLoadButton, 23, 1);
+
+    priv->controlGrid.attach(fileSaveButton, 24, 1);
+    
+    priv->controlGrid.attach(priv->space4[11], 25, 0);
+
     
     //priv->controlGrid.attach(priv->waitLabel, 7, 2);
     //priv->controlGrid.attach(waitScale, 8, 2);
-
-    priv->controlGrid.attach(priv->recordingSizeLabel, 7, 3);
-    priv->controlGrid.attach(recordingSizeScale, 8, 3);
 
 	priv->controlFrame.add(priv->controlGrid);
 
