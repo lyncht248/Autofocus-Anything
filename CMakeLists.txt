@@ -16,9 +16,9 @@ pkg_check_modules(TOON TooN)
 pkg_check_modules(SDL sdl2)
 #pkg_check_modules(SDLGFX SDL2_gfx)
 
-###
-pkg_search_module(LIBUSB1 REQUIRED libusb-1.0)
-include_directories(SYSTEM ${LIBUSB1_INCLUDE_DIRS})
+### Commented these out
+#pkg_search_module(LIBUSB1 REQUIRED libusb-1.0)
+#include_directories(SYSTEM ${LIBUSB1_INCLUDE_DIRS})
 
 include_directories(${GTKMM_INCLUDE_DIRS})
 link_directories (${GTKMM_LIBRARY_DIRS})
@@ -39,9 +39,12 @@ add_definitions (${SDL_CFLAGS_OTHER})
 include_directories(Vimba_6_0)
 
 #added -pg to profile using gprof
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
-SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
-SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -pg")
+# SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
+# SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
+# SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -pg")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
 
 add_executable(hvi-gtk main.cpp mainwindow.cpp sdlwindow.cpp sdlwinchild.cpp cond.cpp system.cpp recorder.cpp thread.cpp stabiliser.cpp vesseledgel.cpp autofocus.cpp lens.cpp tiltedcam.cpp pid.cpp)
 

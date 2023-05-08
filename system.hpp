@@ -120,6 +120,7 @@ public:
 
 	VidFrame* getFrame();
 
+
 private:
 	void renderFrame();
 	void releaseFrame();
@@ -147,6 +148,7 @@ private:
 	void onWindowScaleChanged(double val);
 	void onWindowBestFocusChanged(double val);
 	void onWindowPauseClicked();
+	void onFindFocusClicked();
 
 	struct Private;
 	MainWindow window; //object from mainwindow.cpp class

@@ -39,7 +39,7 @@ using namespace cv;
 
 int imgcount;
 bool bHoldFocus;
-bool bFindFocus;
+bool bFindFocus = 0;
 //int center; //TODO: Optimize for unique alignment 
 
 void CallBackFunc(int event, int x, int y, int flags, void* userdata)
@@ -92,7 +92,7 @@ void autofocus::crapGUI(void)
     std::cout << "exited waitkey";
 }
 
-void autofocus::run () {
+void autofocus::run2 () {
   //functions to execute when app opens 
 
   tiltedcam tiltedcam; //Create a tiltedcam object
@@ -108,7 +108,7 @@ void autofocus::run () {
 
 
   //Should this happen when the motor object is initialized? (ie. as a constructor?)
-  int PortToUse = 3; 
+  int PortToUse = 0; 
   if(!lens.initmotor(PortToUse)) {
     std::cout << "Failure to initalize lens motor\n";
   } 
@@ -204,8 +204,9 @@ void autofocus::run () {
             //window.setBestFocusScaleValue(center); //set the slider to be equal to the current location of best-focus
           }
           else if (bFindFocus) {
-            center = 160;
-            previous = 160;
+            center = 200;
+            previous = 200;
+         		std::cout << "Set center back to 160 in autofocus.cc" << std::endl;
             //window.setBestFocusScaleValue(center); //set the slider to be equal to 160, the center-point
           }
       }

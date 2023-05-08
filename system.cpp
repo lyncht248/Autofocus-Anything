@@ -332,7 +332,6 @@ System::System(int argc, char **argv) :
 	window.signalScaleChanged().connect(sigc::mem_fun(*this, &System::onWindowScaleChanged) );
 	window.signalBestFocusChanged().connect(sigc::mem_fun(*this, &System::onWindowBestFocusChanged) );
 	window.signalPauseClicked().connect(sigc::mem_fun(*this, &System::onWindowPauseClicked) );
-
 	sigNewFrame.connect(sigc::mem_fun(*this, &System::renderFrame) );
 
 	//CONDITIONS
@@ -343,7 +342,9 @@ System::System(int argc, char **argv) :
 	window.getStabiliseActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenStabiliseToggled) );
 	window.getShowMapActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenShowMapToggled) );
 
-	window.getFindFocusActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenFindFocusToggled) );
+	//window.getFindFocusActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenFindFocusToggled) );
+	window.signalFindFocusClicked().connect(sigc::mem_fun(*this, &System::onFindFocusClicked));
+
 	window.getHoldFocusActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenHoldFocusToggled) );
 	window.get3DStabActive().signalToggled().connect(sigc::mem_fun(*this, &System::when3DStabToggled) );
 
@@ -615,14 +616,14 @@ void System::whenShowMapToggled(bool showingMap)
 
 void System::whenFindFocusToggled(bool findingFocus)
 {
+	std::cout << "findingFocus is " << findingFocus << std::endl;
 	if (findingFocus)
 	{
 		//CODE TO BE EXECUTED WHEN "FIND FOCUS" IS ENABLED GOES HERE
 
-		hvigtk_logfile << "Finding focus" << std::endl;
+		std::cout << "Finding focus (in System)" << std::endl;
 		imgcount = 0;
 		bFindFocus = 1;
-		
 		
 		// usleep(500000); //half a second
 		
@@ -633,12 +634,26 @@ void System::whenFindFocusToggled(bool findingFocus)
 	else
 	{
 		bFindFocus = 0;
+		std::cout << "Done finding focus (in System)" << std::endl;
+
 		//CODE TO BE EXECUTED WHEN "FIND FOCUS" IS DISABLED GOES HERE
 	}
 }
 
+void System::onFindFocusClicked() {
+	std::cout << "onFindFocus is activated!" << std::endl;
+	//TODO: NONE OF THIS IS USED,CLEAN IT UP
+	imgcount = 0;
+	bFindFocus = 1;
+
+	usleep(1000000);
+	bFindFocus = 0;
+}
+
 void System::whenHoldFocusToggled(bool holdingFocus)
 {
+	std::cout << "holdingFocus is " << holdingFocus << std::endl;
+
 	if (holdingFocus)
 	{
 		//CODE TO BE EXECUTED WHEN "HOLD FOCUS" IS ENABLED GOES HERE

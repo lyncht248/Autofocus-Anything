@@ -21,7 +21,7 @@ extern int center;
 class autofocus { //This class handles autofocusing
   public:
   //Called by int main()
-  void run(); 
+  void run2(); 
 
   //thread for capturing video from the tilted camera
   static void capturevideo();

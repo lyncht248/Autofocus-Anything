@@ -19,6 +19,7 @@
 #include "version.hpp"
 #include "main.hpp"
 #include "logfile.hpp"
+#include "autofocus.hpp"
 
 struct MainWindow::Private
 {
@@ -317,13 +318,13 @@ MainWindow::MainWindow() : Gtk::Window(),
     gainScale(0, 50, 1, 0, 7, 150),
     exposeScale(100, 50000, 1000, 15000, 7, 150),
     gammaScale(0.5, 2.5, 0.01, 1, 7, 150),
-	frameRateScale(20, 80, 5, 30, 7, 150, true),
+	frameRateScale(20, 80, 5, 60, 7, 150, true),
     frameSlider(0, 1799, 1, 0, 5, 200),
     thresScale(0, 1, 0.01, 0.4, 6, 100),
     scaleScale(0, 5, 0.01, 2.0, 6, 100),
     waitScale(0, HVIGTK_STAB_LIM, 100, 0, 6, 100),
-	recordingSizeScale(900, 3600, 10, 1800, 6, 100),
-    bestFocusScale(1, 320, 1, 160, 4, 100),
+	recordingSizeScale(900, 3600, 10, 900, 6, 100),
+    bestFocusScale(1, 320, 1, 200, 4, 100),
     recordButton(),
     backToStartButton(),
     pauseButton(),
@@ -503,8 +504,11 @@ MainWindow::MainWindow() : Gtk::Window(),
 	showMapActive.toggleOnSignal(showMapToggle.signal_toggled() );
 	showMapActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenShowMapToggled) );
 	
-	findFocusActive.toggleOnSignal(findFocusToggle.signal_toggled() );
-	findFocusActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenFindFocusToggled) );
+	// findFocusActive.toggleOnSignal(findFocusToggle.signal_toggled() );
+	// findFocusActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenFindFocusToggled) );
+
+	findFocusToggle.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_button_clicked));
+    findFocusToggle.set_tooltip_text("Finds image with highest sharpness");
 
 	holdFocusActive.toggleOnSignal(holdFocusToggle.signal_toggled() );
 	holdFocusActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenHoldFocusToggled) );
@@ -581,12 +585,16 @@ MainWindow::MainWindow() : Gtk::Window(),
 	priv->controlGrid.attach(priv->cameraSettingsTitle, 18, 3, 2);
     priv->controlGrid.attach(priv->gainLabel, 18, 0);
     priv->controlGrid.attach(priv->exposeLabel, 18, 1);
-    // priv->controlGrid.attach(priv->gammaLabel, 18, 3);
+
+    priv->controlGrid.attach(priv->gammaLabel, 23, 2);
+
 	priv->controlGrid.attach(priv->frameRateLabel, 18, 2);
  
     priv->controlGrid.attach(gainScale, 19, 0);
     priv->controlGrid.attach(exposeScale, 19, 1);
-    // priv->controlGrid.attach(gammaScale, 19, 2);
+
+    priv->controlGrid.attach(gammaScale, 24, 2);
+
 	priv->controlGrid.attach(frameRateScale, 19, 2);
 
 	priv->controlGrid.attach(priv->space4[9], 20, 0);
@@ -724,6 +732,12 @@ MainWindow::SignalPauseClicked MainWindow::signalPauseClicked()
 {
 	return sigPauseClicked;
 }
+
+MainWindow::SignalFindFocusClicked MainWindow::signalFindFocusClicked()
+{
+	return sigFindFocusClicked;
+}
+
 
 void MainWindow::setHasBuffer(bool val)
 {
@@ -999,22 +1013,37 @@ void MainWindow::whenFindFocusToggled(bool findingFocus)
 {
 	if (findingFocus)
 	{
-		holdFocusToggle.set_sensitive(false);
-		tdStabToggle.set_sensitive(false);
+		//holdFocusToggle.set_sensitive(false);
+		//tdStabToggle.set_sensitive(false);
+		
+		std::cout << "Find focus clicked (in mainwindow.cpp)" << std::endl;
 
-		//Wait 2 seconds and then disable the toggle, making it a button
-		usleep(2000000);
-		findFocusToggle.set_active(false);
+
+		// //Wait 1 seconds and then disable the toggle, making it a button
+		// usleep(1000000);
+		// std::cout << "Is this before system is opened?";
+		// findFocusToggle.set_active(false);
 
 		//GUI CHANGES WHEN "FINDING FOCUS" IS ENABLED GO HERE
 	}
 	else
 	{
-		holdFocusToggle.set_sensitive(true);
-		tdStabToggle.set_sensitive(true);
+		// holdFocusToggle.set_sensitive(true);
+		// tdStabToggle.set_sensitive(true);
+		std::cout << "Find focus un-clicked (in mainwindow.cpp)" << std::endl;
 
 		//GUI CHANGES WHEN "FINDING FOCUS" IS DISABLED GO HERE
 	}
+}
+
+void MainWindow::on_button_clicked()
+{
+	//GUI CHANGES WHEN "FINDING FOCUS" IS CLICKED
+	imgcount = 0;
+	bFindFocus = 1;
+
+	usleep(1000000);
+	bFindFocus = 0;
 }
 
 void MainWindow::whenHoldFocusToggled(bool holdingFocus)
@@ -1043,6 +1072,8 @@ void MainWindow::when3DStabToggled(bool active)
 		holdFocusToggle.set_active(true);
 		makeMapToggle.set_active(true);
 		stabiliseToggle.set_active(true);
+		usleep(1000000);
+		showMapToggle.set_active(false);
 		//GUI CHANGES WHEN "3D STABILISER" IS ENABLED GO HERE
 	}
 	else

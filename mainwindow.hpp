@@ -90,6 +90,9 @@ public:
     using SignalPauseClicked = sigc::signal<void()>;
     SignalPauseClicked signalPauseClicked();
 
+	using SignalFindFocusClicked = sigc::signal<void()>;
+    SignalFindFocusClicked signalFindFocusClicked();
+
 	void setHasBuffer(bool val);
 	void setLiveView(bool val);
 	void setLoading(bool val);
@@ -120,7 +123,7 @@ public:
 
 	void addRenderFilter(const std::string &key, RenderFilter *filter);
 	RenderFilter* removeRenderFilter(const std::string &key);
-
+	
 protected:
 	virtual void on_realize() override;
 	virtual void on_show() override;
@@ -145,7 +148,8 @@ private:
 	void whenFindFocusToggled(bool findingFocus);
 	void whenHoldFocusToggled(bool holdingFocus);
 	void when3DStabToggled(bool active);
-    
+    void on_button_clicked(); 
+
     void bufferFilled();
     void bufferEmptied();
     
@@ -187,7 +191,9 @@ private:
     Gtk::Button recordButton, backToStartButton, pauseButton, playButton, fileLoadButton, fileSaveButton;
     Gtk::Entry fileNameEntry;
     Gtk::FileChooserButton fileChooseButton;
-    Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, findFocusToggle, holdFocusToggle, tdStabToggle;
+    Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, holdFocusToggle, tdStabToggle;
+	Gtk::Button findFocusToggle;
+
     Gtk::Label fpsLabel;
 
 
@@ -204,6 +210,7 @@ private:
 	SignalScaleChanged sigScaleChanged;
 	SignalBestFocusChanged sigBestFocusChanged;
 	SignalPauseClicked sigPauseClicked;
+	SignalFindFocusClicked sigFindFocusClicked;
 
 	sigc::connection gainScaleConnection, exposeScaleConnection, gammaScaleConnection, frameRateScaleConnection, frameSliderConnection, stateChangeConnection;
 

@@ -12,6 +12,8 @@
 
 class lens { //This object handles autofocusing
   public:
+  ~lens();
+
   int serial_port = open("/dev/ttyUSB0", O_RDWR);
 
   // Initializes and opens the motor. Returns 1 if successful, 0 if not
@@ -24,7 +26,7 @@ class lens { //This object handles autofocusing
   void mov_rel(double mmToMove);
   
   private:
-
+  double currentLensLoc = 11.0;
   // Gets the current position of the motor
   double get_pos();
   

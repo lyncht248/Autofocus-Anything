@@ -48,7 +48,7 @@ int Recorder::putFrame(VidFrame *frame)
 {
 	frames.push_back(frame);
 	emitOperationComplete(Operation::RECOP_ADDFRAME, true);
-	if (frames.size() == system.getWindow().getStabWaitScaleValue() )
+	if (frames.size() == (int) system.getWindow().getRecordingSizeScaleValue() )
 		emitOperationComplete(Operation::RECOP_FILLED, true);
 	return frames.size();
 }

@@ -10,7 +10,7 @@
 #include "SDL_video.h"
 #include "sdlwinchild.hpp"
 
-#define BORDER_THRES 18
+#define BORDER_THRES 9
 
 enum
 {
@@ -135,16 +135,17 @@ int SDLWindow::child_main()
 	if (SDL_Init(SDL_INIT_VIDEO) )
 		return 1;
 
-	int scalexyz = 4;
+	int scalexyz = 2;
 	// SDL_Window *window = SDL_CreateWindow("sdlwindow", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 800 * scalexyz, 600 * scalexyz, 
 	// 		SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_UTILITY | SDL_WINDOW_SKIP_TASKBAR | SDL_WINDOW_ALLOW_HIGHDPI);
-	SDL_Window *window = SDL_CreateWindow("sdlwindow", 0, 0, 900 * scalexyz, 500 * scalexyz, 
-		SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS  | SDL_WINDOW_SKIP_TASKBAR | SDL_WINDOW_ALLOW_HIGHDPI);
+	// SDL_Window *window = SDL_CreateWindow("sdlwindow", 0, 0, 900 * scalexyz, 500 * scalexyz, 
+	// 	SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS  | SDL_WINDOW_SKIP_TASKBAR | SDL_WINDOW_ALLOW_HIGHDPI);
+	SDL_Window *window = SDL_CreateWindow("sdlwindow", 42, 269, 918 * scalexyz, 442 * scalexyz, SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALLOW_HIGHDPI);
 
 	if (!window)
 		return 2;
 	
-	SDL_SetWindowPosition(window, 1000, 1000);
+	//SDL_SetWindowPosition(window, 3000, 3000); 
 
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best");
 
@@ -250,7 +251,8 @@ int SDLWindow::child_main()
 				{
 					int x = sdlwin->lcmd[0].d_int;
 					int y = sdlwin->lcmd[1].d_int;
-					SDL_SetWindowPosition(window, x, y);
+					//Causes window to always appear in centerof screen... test removing for now
+					//SDL_SetWindowPosition(window, x, y);
 					break;
 				}
 				case CMD_QUIT:
@@ -289,5 +291,7 @@ int SDLWindow::child_main()
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
+	
+	std::cout << "SDLWinChild loop ending gracefully";
 	return 0;
 }

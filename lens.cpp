@@ -25,7 +25,7 @@ int lens::initmotor(int PortToUse) {
 
     // Read in existing settings, and handle any error
     if(tcgetattr(serial_port, &tty) != 0) {
-        //printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
+        printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
         return 0;
     }
     
@@ -63,25 +63,25 @@ int lens::initmotor(int PortToUse) {
 
     ssize_t bytes_written; //Gets rid of the warn_unused_result error
 
-    // Sets the home location offset to be 1mm (or __ encoder pulses, or 0x0400) from the factory home location
+    // Sets the home location offset to be 1mm (or __ encoder pulses, or 0x0400) from the factory home location. Doesn't move lens. 
     unsigned char msg[] = { '0', 's', 'o', '0', '0', '0', '0', '0', '4', '0', '0', '\r', '\n' };
     bytes_written = write(serial_port, msg, sizeof(msg));
-    usleep(1000*10000);
+    usleep(1000000); //Sleep for 1s
 
-    // Moves the slider to the OFFSET home position (end of the slide plus above offset). The lens will go to the offset home position, quickly move to the home position for callibration (end of the slide), and then back to the offset home position.
+    // The lens will move to the offset home position, quickly move to the home position for callibration (end of the slide right), and then back to the offset home position.
     unsigned char msg2[] = { '0', 'h', 'o', '0', '\r', '\n' };
     bytes_written = write(serial_port, msg2, sizeof(msg2));
-    usleep(1000*10000);
+    usleep(1000000); //Sleep for 1s
 
     // Absolute move of 0x2E00, or 11mm, relative to the offset home position.
     unsigned char msg3[] = { '0', 'm', 'a', '0', '0', '0', '0', '2', 'E', '0', '0', '\r', '\n' };
     bytes_written = write(serial_port, msg3, sizeof(msg3));
-    usleep(1000*10000);
+    usleep(1000000); //Sleep for 1s
 
     // Sets the delay the slider waits between movements
     unsigned char msg4[] = { '0', 'v', 'v', '2', '5', '\r', '\n' };
     bytes_written = write(serial_port, msg4, sizeof(msg4));
-    usleep(100*10000);
+    usleep(100000); //Sleep for 0.1s
 
     std::cout << "Serial Port initialized!" << "\n";
     return 1;
@@ -110,6 +110,9 @@ void lens::mov_rel(double mmToMove) {
     double move = rate * mmToMove; //encoder pulses to move
     //double new_pos = move + current_pos;
 
+    //currentLensLoc = currentLensLoc + mmToMove;
+    //std::cout << currentLensLoc << std::endl;
+    
     //TODO: Replace TRUE with a way to limit the lens moving out-of-bounds
     if (1) {
         std::string pszBufStr = "0mr" + double2hexstr(mmToMove) + "\r\n";
@@ -206,5 +209,15 @@ void lens::closemotor() {
     // port.CancelIo();
     // port.Close();
 
+    close(serial_port);
+}
+
+lens::~lens() {
+    // port.ClearWriteBuffer();
+    // port.ClearReadBuffer();
+    // port.Flush();
+    // port.CancelIo();
+    // port.Close();
+    std::cout << "serial port closed" << std::endl;
     close(serial_port);
 }

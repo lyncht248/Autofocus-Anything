@@ -47,10 +47,11 @@ int main(int argc, char **argv)
     autofocus AF;
 
     //Starts an autofocusing thread (should be replaced by constructor for the AF object, I believe)
-    std::thread tAutofocus(&autofocus::run, &AF);
+    std::thread tAutofocus(&autofocus::run2, &AF);
 
     //Opens the GTK application GUI and stops main() execution. system.getWindow() returns a pointer to the MainWindow object created in system.cc
     int out = app->run(system.getWindow() );
+	std::cout << "app-> run loop ending gracefully";
 
     //Closes logfile when GTK application exits
 	hvigtk_logfile.close();
@@ -62,6 +63,7 @@ int main(int argc, char **argv)
     tAutofocus.join(); // Stops the CaptureVideo thread too. This should be a destructor in the autofocus object instead
 
     //Returns the exit code of the GTK application
+	std::cout << "main loop ending gracefully";
 	return out;
 }
 
