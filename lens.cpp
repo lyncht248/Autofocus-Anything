@@ -119,6 +119,67 @@ void lens::mov_rel(double mmToMove) {
         unsigned char msg[pszBufStr.length()];
         std::copy( pszBufStr.begin(), pszBufStr.end(), msg );
         bytes_written = write(serial_port, msg, sizeof(msg));
+
+        // char buf[256];
+        // int n_read = 0;
+        // bool line_received = false;
+        // bool successfulmove = false;
+        // while(!successfulmove){
+        //     //Reads one bit at a time until a new line recieved (end of message)
+        //     while (!line_received && n_read < sizeof(buf)) {
+        //         int n = read(serial_port, &buf[n_read], 1);
+        //         if (n < 0) {
+        //             std::cerr << "Error reading from serial port\n";
+        //             return 1;
+        //         }
+        //         if (buf[n_read] == '\n') {
+        //             line_received = true;
+        //         }
+        //         n_read += n;
+        //     }
+        //     if (line_received) {
+        //         buf[n_read-1] = '\0'; // remove the newline character from the buffer
+        //         std::cout << "Received line: " << buf << std::endl;
+        //     } else {
+        //         std::cerr << "Error: no line terminator received\n";
+        //         return 1;
+        //     }
+        //     //If 'P' is recieved, the move was successful
+        //     if (buf[1] == 'P') {
+        //         std::cout << "successfully homed!" << std::endl;
+        //         successfulmove = true;
+        //     }
+        //     //If 'G' or something else was recieved, the move wasn't successful
+        //     else {
+        //         std::cout << "Lens error... must reset lens." << std::endl;
+        //         usleep(1000000); //1 second
+        //     }
+        // }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 //        std::cout << msg << "\n";
     //     //Sleep(20);
 
@@ -144,9 +205,6 @@ void lens::mov_rel(double mmToMove) {
     //     }
     // }
     }
-    else { std::cout << "Out of bounds"; }
-
-    
 }
 
 //TODO

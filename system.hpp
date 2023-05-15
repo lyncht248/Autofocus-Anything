@@ -131,7 +131,6 @@ private:
 	void whenStabiliseToggled(bool stabilising);
 	void whenShowMapToggled(bool showingMap);
 
-	void whenFindFocusToggled(bool findingFocus);
 	void whenHoldFocusToggled(bool holdingFocus);
 	void when3DStabToggled(bool active);
 
@@ -149,6 +148,9 @@ private:
 	void onWindowBestFocusChanged(double val);
 	void onWindowPauseClicked();
 	void onFindFocusClicked();
+	void onResetClicked();
+
+	bool onCloseClicked(const GdkEventAny* event);
 
 	struct Private;
 	MainWindow window; //object from mainwindow.cpp class

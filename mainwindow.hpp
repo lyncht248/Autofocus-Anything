@@ -145,10 +145,11 @@ private:
 	void whenStabiliseToggled(bool stabilising);
 	void whenShowMapToggled(bool showingMap);
 
-	void whenFindFocusToggled(bool findingFocus);
 	void whenHoldFocusToggled(bool holdingFocus);
 	void when3DStabToggled(bool active);
-    void on_button_clicked(); 
+    void onFindFocusClicked(); 
+    void onResetClicked(); 
+
 
     void bufferFilled();
     void bufferEmptied();
@@ -192,7 +193,7 @@ private:
     Gtk::Entry fileNameEntry;
     Gtk::FileChooserButton fileChooseButton;
     Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, holdFocusToggle, tdStabToggle;
-	Gtk::Button findFocusToggle;
+	Gtk::Button findFocusButton, resetButton;
 
     Gtk::Label fpsLabel;
 

@@ -342,7 +342,6 @@ System::System(int argc, char **argv) :
 	window.getStabiliseActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenStabiliseToggled) );
 	window.getShowMapActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenShowMapToggled) );
 
-	//window.getFindFocusActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenFindFocusToggled) );
 	window.signalFindFocusClicked().connect(sigc::mem_fun(*this, &System::onFindFocusClicked));
 
 	window.getHoldFocusActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenHoldFocusToggled) );
@@ -353,6 +352,9 @@ System::System(int argc, char **argv) :
 	window.getPlayingBuffer().signalToggled().connect(sigc::mem_fun(*this, &System::whenPlayingToggled) );
 	window.getSeeking().signalToggled().connect(sigc::mem_fun(*this, &System::whenSeekingToggled) );
 	window.getRecording().signalToggled().connect(sigc::mem_fun(*this, &System::whenRecordingToggled) );
+
+	//Signals that the window has been closed, and other threads must close
+	window.signal_delete_event().connect(sigc::mem_fun(*this, &System::onCloseClicked));
 
 	hvigtk_logfile << "HVI-GTK " << HVIGTK_VERSION_STR << std::endl;
 	hvigtk_logfile.flush();
@@ -394,7 +396,7 @@ System::System(int argc, char **argv) :
 		hvigtk_logfile << "Failed to start Vimba" << std::endl;
 		hvigtk_logfile.flush();
 	}
-	whenLiveViewToggled(true);
+	whenLiveViewToggled(true); // calls startStreaming
 }
 
 void System::startStreaming()
@@ -614,40 +616,19 @@ void System::whenShowMapToggled(bool showingMap)
 	*/
 }
 
-void System::whenFindFocusToggled(bool findingFocus)
-{
-	std::cout << "findingFocus is " << findingFocus << std::endl;
-	if (findingFocus)
-	{
-		//CODE TO BE EXECUTED WHEN "FIND FOCUS" IS ENABLED GOES HERE
-
-		std::cout << "Finding focus (in System)" << std::endl;
-		imgcount = 0;
-		bFindFocus = 1;
-		
-		// usleep(500000); //half a second
-		
-		// // untoggle the button
-		// window.getFindFocusActive().setValue(false);
-
-	}
-	else
-	{
-		bFindFocus = 0;
-		std::cout << "Done finding focus (in System)" << std::endl;
-
-		//CODE TO BE EXECUTED WHEN "FIND FOCUS" IS DISABLED GOES HERE
-	}
-}
-
 void System::onFindFocusClicked() {
 	std::cout << "onFindFocus is activated!" << std::endl;
-	//TODO: NONE OF THIS IS USED,CLEAN IT UP
+
 	imgcount = 0;
 	bFindFocus = 1;
 
 	usleep(1000000);
 	bFindFocus = 0;
+}
+
+
+void System::onResetClicked() {
+	std::cout << "Lens reset button clicked!" << std::endl;
 }
 
 void System::whenHoldFocusToggled(bool holdingFocus)
@@ -869,6 +850,19 @@ void System::onWindowBestFocusChanged(double val)
 
 void System::onWindowPauseClicked()
 {
+}
+
+bool System::onCloseClicked(const GdkEventAny* event)
+{
+	//CODE TO EXECUTE WHEN CLOSE BUTTON CLICKED
+
+	//Close the streaming camera
+	stopStreaming();
+	vsys.Shutdown();
+	delete priv;
+	bAutofocusing = 0;
+	std::cout << "THE function RAN!" << std::endl;
+	return false;
 }
 
 System::~System()

@@ -20,10 +20,11 @@ std::ofstream hvigtk_logfile("hvigtk.log");
 
 SDLWindow::SDLWin *childwin = nullptr;
 int center;
+std::atomic<bool> bAutofocusing = 0; //Flag that controls the autofocusing while() loop
+
 
 int main(int argc, char **argv) 
 {
-
     // Spawns the SDL window, which is done in a separate process
 	childwin = SDLWindow::sdlwin_open();
 	if (!childwin)
@@ -36,6 +37,11 @@ int main(int argc, char **argv)
     // Creates a GTK application object
     auto app = Gtk::Application::create(argc, argv, HVIGTK_APPID); 
 
+    //Sets to dark theme, which is useful for operator to see contrast better
+    Glib::RefPtr<Gtk::Settings> settings = Gtk::Settings::get_default();
+    if(settings) {
+        settings->property_gtk_application_prefer_dark_theme() = true;
+    }
     // Initializes the GTK thread system and sets the GTK thread to default (?)
 	if(!Glib::thread_supported() ) Glib::thread_init();
 	Glib::MainContext::get_default()->push_thread_default();
@@ -43,7 +49,7 @@ int main(int argc, char **argv)
     // Creates a System object to run the logic behind the app's main window
     System system(argc, argv);
 
-    // Creates an Autofocus object to run the autofocusing logic (should be done in system object)
+    // Creates an Autofocus object to run the autofocusing logic (perhaps should be done in system object)
     autofocus AF;
 
     //Starts an autofocusing thread (should be replaced by constructor for the AF object, I believe)
@@ -58,12 +64,16 @@ int main(int argc, char **argv)
 
     //Closes the SDL window
 	SDLWindow::sdlwin_close(childwin);
+    std::cout << "winchild closed correctly" << std::endl;
 
     // Stops the autofocus thread. This should be a destructor in the autofocus object
-    tAutofocus.join(); // Stops the CaptureVideo thread too. This should be a destructor in the autofocus object instead
+    if (tAutofocus.joinable() ) {
+        tAutofocus.join(); // Stops the CaptureVideo thread too. This should be a destructor in the autofocus object instead
+        std::cout << "Autofocus closed correctly" << std::endl;
+    }
 
     //Returns the exit code of the GTK application
 	std::cout << "main loop ending gracefully";
-	return out;
+	return 1;
 }
 

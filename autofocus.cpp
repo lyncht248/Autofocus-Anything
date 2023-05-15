@@ -2,7 +2,7 @@
 #include "tiltedcam.hpp"
 #include "lens.hpp"
 #include "pid.hpp"
-
+#include "main.hpp"
 
 #include "ASICamera2.h" //TODO: Remove this when you move capturevideo() to tiltedcam.cc
 
@@ -22,7 +22,6 @@
 #include "opencv2/highgui/highgui.hpp"
 
 //Global variables 
-std::atomic<bool> bAutofocusing = 0; //Flag that controls the autofocusing while() loop
 std::atomic<bool> bNewImage = 0; //Flag that is 1 for when the buffer image is new, 0 when buffer image is old
 
 const long img_size = 1280 * 960; //Replace with actual image size

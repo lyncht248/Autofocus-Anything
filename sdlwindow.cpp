@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/wait.h>
-
+#include <iostream>
 using namespace SDLWindow;
 
 //only meaningful in child process
@@ -83,6 +83,7 @@ void SDLWindow::sdlwin_close(SDLWin* win)
 	pthread_cond_destroy(&win->hasCommand);
 	pthread_mutex_destroy(&win->mutex);
 	munmap(win, sizeof(struct SDLWin) );
+	std::cout << "SDLWin closed" << std::endl;
 }
 
 Response SDLWindow::createFrame(SDLWin *win, int width, int height)

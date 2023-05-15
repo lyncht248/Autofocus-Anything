@@ -329,6 +329,7 @@ MainWindow::MainWindow() : Gtk::Window(),
     backToStartButton(),
     pauseButton(),
     playButton(),
+	resetButton("Reset"),
     fileLoadButton("Load"),
     fileSaveButton("Save"),
     fileNameEntry(),
@@ -337,7 +338,7 @@ MainWindow::MainWindow() : Gtk::Window(),
     makeMapToggle("Make Map"),
     stabiliseToggle("Stabilise"),
     showMapToggle("Show Map"),
-    findFocusToggle("Find Focus"),
+    findFocusButton("Find Focus"),
     holdFocusToggle("Hold Focus"),
     tdStabToggle("3D Stab."),
     fpsLabel(""),
@@ -503,12 +504,12 @@ MainWindow::MainWindow() : Gtk::Window(),
 
 	showMapActive.toggleOnSignal(showMapToggle.signal_toggled() );
 	showMapActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenShowMapToggled) );
-	
-	// findFocusActive.toggleOnSignal(findFocusToggle.signal_toggled() );
-	// findFocusActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenFindFocusToggled) );
 
-	findFocusToggle.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_button_clicked));
-    findFocusToggle.set_tooltip_text("Finds image with highest sharpness");
+	findFocusButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onFindFocusClicked));
+    findFocusButton.set_tooltip_text("Finds image with highest sharpness");
+
+	resetButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onResetClicked));
+    resetButton.set_tooltip_text("Resets the lens to home position");
 
 	holdFocusActive.toggleOnSignal(holdFocusToggle.signal_toggled() );
 	holdFocusActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenHoldFocusToggled) );
@@ -540,10 +541,11 @@ MainWindow::MainWindow() : Gtk::Window(),
 
     priv->controlGrid.attach(priv->space4[0], 0, 0);
 
-	priv->controlGrid.attach(priv->autofocusTitle, 1, 3, 3);
-    priv->controlGrid.attach(findFocusToggle, 1, 0);
+	priv->controlGrid.attach(priv->autofocusTitle, 1, 4, 3);
+    priv->controlGrid.attach(findFocusButton, 1, 0);
     priv->controlGrid.attach(holdFocusToggle, 1, 1);
     priv->controlGrid.attach(tdStabToggle, 1, 2);
+	priv->controlGrid.attach(resetButton, 1, 3);
 
     priv->controlGrid.attach(priv->space4[1], 2, 0);
 
@@ -554,7 +556,7 @@ MainWindow::MainWindow() : Gtk::Window(),
     priv->controlGrid.attach(priv->verticalSeparator1, 5, 0, 1, 4);
 	priv->controlGrid.attach(priv->space4[3], 6, 0);
 
-	priv->controlGrid.attach(priv->stabilizationTitle, 7, 3, 4);
+	priv->controlGrid.attach(priv->stabilizationTitle, 7, 4, 4);
     priv->controlGrid.attach(makeMapToggle, 7, 0);
     priv->controlGrid.attach(stabiliseToggle, 7, 1);
     priv->controlGrid.attach(showMapToggle, 7, 2);
@@ -573,7 +575,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 	priv->controlGrid.attach(priv->verticalSeparator2, 12, 0, 1, 4);
 	priv->controlGrid.attach(priv->space4[6], 13, 0);
 
-	priv->controlGrid.attach(priv->playbackTitle, 14, 3, 1);
+	priv->controlGrid.attach(priv->playbackTitle, 14, 4, 1);
     priv->controlGrid.attach(priv->mediaBox, 14, 0);
     priv->controlGrid.attach(frameSlider, 14, 1);
     priv->controlGrid.attach(fpsLabel, 14, 2);
@@ -582,26 +584,22 @@ MainWindow::MainWindow() : Gtk::Window(),
 	priv->controlGrid.attach(priv->verticalSeparator3, 16, 0, 1, 4);
 	priv->controlGrid.attach(priv->space4[8], 17, 0);
 
-	priv->controlGrid.attach(priv->cameraSettingsTitle, 18, 3, 2);
+	priv->controlGrid.attach(priv->cameraSettingsTitle, 18, 4, 2);
     priv->controlGrid.attach(priv->gainLabel, 18, 0);
     priv->controlGrid.attach(priv->exposeLabel, 18, 1);
-
-    priv->controlGrid.attach(priv->gammaLabel, 23, 2);
-
-	priv->controlGrid.attach(priv->frameRateLabel, 18, 2);
+    priv->controlGrid.attach(priv->gammaLabel, 18, 2);
+	priv->controlGrid.attach(priv->frameRateLabel, 18, 3);
  
     priv->controlGrid.attach(gainScale, 19, 0);
     priv->controlGrid.attach(exposeScale, 19, 1);
-
-    priv->controlGrid.attach(gammaScale, 24, 2);
-
-	priv->controlGrid.attach(frameRateScale, 19, 2);
+	priv->controlGrid.attach(frameRateScale, 19, 3);
+    priv->controlGrid.attach(gammaScale, 19, 2);
 
 	priv->controlGrid.attach(priv->space4[9], 20, 0);
 	priv->controlGrid.attach(priv->verticalSeparator4, 21, 0, 1, 4);
 	priv->controlGrid.attach(priv->space4[10], 22, 0);
 
-	priv->controlGrid.attach(priv->fileTitle, 23, 3, 2);
+	priv->controlGrid.attach(priv->fileTitle, 23, 4, 2);
     priv->fileChooserBox.add(fileNameEntry);
     priv->fileChooserBox.add(fileChooseButton);
     priv->controlGrid.attach(priv->fileChooserBox, 23, 0, 2, 1);
@@ -1009,34 +1007,7 @@ void MainWindow::whenShowMapToggled(bool showingMap)
 	}
 }
 
-void MainWindow::whenFindFocusToggled(bool findingFocus)
-{
-	if (findingFocus)
-	{
-		//holdFocusToggle.set_sensitive(false);
-		//tdStabToggle.set_sensitive(false);
-		
-		std::cout << "Find focus clicked (in mainwindow.cpp)" << std::endl;
-
-
-		// //Wait 1 seconds and then disable the toggle, making it a button
-		// usleep(1000000);
-		// std::cout << "Is this before system is opened?";
-		// findFocusToggle.set_active(false);
-
-		//GUI CHANGES WHEN "FINDING FOCUS" IS ENABLED GO HERE
-	}
-	else
-	{
-		// holdFocusToggle.set_sensitive(true);
-		// tdStabToggle.set_sensitive(true);
-		std::cout << "Find focus un-clicked (in mainwindow.cpp)" << std::endl;
-
-		//GUI CHANGES WHEN "FINDING FOCUS" IS DISABLED GO HERE
-	}
-}
-
-void MainWindow::on_button_clicked()
+void MainWindow::onFindFocusClicked()
 {
 	//GUI CHANGES WHEN "FINDING FOCUS" IS CLICKED
 	imgcount = 0;
@@ -1046,19 +1017,24 @@ void MainWindow::on_button_clicked()
 	bFindFocus = 0;
 }
 
+void MainWindow::onResetClicked()
+{
+	std::cout << "Resetting Lens from mainwindow.cpp" << std::endl;
+}
+
 void MainWindow::whenHoldFocusToggled(bool holdingFocus)
 {
 	if (holdingFocus)
 	{
 		bestFocusScale.set_sensitive(true);
 
-		findFocusToggle.set_sensitive(false);
+		findFocusButton.set_sensitive(false);
 		tdStabToggle.set_sensitive(false);
 		//GUI CHANGES WHEN "HOLD FOCUS" IS ENABLED GO HERE
 	}
 	else
 	{
-		findFocusToggle.set_sensitive(true);
+		findFocusButton.set_sensitive(true);
 		tdStabToggle.set_sensitive(true);
 
 		//GUI CHANGES WHEN "FIND FOCUS" IS DISABLED GO HERE
