@@ -90,7 +90,7 @@ int lens::initmotor(int PortToUse) {
 void lens::return_to_start() {
     // Absolute move of 0x2E00, or 11mm
     ssize_t bytes_written;
-
+    std::cout << "Success!" << std::endl;
     unsigned char msg3[] = { '0', 'm', 'a', '0', '0', '0', '0', '2', 'E', '0', '0', '\r', '\n' };
     bytes_written = write(serial_port, msg3, sizeof(msg3));
     usleep(100*10000);

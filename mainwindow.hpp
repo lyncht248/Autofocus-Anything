@@ -93,6 +93,9 @@ public:
 	using SignalFindFocusClicked = sigc::signal<void()>;
     SignalFindFocusClicked signalFindFocusClicked();
 
+	using SignalResetClicked = sigc::signal<void()>;
+    SignalResetClicked signalResetClicked();
+
 	void setHasBuffer(bool val);
 	void setLiveView(bool val);
 	void setLoading(bool val);
@@ -212,6 +215,7 @@ private:
 	SignalBestFocusChanged sigBestFocusChanged;
 	SignalPauseClicked sigPauseClicked;
 	SignalFindFocusClicked sigFindFocusClicked;
+	SignalResetClicked sigResetClicked;
 
 	sigc::connection gainScaleConnection, exposeScaleConnection, gammaScaleConnection, frameRateScaleConnection, frameSliderConnection, stateChangeConnection;
 

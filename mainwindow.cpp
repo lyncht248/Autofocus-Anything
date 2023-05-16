@@ -736,6 +736,10 @@ MainWindow::SignalFindFocusClicked MainWindow::signalFindFocusClicked()
 	return sigFindFocusClicked;
 }
 
+MainWindow::SignalResetClicked MainWindow::signalResetClicked()
+{
+	return sigResetClicked;
+}
 
 void MainWindow::setHasBuffer(bool val)
 {
@@ -1020,6 +1024,7 @@ void MainWindow::onFindFocusClicked()
 void MainWindow::onResetClicked()
 {
 	std::cout << "Resetting Lens from mainwindow.cpp" << std::endl;
+	bResetLens = 1;
 }
 
 void MainWindow::whenHoldFocusToggled(bool holdingFocus)

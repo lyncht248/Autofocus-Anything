@@ -39,6 +39,7 @@ using namespace cv;
 int imgcount;
 bool bHoldFocus;
 bool bFindFocus = 0;
+bool bResetLens = 0;
 //int center; //TODO: Optimize for unique alignment 
 
 void CallBackFunc(int event, int x, int y, int flags, void* userdata)
@@ -159,7 +160,12 @@ void autofocus::run2 () {
   //std::thread tcrapGUI(autofocus::crapGUI);
 
   while(bAutofocusing) {
-     
+    
+    if(bResetLens) {
+      lens.return_to_start();
+      bResetLens = 0;
+    }
+
     if (bNewImage && (bHoldFocus || bFindFocus)) {
       { 
       std::lock_guard<std::mutex> lck{ mtx };

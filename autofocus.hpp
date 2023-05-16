@@ -15,6 +15,7 @@
 extern int imgcount;
 extern bool bHoldFocus;
 extern bool bFindFocus;
+extern bool bResetLens;
 extern int center;
 
 

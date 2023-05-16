@@ -343,6 +343,7 @@ System::System(int argc, char **argv) :
 	window.getShowMapActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenShowMapToggled) );
 
 	window.signalFindFocusClicked().connect(sigc::mem_fun(*this, &System::onFindFocusClicked));
+	window.signalResetClicked().connect(sigc::mem_fun(*this, &System::onResetClicked));
 
 	window.getHoldFocusActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenHoldFocusToggled) );
 	window.get3DStabActive().signalToggled().connect(sigc::mem_fun(*this, &System::when3DStabToggled) );
