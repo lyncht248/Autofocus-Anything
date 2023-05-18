@@ -51,7 +51,7 @@ class autofocus { //This class handles autofocusing
 
   private:
     //MainWindow window;
-    bool waitForLensToRead = false;
+    bool waitForLensToRead = true;
 
 };
 

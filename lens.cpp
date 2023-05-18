@@ -83,6 +83,7 @@ int lens::initmotor(int PortToUse) {
     bytes_written = write(serial_port, msg4, sizeof(msg4));
     usleep(100000); //Sleep for 0.1s
 
+    currentLensLoc = 0;
     std::cout << "Serial Port initialized!" << "\n";
     return 1;
 }
@@ -100,6 +101,7 @@ void lens::return_to_start() {
     bytes_written = write(serial_port, msg4, sizeof(msg4));
     usleep(100*10000);
 
+    currentLensLoc = 0;
 }
 
 void lens::mov_rel(double mmToMove, bool waitForLensToRead) {
@@ -120,6 +122,9 @@ void lens::mov_rel(double mmToMove, bool waitForLensToRead) {
         unsigned char msg[pszBufStr.length()];
         std::copy( pszBufStr.begin(), pszBufStr.end(), msg );
         bytes_written = write(serial_port, msg, sizeof(msg));
+        int pulses = round(mmToMove * 1024);
+        currentLensLoc = currentLensLoc + pulses;
+        std::cout << currentLensLoc << std::endl;
 
         if (waitForLensToRead) {
             int tryagain = 2;
@@ -142,14 +147,14 @@ void lens::mov_rel(double mmToMove, bool waitForLensToRead) {
                 }
                 if (line_received) {
                     buf[n_read-1] = '\0'; // remove the newline character from the buffer
-                    std::cout << "Received line: " << buf << std::endl;
+                    // std::cout << "Received line: " << buf << std::endl;
                 } else {
                     std::cerr << "Error: no line terminator received\n";
                     return;
                 }
                 //If 'P' is recieved, the move was successful
                 if (buf[1] == 'P') {
-                    std::cout << "successfully homed!" << std::endl;
+                    // std::cout << "successfully homed!" << std::endl;
                     successfulmove = true;
                 }
                 //If 'G' or something else was recieved, the move wasn't successful or is in-progress. Try again

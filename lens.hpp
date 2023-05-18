@@ -26,7 +26,7 @@ class lens { //This object handles autofocusing
   void mov_rel(double mmToMove, bool waitForLensToRead);
   
   private:
-  double currentLensLoc = 11.0;
+  int currentLensLoc = 0;
   // Gets the current position of the motor
   double get_pos();
   

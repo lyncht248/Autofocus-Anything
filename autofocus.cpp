@@ -25,7 +25,7 @@
 std::atomic<bool> bNewImage = 0; //Flag that is 1 for when the buffer image is new, 0 when buffer image is old
 
 const long img_size = 1280 * 960; //Replace with actual image size
-bool bSaveImages = 0;
+bool bSaveImages = 0; // Saves images from the tilted camera to output folder (check filepath is right)
 bool bBlinking = 1;
 
 unsigned char* img_buf = (unsigned char*)malloc(img_size); // Accessed by thread1 and thread2
@@ -139,7 +139,7 @@ void autofocus::run2 () {
   //The following variables assume imgWidth = 320; must be changed if this isn't the case.
   int moved = 1;
   int previous = center; //TODO: should be in a mutex
-  int tol = 4; //Tolerance zone of pixels in the center of image where no lense movement is triggered
+  int tol = 4; //Tolerance zone of pixels in the center of image where no lense movement is triggered. Lower than 4 causes constant signals to lens
 
   int blink = 0; //Becomes 1 when a blink is detected
   int blinkframes = 15; //number of frames to ignore when blink is detected
@@ -149,15 +149,15 @@ void autofocus::run2 () {
   bHoldFocus = 0;
 
   //// PID CONTROLLER
-  double dt = 1.0 / 50.0; //time per frame. Assumes about 50Hz... could be set exactly inside the while loop
+  double dt = 1.0 / 50.0; //time per frame. Assumes about 50Hz... TODO: use actual time in while loop
   double max = 3;  //maximum relative move the lens can be ordered to make. Set to +-3mm
   double min = -3; 
   double Kp;
   if(waitForLensToRead) {
-    Kp = 0.0018 / 0.3;
+    Kp = 0.0018 * 3.0; //*4-5.0 is on the edge of instability; *3.0 seems stable
   }
   else {
-    Kp = 0.0018 / 1.0; //From experimental testing; and doubled since we are using actual pixel width, not 640 width
+    Kp = 0.0018 * 1.0; //From experimental testing; and doubled since we are using actual pixel width, not 640 width
   }
   double Ki = 0;
   double Kd = 0; //Should try to add a small Kd; further testing required
@@ -194,7 +194,7 @@ void autofocus::run2 () {
         cv::line(resized, p1, p2, cv::Scalar(0, 0, 255), 2);
         //cv::namedWindow("Image With Loc of Best-Focus", cv::WINDOW_AUTOSIZE);
         //cv::imshow("Image With Loc of Best-Focus", resized);
-        std::string FilePath = "/home/tom/projects/autofocus_v9/test/output/pic" + std::to_string(imgcountfile) + ".png";
+        std::string FilePath = "/home/hvi/repos/autofocus-app/output/" + std::to_string(imgcountfile) + ".png";
         if (bSaveImages) {cv::imwrite(FilePath, resized);};
         //cv::waitKey(0);
 
@@ -241,8 +241,8 @@ void autofocus::run2 () {
       else {
           //do nothing inside tol band
           if (abs(locBestFocus - center) <= tol) { // tol
-              std::cout << s_int.count() << " ms, ";
-              std::cout << "0\n";
+              // std::cout << s_int.count() << " ms, ";
+              // std::cout << "0\n";
               moved = 0;
           }
 
@@ -251,9 +251,9 @@ void autofocus::run2 () {
               double inc = pid.calculate(center, locBestFocus);
               inc = inc * -1.0;
               lens.mov_rel(inc, waitForLensToRead);
-              std::cout << s_int.count() << ", ";
-              std::cout << locBestFocus << ", ";
-              std::cout << inc << "\n";
+              // std::cout << s_int.count() << ", ";
+              // std::cout << locBestFocus << ", ";
+              // std::cout << inc << "\n";
               moved = 1;
           }
       }
