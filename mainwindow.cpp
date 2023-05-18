@@ -376,6 +376,8 @@ MainWindow::MainWindow() : Gtk::Window(),
     //set_default_size(1700,200);
     set_title("HVI-GTK " HVIGTK_VERSION_STR);
     add_events(Gdk::STRUCTURE_MASK);
+	//set_position(Gtk::WIN_POS_CENTER_ALWAYS, 0, 0);
+
 	stateChangeConnection = signal_window_state_event().connect(sigc::mem_fun(*this, &MainWindow::_on_state_event) );
     //gainScale.setScaleSizeRequest(150, 0);
     //gainScale.setSpinButtonWidth(7);
@@ -1024,6 +1026,9 @@ void MainWindow::onFindFocusClicked()
 void MainWindow::onResetClicked()
 {
 	std::cout << "Resetting Lens from mainwindow.cpp" << std::endl;
+	//findFocusButton.set_active(false);
+	holdFocusToggle.set_active(false);
+	tdStabToggle.set_active(false);
 	bResetLens = 1;
 }
 
