@@ -152,7 +152,13 @@ void autofocus::run2 () {
   double dt = 1.0 / 50.0; //time per frame. Assumes about 50Hz... could be set exactly inside the while loop
   double max = 3;  //maximum relative move the lens can be ordered to make. Set to +-3mm
   double min = -3; 
-  double Kp = 0.0018 / 1.0; //From experimental testing; and doubled since we are using actual pixel width, not 640 width
+  double Kp;
+  if(waitForLensToRead) {
+    Kp = 0.0018 / 0.3;
+  }
+  else {
+    Kp = 0.0018 / 1.0; //From experimental testing; and doubled since we are using actual pixel width, not 640 width
+  }
   double Ki = 0;
   double Kd = 0; //Should try to add a small Kd; further testing required
   PID pid = PID(dt, max, min, Kp, Kd, Ki);
@@ -244,7 +250,7 @@ void autofocus::run2 () {
               // PID CONTROLLER
               double inc = pid.calculate(center, locBestFocus);
               inc = inc * -1.0;
-              lens.mov_rel(inc);
+              lens.mov_rel(inc, waitForLensToRead);
               std::cout << s_int.count() << ", ";
               std::cout << locBestFocus << ", ";
               std::cout << inc << "\n";

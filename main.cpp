@@ -42,6 +42,7 @@ int main(int argc, char **argv)
     if(settings) {
         settings->property_gtk_application_prefer_dark_theme() = true;
     }
+
     // Initializes the GTK thread system and sets the GTK thread to default (?)
 	if(!Glib::thread_supported() ) Glib::thread_init();
 	Glib::MainContext::get_default()->push_thread_default();
