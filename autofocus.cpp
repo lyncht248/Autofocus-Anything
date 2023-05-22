@@ -304,13 +304,13 @@ void autofocus::capturevideo() {
 }
 
 int autofocus::computebestfocus (cv::Mat image, int imgHeight, int imgWidth) {
-  //Specular reflection rejection
-  cv::Mat thresh;
-  cv::threshold(image, thresh, 140, 255, cv::THRESH_TRUNC);
+  // //Specular reflection rejection
+  // cv::Mat thresh;
+  // cv::threshold(image, thresh, 140, 255, cv::THRESH_TRUNC);
 
   //Gaussian blurring
   cv::Mat blurred;
-  cv::GaussianBlur(thresh, blurred, cv::Size(3,3),1,1,cv::BORDER_DEFAULT);
+  cv::GaussianBlur(image, blurred, cv::Size(3,3),1,1,cv::BORDER_DEFAULT);
 
   //Computing the sharpness curve along the horizontal of the image 
   int kernel = 16; //must be an even number
