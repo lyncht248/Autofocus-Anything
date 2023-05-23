@@ -1,9 +1,9 @@
 #include "autofocus.hpp"
-#include "tiltedcam.hpp"
-#include "lens.hpp"
+// #include "tiltedcam.hpp"
+// #include "lens.hpp"
 #include "pid.hpp"
 #include "main.hpp"
-
+#include "logfile.hpp"
 #include "ASICamera2.h" //TODO: Remove this when you move capturevideo() to tiltedcam.cc
 
 #include <opencv2/highgui.hpp>
@@ -42,98 +42,83 @@ bool bFindFocus = 0;
 bool bResetLens = 0;
 //int center; //TODO: Optimize for unique alignment 
 
-void CallBackFunc(int event, int x, int y, int flags, void* userdata)
+// void CallBackFunc(int event, int x, int y, int flags, void* userdata)
+// {
+//      if  ( event == cv::EVENT_LBUTTONDOWN )
+//      {
+//           std::cout << "Left button of the mouse is clicked" << endl;
+//           if (bHoldFocus){
+//             bHoldFocus = 0;
+//           } 
+//           else 
+//           {
+//             imgcount = 0;
+//             bHoldFocus = 1;
+//             std::cout << "HoldFocus = 1" << endl;
+//           }
+//      }
+//      else if  ( event == cv::EVENT_RBUTTONDOWN )
+//      {
+//           std::cout << "Right button of the mouse is clicked" << endl;
+//           lens lens2;
+//           lens2.return_to_start();
+//      }
+//      else if  ( event == cv::EVENT_MBUTTONDOWN )
+//      {
+//           std::cout << "Middle button of the mouse is clicked, bAutofocusing = 0" << endl;
+//           if (bAutofocusing){
+//             bAutofocusing = 0;
+//           } else bAutofocusing = 1;
+//      }
+// }
+
+// void autofocus::crapGUI(void)
+// {
+//     // Read image from file 
+//     Mat img = imread("/home/tom/projects/autofocus_v9/test/black.png");
+
+//     //Create a window
+//     namedWindow("My Window", WINDOW_NORMAL);
+//     //set the callback function for any mouse event
+//     setMouseCallback("My Window", CallBackFunc, NULL);
+//     Mat resize;
+//     cv::resize(img, resize, cv::Size(), 0.5, 0.55); //function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
+
+//     //show the image
+//     imshow("My Window", resize);
+
+//     // Wait until user press some key
+//     waitKey(0);
+//     std::cout << "exited waitkey";
+// }
+
+autofocus::autofocus() :
+  lens1(), //calls lens constructor, which homes lens
+  tiltedcam1(), //calls tiltedcam constructor, which opens tilted camera 
+  stop_thread(false)
 {
-     if  ( event == cv::EVENT_LBUTTONDOWN )
-     {
-          std::cout << "Left button of the mouse is clicked" << endl;
-          if (bHoldFocus){
-            bHoldFocus = 0;
-          } 
-          else 
-          {
-            imgcount = 0;
-            bHoldFocus = 1;
-            std::cout << "HoldFocus = 1" << endl;
-          }
-     }
-     else if  ( event == cv::EVENT_RBUTTONDOWN )
-     {
-          std::cout << "Right button of the mouse is clicked" << endl;
-          lens lens2;
-          lens2.return_to_start();
-     }
-     else if  ( event == cv::EVENT_MBUTTONDOWN )
-     {
-          std::cout << "Middle button of the mouse is clicked, bAutofocusing = 0" << endl;
-          if (bAutofocusing){
-            bAutofocusing = 0;
-          } else bAutofocusing = 1;
-     }
+  // tiltedcam::settings camsettings = tiltedcam.getsettings();
+  tAutofocus = std::thread(&autofocus::run, this); // starts a thread that executes autofocus::run()
+  hvigtk_logfile << "Autofocus thread started \n";
 }
 
-void autofocus::crapGUI(void)
-{
-    // Read image from file 
-    Mat img = imread("/home/tom/projects/autofocus_v9/test/black.png");
-
-    //Create a window
-    namedWindow("My Window", WINDOW_NORMAL);
-    //set the callback function for any mouse event
-    setMouseCallback("My Window", CallBackFunc, NULL);
-    Mat resize;
-    cv::resize(img, resize, cv::Size(), 0.5, 0.55); //function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
-
-    //show the image
-    imshow("My Window", resize);
-
-    // Wait until user press some key
-    waitKey(0);
-    std::cout << "exited waitkey";
-}
-
-void autofocus::run2 () {
-  //functions to execute when app opens 
-
-  tiltedcam tiltedcam; //Create a tiltedcam object
-  lens lens; 
-  autofocus AF; //Create an autofocus object... again?
-
-  //Should this happen when the tiltedcam object is initialized? (ie as a constructor?)
-    //   if (ASIOpenCamera(0) == ASI_SUCCESS) {
-
-    //      std::cout << "tilted camera opened\n";
-
-    // }
-
-
-  //Should this happen when the motor object is initialized? (ie. as a constructor?)
-  int PortToUse = 0; 
-  if(!lens.initmotor(PortToUse)) {
-    std::cout << "Failure to initalize lens motor\n";
-  } 
-  
-  if(!tiltedcam.initcam()) {
-    std::cout << "Failure to initalize tilted camera\n";
-    return;
+autofocus::~autofocus() { 
+  // Stops the autofocus thread
+  stop_thread.store(true);
+  if(tAutofocus.joinable()) {
+      tAutofocus.join();
   }
+  hvigtk_logfile << "Autofocus thread stopped \n";
+}
 
-  tiltedcam::settings camsettings = tiltedcam.getsettings();
-
-  // For testing, bAutofocusing is set here and flagged using time_autofocusing_s. Later, it will be controlled by Focus_Button
-  // TODO: replace with enter button to start autofocus, and enter button to stop again. 
-  bAutofocusing = 1; 
-
-  // double time_autofocusing_s;
-  // std::cout << "How long should the code run for (s)?\n"; 
-  // std::cin >> time_autofocusing_s;
+void autofocus::run () {
   auto t1 = std::chrono::steady_clock::now();
   usleep(10000);
   auto t2 = std::chrono::steady_clock::now();
   auto s_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
 
   //Starting the capture video thread
-  std::thread tCaptureVideo(autofocus::capturevideo);
+  std::thread tCaptureVideo(&autofocus::capturevideo, this);
   int testcount = 1;
 
   //The following variables assume imgWidth = 320; must be changed if this isn't the case.
@@ -147,6 +132,9 @@ void autofocus::run2 () {
   int imgcountfile = 0; //TODO: janky
 
   bHoldFocus = 0;
+
+  int imWidth = tiltedcam1.getImageWidth();
+  int imHeight = tiltedcam1.getImageHeight();
 
   //// PID CONTROLLER
   double dt = 1.0 / 50.0; //time per frame. Assumes about 50Hz... TODO: use actual time in while loop
@@ -163,12 +151,11 @@ void autofocus::run2 () {
   double Kd = 0; //Should try to add a small Kd; further testing required
   PID pid = PID(dt, max, min, Kp, Kd, Ki);
   
-  //std::thread tcrapGUI(autofocus::crapGUI);
 
-  while(bAutofocusing) {
+  while(!stop_thread.load()) {
     
     if(bResetLens) {
-      lens.return_to_start();
+      lens1.return_to_start();
       bResetLens = 0;
     }
 
@@ -181,13 +168,13 @@ void autofocus::run2 () {
       imgcount++;
       imgcountfile++;
 
-      cv::Mat image = cv::Mat(camsettings.imgHeight, camsettings.imgWidth, CV_8U, img_calc_buf);
+      cv::Mat image = cv::Mat(imWidth, imHeight, CV_8U, img_calc_buf);
       cv::Mat resized;
       double scale = 0.25; //change to 0.5 to resize image to (0.5*current dimensions). INSTEAD, TRUNCATE IMAGE, OR REDUCE KERNEL!
       cv::resize(image, resized, cv::Size(), scale, scale); //function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
       //cv::Mat cropped = image(std::Range(0,12), std::Range(0,12));
 
-      int locBestFocus = AF.computebestfocus(resized, resized.rows, resized.cols);
+      int locBestFocus = computebestfocus(resized, resized.rows, resized.cols);
     
       // //Print image with line at the location of best focus
         cv::Point p1(locBestFocus, 0), p2(locBestFocus, resized.cols);
@@ -250,7 +237,7 @@ void autofocus::run2 () {
               // PID CONTROLLER
               double inc = pid.calculate(center, locBestFocus);
               inc = inc * -1.0;
-              lens.mov_rel(inc, waitForLensToRead);
+              lens1.mov_rel(inc, waitForLensToRead);
               // std::cout << s_int.count() << ", ";
               // std::cout << locBestFocus << ", ";
               // std::cout << inc << "\n";
@@ -269,12 +256,12 @@ void autofocus::run2 () {
   std::cout << imgcountfile << "\n";
   //tcrapGUI.join();
   tCaptureVideo.join(); // Stops the CaptureVideo thread too
-  
+
 } 
 
 //TODO: This should be in tiltedcam.cc, but I need to use the global variables... Poor code!
 void autofocus::capturevideo() {
-  while(bAutofocusing) {
+  while(!stop_thread.load()) {
 
     //for testing
     // cv::Mat image;

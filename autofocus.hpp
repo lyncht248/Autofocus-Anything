@@ -3,6 +3,11 @@
 
 #include <opencv2/highgui.hpp>
 #include "mainwindow.hpp"
+#include "lens.hpp"
+#include "tiltedcam.hpp"
+#include <atomic>
+#include <thread>
+
 //Global Variables
 //extern std::atomic<bool> bAutofocusing; //Flag that controls the autofocusing while() loop
 //extern std::atomic<bool> bNewImage; //Flag that is 1 for when the buffer image is new, 0 when buffer image is old
@@ -22,12 +27,15 @@ extern int center;
 class autofocus { //This class handles autofocusing
   public:
   //Called by int main()
-  void run2(); 
+  autofocus();
+  ~autofocus();
+
+  void run(); 
 
   //thread for capturing video from the tilted camera
-  static void capturevideo();
+  void capturevideo();
 
-  static void crapGUI();
+  //static void crapGUI();
 
   //computes the location of best-focus, from 8 to 310
   int computebestfocus (cv::Mat image, int imgHeight, int imgWidth); 
@@ -52,6 +60,11 @@ class autofocus { //This class handles autofocusing
   private:
     //MainWindow window;
     bool waitForLensToRead = false;
+    std::atomic<bool> stop_thread;
+    std::thread tAutofocus;
+
+    lens lens1;
+    tiltedcam tiltedcam1;
 
 };
 

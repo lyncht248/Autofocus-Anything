@@ -1,4 +1,5 @@
 #include "lens.hpp"
+#include "logfile.hpp"
 
 #include <iostream>
 
@@ -9,24 +10,24 @@
 #include <string>
 #include <tgmath.h>
 
-
 #include <vector>
 #include <string>
 #include <iomanip>
 
-int lens::initmotor(int PortToUse) {
+lens::lens() {
 
     // Check for errors
     if (serial_port < 0) {
-        return 0;
+        hvigtk_logfile << "Error opening serial port \n";
     }
+
       // Create new termios struct, we call it 'tty' for convention
     struct termios tty;
 
     // Read in existing settings, and handle any error
     if(tcgetattr(serial_port, &tty) != 0) {
         printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
-        return 0;
+        hvigtk_logfile << "Error opening serial port \n";
     }
     
 
@@ -56,8 +57,7 @@ int lens::initmotor(int PortToUse) {
     // Save tty settings, also checking for error
     if (tcsetattr(serial_port, TCSANOW, &tty) != 0) {
         //printf("Error %i from tcsetattr: %s\n", errno, strerror(errno));
-        std::cout << "failure to save tty settings for lens motor";
-        return 0;
+        hvigtk_logfile << "failure to save tty settings for lens motor \n";
     }
 
 
@@ -73,7 +73,17 @@ int lens::initmotor(int PortToUse) {
     bytes_written = write(serial_port, msg2, sizeof(msg2));
     usleep(1000000); //Sleep for 1s
 
-    // Absolute move of 0x2E00, or 11mm, relative to the offset home position.
+    return_to_start(); // Moves lens to callibrated start position
+
+    hvigtk_logfile << "Serial Port iniialized! \n";
+
+}
+
+void lens::return_to_start() {
+    // Absolute move of 0x2E00, or 11mm, relative to the offset home position
+    ssize_t bytes_written;
+    hvigtk_logfile << "Lens at home position! \n";
+
     unsigned char msg3[] = { '0', 'm', 'a', '0', '0', '0', '0', '2', 'E', '0', '0', '\r', '\n' };
     bytes_written = write(serial_port, msg3, sizeof(msg3));
     usleep(1000000); //Sleep for 1s
@@ -82,24 +92,6 @@ int lens::initmotor(int PortToUse) {
     unsigned char msg4[] = { '0', 'v', 'v', '2', '5', '\r', '\n' };
     bytes_written = write(serial_port, msg4, sizeof(msg4));
     usleep(100000); //Sleep for 0.1s
-
-    currentLensLoc = 0;
-    std::cout << "Serial Port initialized!" << "\n";
-    return 1;
-}
-
-void lens::return_to_start() {
-    // Absolute move of 0x2E00, or 11mm
-    ssize_t bytes_written;
-    std::cout << "Success!" << std::endl;
-    unsigned char msg3[] = { '0', 'm', 'a', '0', '0', '0', '0', '2', 'E', '0', '0', '\r', '\n' };
-    bytes_written = write(serial_port, msg3, sizeof(msg3));
-    usleep(100*10000);
-
-    // Sets the delay the slider waits between movements
-    unsigned char msg4[] = { '0', 'v', 'v', '2', '5', '\r', '\n' };
-    bytes_written = write(serial_port, msg4, sizeof(msg4));
-    usleep(100*10000);
 
     currentLensLoc = 0;
 }

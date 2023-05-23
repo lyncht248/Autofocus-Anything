@@ -9,6 +9,7 @@
 #include "cairomm/surface.h"
 #include "vidframe.hpp"
 #include "mainwindow.hpp"
+#include "autofocus.hpp"
 #include "cond.hpp"
 #include "thread.hpp"
 #include "recorder.hpp"
@@ -154,6 +155,7 @@ private:
 
 	struct Private;
 	MainWindow window; //object from mainwindow.cpp class
+	autofocus AF; //object from autofocus.cpp class
 	Vimba::VimbaSystem &vsys; //For interacting with Vimba camera
 	Vimba::CameraPtr cam; //For interacting with Vimba camera
 

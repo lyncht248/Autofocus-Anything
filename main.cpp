@@ -50,11 +50,11 @@ int main(int argc, char **argv)
     // Creates a System object to run the logic behind the app's main window
     System system(argc, argv);
 
-    // Creates an Autofocus object to run the autofocusing logic (perhaps should be done in system object)
-    autofocus AF;
+    // // Creates an Autofocus object to run the autofocusing logic (perhaps should be done in system object)
+    // autofocus AF;
 
-    //Starts an autofocusing thread (should be replaced by constructor for the AF object, I believe)
-    std::thread tAutofocus(&autofocus::run2, &AF);
+    // //Starts an autofocusing thread (should be replaced by constructor for the AF object, I believe)
+    // std::thread tAutofocus(&autofocus::run2, &AF);
 
     //Opens the GTK application GUI and stops main() execution. system.getWindow() returns a pointer to the MainWindow object created in system.cc
     int out = app->run(system.getWindow() );
@@ -67,11 +67,11 @@ int main(int argc, char **argv)
 	SDLWindow::sdlwin_close(childwin);
     std::cout << "winchild closed correctly" << std::endl;
 
-    // Stops the autofocus thread. This should be a destructor in the autofocus object
-    if (tAutofocus.joinable() ) {
-        tAutofocus.join(); // Stops the CaptureVideo thread too. This should be a destructor in the autofocus object instead
-        std::cout << "Autofocus closed correctly" << std::endl;
-    }
+    // // Stops the autofocus thread. This should be a destructor in the autofocus object
+    // if (tAutofocus.joinable() ) {
+    //     tAutofocus.join(); // Stops the CaptureVideo thread too. This should be a destructor in the autofocus object instead
+    //     std::cout << "Autofocus closed correctly" << std::endl;
+    // }
 
     //Returns the exit code of the GTK application
 	std::cout << "main loop ending gracefully";

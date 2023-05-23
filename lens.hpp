@@ -12,6 +12,7 @@
 
 class lens { //This object handles autofocusing
   public:
+  lens();
   ~lens();
 
   int serial_port = open("/dev/ttyUSB0", O_RDWR);

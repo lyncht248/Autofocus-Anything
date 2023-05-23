@@ -7,7 +7,7 @@
 #include <gtkmm.h>
 #include <cstring>
 #include <string>
-
+#include <thread>
 #include "VimbaC/Include/VmbCommonTypes.h"
 #include "VimbaCPP/Include/Frame.h"
 #include "VimbaCPP/Include/SharedPointerDefines.h"
@@ -309,6 +309,7 @@ System::Private::Private() :
 
 System::System(int argc, char **argv) :
 	window(), 
+	AF(), //Creates an autofocus object, calling constructor
 	vsys(Vimba::VimbaSystem::GetInstance() ), 
 	cam(),
 	size(),
@@ -323,6 +324,7 @@ System::System(int argc, char **argv) :
 	stabiliser(),
 	madeMap(false)
 {
+
 	recorder->connectTo(&sRecorderOperationComplete);
 	sRecorderOperationComplete.connect(sigc::mem_fun(*this, &System::onRecorderOperationComplete) );
 
