@@ -1,4 +1,5 @@
 #include "system.hpp"
+#include "main.hpp"
 
 #include <chrono>
 #include <ctime>
@@ -309,7 +310,6 @@ System::Private::Private() :
 
 System::System(int argc, char **argv) :
 	window(), 
-	AF(), //Creates an autofocus object, calling constructor
 	vsys(Vimba::VimbaSystem::GetInstance() ), 
 	cam(),
 	size(),
@@ -322,11 +322,19 @@ System::System(int argc, char **argv) :
 	recorder(thread.createObject<Recorder, System&>(*this) ),
 	sRecorderOperationComplete(),
 	stabiliser(),
-	madeMap(false)
+	madeMap(false),
+	AF() //Creates an autofocus object, calling constructor
+
 {
+
 
 	recorder->connectTo(&sRecorderOperationComplete);
 	sRecorderOperationComplete.connect(sigc::mem_fun(*this, &System::onRecorderOperationComplete) );
+
+    window.signal_map_event().connect([this](GdkEventAny* /*event*/) -> bool {
+        window.move(gtkAppLocationX, gtkAppLocationY);  // Replace with your desired coordinates.
+        return false;  // Continue propagation.
+    });
 
 	window.signalFrameDrawn().connect(sigc::mem_fun(*this, &System::releaseFrame) );
 	window.signalFeatureUpdated().connect(sigc::mem_fun(*this, &System::onWindowFeatureUpdated) );
@@ -335,6 +343,8 @@ System::System(int argc, char **argv) :
 	window.signalBestFocusChanged().connect(sigc::mem_fun(*this, &System::onWindowBestFocusChanged) );
 	window.signalPauseClicked().connect(sigc::mem_fun(*this, &System::onWindowPauseClicked) );
 	sigNewFrame.connect(sigc::mem_fun(*this, &System::renderFrame) );
+
+	m_errorSignal.connect(sigc::mem_fun(*this, &System::on_error));
 
 	//CONDITIONS
 	
@@ -349,6 +359,7 @@ System::System(int argc, char **argv) :
 
 	window.getHoldFocusActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenHoldFocusToggled) );
 	window.get3DStabActive().signalToggled().connect(sigc::mem_fun(*this, &System::when3DStabToggled) );
+	window.get2DStabActive().signalToggled().connect(sigc::mem_fun(*this, &System::when2DStabToggled) );
 
 	window.getLoading().signalToggled().connect(sigc::mem_fun(*this, &System::whenLoadingToggled) );
 	window.getSaving().signalToggled().connect(sigc::mem_fun(*this, &System::whenSavingToggled) );
@@ -404,6 +415,7 @@ System::System(int argc, char **argv) :
 
 void System::startStreaming()
 {
+
 	if (cam != nullptr)
 	{
 		if (cam->Open(VmbAccessModeFull) == VmbErrorSuccess)
@@ -525,7 +537,9 @@ void System::releaseFrame()
 	if (window.getMakeMapActive().getValue() && !madeMap)
 	{
 		stabiliser.make_map(*getFrame(), DEFAULT_NUM_TRACKERS);
-		window.setShowingMap(true);
+		if(!window.get3DStabActive().getValue() && !window.get2DStabActive().getValue()) { //If either 3D or 2D stab is active, don't show map
+			window.setShowingMap(true);
+		}
 		madeMap = true;
 	}
 	frameProcessor.releaseFrame();
@@ -558,7 +572,9 @@ void System::whenMakeMapToggled(bool makingMap)
 			if (vframe)
 			{
 				stabiliser.make_map(*vframe, DEFAULT_NUM_TRACKERS);
-				window.setShowingMap(true);
+				if(!window.get3DStabActive().getValue() && !window.get2DStabActive().getValue()) {  //If either 3D or 2D stab is active, don't show map
+					window.setShowingMap(true);	
+				}
 			}
 			else
 				window.setMakingMap(false);
@@ -620,7 +636,7 @@ void System::whenShowMapToggled(bool showingMap)
 }
 
 void System::onFindFocusClicked() {
-	std::cout << "onFindFocus is activated!" << std::endl;
+	hvigtk_logfile << "system::onFindFocusClicked is activated!" << std::endl;
 
 	imgcount = 0;
 	bFindFocus = 1;
@@ -631,18 +647,20 @@ void System::onFindFocusClicked() {
 
 
 void System::onResetClicked() {
-	std::cout << "Lens reset button clicked!" << std::endl;
+	hvigtk_logfile << "Lens reset button clicked!" << std::endl;
 }
 
 void System::whenHoldFocusToggled(bool holdingFocus)
 {
-	std::cout << "holdingFocus is " << holdingFocus << std::endl;
+	hvigtk_logfile << "holdingFocus is " << holdingFocus << "in System::whenHoldFocusToggled" << std::endl;
 
 	if (holdingFocus)
 	{
 		//CODE TO BE EXECUTED WHEN "HOLD FOCUS" IS ENABLED GOES HERE
 		imgcount = 0;
 		bHoldFocus = 1;
+		usleep(100000); //sleep for 0.1 second
+        window.setBestFocusScaleValue(desiredLocBestFocus);
 
 	}
 	else
@@ -661,6 +679,18 @@ void System::when3DStabToggled(bool active)
 	else
 	{
 		//CODE TO BE EXECUTED WHEN "3D STAB" IS DISABLED GOES HERE
+	}
+}
+
+void System::when2DStabToggled(bool active2)
+{
+	if (active2)
+	{
+		//CODE TO BE EXECUTED WHEN "2D STAB" IS ENABLED GOES HERE
+	}
+	else
+	{
+		//CODE TO BE EXECUTED WHEN "2D STAB" IS DISABLED GOES HERE
 	}
 }
 
@@ -847,7 +877,8 @@ void System::onWindowBestFocusChanged(double val)
 	//CODE TO EXECUTE WHEN BEST FOCUS SCALE CHANGED
 
 	int val2 = round(val);
-	center = val2;
+	//This should be in a mutex, but it's not critical
+	desiredLocBestFocus = val2;
 
 }
 
@@ -863,8 +894,7 @@ bool System::onCloseClicked(const GdkEventAny* event)
 	stopStreaming();
 	vsys.Shutdown();
 	delete priv;
-	bAutofocusing = 0;
-	std::cout << "THE function RAN!" << std::endl;
+	hvigtk_logfile << "system::onCloseClicked ran" << std::endl;
 	return false;
 }
 
@@ -882,4 +912,13 @@ MainWindow& System::getWindow()
 Recorder& System::getRecorder()
 {
 	return *recorder;
+}
+
+void System::on_error()
+{
+	// Show an error dialog
+	// if (alreadyError) {
+	// 	Gtk::MessageDialog dialog("An error occurred", false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
+	// 	dialog.run();
+	// }
 }

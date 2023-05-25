@@ -9,6 +9,7 @@
 #include "SDL_render.h"
 #include "SDL_video.h"
 #include "sdlwinchild.hpp"
+#include "main.hpp"
 
 #define BORDER_THRES 9
 
@@ -140,7 +141,7 @@ int SDLWindow::child_main()
 	// 		SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_UTILITY | SDL_WINDOW_SKIP_TASKBAR | SDL_WINDOW_ALLOW_HIGHDPI);
 	// SDL_Window *window = SDL_CreateWindow("sdlwindow", 0, 0, 900 * scalexyz, 500 * scalexyz, 
 	// 	SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS  | SDL_WINDOW_SKIP_TASKBAR | SDL_WINDOW_ALLOW_HIGHDPI);
-	SDL_Window *window = SDL_CreateWindow("sdlwindow", 42, 269, 918 * scalexyz, 442 * scalexyz, SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALLOW_HIGHDPI);
+	SDL_Window *window = SDL_CreateWindow("sdlwindow", gtkAppLocationX, gtkAppLocationY+205, 918 * scalexyz, 442 * scalexyz, SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALLOW_HIGHDPI);
 
 	if (!window)
 		return 2;
@@ -292,6 +293,5 @@ int SDLWindow::child_main()
 	SDL_DestroyWindow(window);
 	SDL_Quit();
 	
-	std::cout << "SDLWinChild loop ending gracefully";
 	return 0;
 }

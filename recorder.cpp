@@ -17,7 +17,7 @@ Recorder::Recorder(System &sys) :
 	sigOperationSave(),
 	sigOperationLoad(),
 	sigBuffer(),
-	mutex(),
+	mutex(), // Holds frame data
 	frameReleased(),
 	current(nullptr)
 {

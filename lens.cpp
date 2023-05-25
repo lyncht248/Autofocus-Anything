@@ -1,6 +1,7 @@
 #include "lens.hpp"
 #include "logfile.hpp"
-
+#include "system.hpp"
+#include "main.hpp"
 #include <iostream>
 
 #include <stdio.h>
@@ -93,30 +94,31 @@ void lens::return_to_start() {
     bytes_written = write(serial_port, msg4, sizeof(msg4));
     usleep(100000); //Sleep for 0.1s
 
-    currentLensLoc = 0;
+    currentLensLoc = 11.5;
 }
 
 void lens::mov_rel(double mmToMove, bool waitForLensToRead) {
     ssize_t bytes_written;
     int rate = 1024; //1024 encoder pulses per mm
-    int mmUpperBound = 16;
-    //double current_pos = get_pos();  //current position in encoder pulses
-    double move = rate * mmToMove; //encoder pulses to move
-    //double new_pos = move + current_pos;
+    int pulsesToMove = round(mmToMove * rate);
+    std::string hexToMove = int2hexstr(pulsesToMove);
+
 
     //currentLensLoc = currentLensLoc + mmToMove;
     //std::cout << currentLensLoc << std::endl;
     
     //TODO: Replace TRUE with a way to limit the lens moving out-of-bounds
-    if (1) {
+    std::cout << currentLensLoc + mmToMove << std::endl;
+    if (currentLensLoc + mmToMove > 0.0 && currentLensLoc + mmToMove < 16.6) {
         // Send move signal
-        std::string pszBufStr = "0mr" + double2hexstr(mmToMove) + "\r\n";
+        std::string pszBufStr = "0mr" + hexToMove + "\r\n";
         unsigned char msg[pszBufStr.length()];
         std::copy( pszBufStr.begin(), pszBufStr.end(), msg );
         bytes_written = write(serial_port, msg, sizeof(msg));
         int pulses = round(mmToMove * 1024);
-        currentLensLoc = currentLensLoc + pulses;
-        std::cout << currentLensLoc << std::endl;
+        // std::cout << mmToMove << std::endl;
+        // currentLensLoc = currentLensLoc + mmToMove;
+        // std::cout << currentLensLoc << std::endl;
 
         if (waitForLensToRead) {
             int tryagain = 2;
@@ -139,7 +141,7 @@ void lens::mov_rel(double mmToMove, bool waitForLensToRead) {
                 }
                 if (line_received) {
                     buf[n_read-1] = '\0'; // remove the newline character from the buffer
-                    // std::cout << "Received line: " << buf << std::endl;
+                    std::cout << "Received line: " << buf << std::endl;
                 } else {
                     std::cerr << "Error: no line terminator received\n";
                     return;
@@ -148,45 +150,27 @@ void lens::mov_rel(double mmToMove, bool waitForLensToRead) {
                 if (buf[1] == 'P') {
                     // std::cout << "successfully homed!" << std::endl;
                     successfulmove = true;
+                    if (buf[3] != 'F') {
+                        std::string positionHex = std::string(buf).substr(7, 4);
+                        std::cout << positionHex << std::endl;
+                        // Convert positionHex to decimal
+                        int position = hexstr2int(positionHex);
+                        currentLensLoc = position / 1024.0;
+                    }
                 }
                 //If 'G' or something else was recieved, the move wasn't successful or is in-progress. Try again
                 else if (tryagain > 0) {
                     tryagain--;
-                    std::cout << "Lens error... trying again" << std::endl;
+                    std::cout << "Lens error in lens::mov_rel()... trying again" << std::endl;
                 }
                 else {
-                    std::cout << "Lens error... must reset lens." << std::endl;
+                    std::cout << "Lens error in lens::mov_rel()... giving up." << std::endl;
                     successfulmove = 1;
-
                 }
             }
         }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//        std::cout << msg << "\n";
+    //        std::cout << msg << "\n";
     //     //Sleep(20);
 
     //     int wait_move = 0;
@@ -210,6 +194,10 @@ void lens::mov_rel(double mmToMove, bool waitForLensToRead) {
     //         }
     //     }
     // }
+    }
+    else {
+        std::cout << "Lens is out of bounds!" << std::endl;
+        //m_errorSignal.emit();
     }
 }
 
@@ -244,11 +232,11 @@ double lens::get_pos() {
     return 2.0;
 }
   
-  //Converts a hexadecimal string to a double and back again
-double lens::hexstr2double (const std::string& hexstr) {
+// converts a hexadecimal string to an int
+int lens::hexstr2int (const std::string& hexstr) {
     union
     {
-        long long i;
+        int i;
         double    d;
     } value;
 
@@ -256,11 +244,10 @@ double lens::hexstr2double (const std::string& hexstr) {
     return value.i;
 }
 
-std::string lens::double2hexstr(double x) {
-    int num = round(x * 1024);
+std::string lens::int2hexstr(int x) {
 
     std::ostringstream buf;
-    buf << std::hex << std::uppercase << std::setfill('0') << std::setw(8) << num;
+    buf << std::hex << std::uppercase << std::setfill('0') << std::setw(8) << x;
 
     return buf.str();
 }
@@ -282,6 +269,6 @@ lens::~lens() {
     // port.Flush();
     // port.CancelIo();
     // port.Close();
-    std::cout << "serial port closed" << std::endl;
+    hvigtk_logfile << "serial port closed in lens destructor" << std::endl;
     close(serial_port);
 }

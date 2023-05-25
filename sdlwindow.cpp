@@ -1,6 +1,6 @@
 #include "sdlwindow.hpp"
 #include "sdlwinchild.hpp"
-
+#include "logfile.hpp"
 #include <pthread.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -83,7 +83,7 @@ void SDLWindow::sdlwin_close(SDLWin* win)
 	pthread_cond_destroy(&win->hasCommand);
 	pthread_mutex_destroy(&win->mutex);
 	munmap(win, sizeof(struct SDLWin) );
-	std::cout << "SDLWin closed" << std::endl;
+	hvigtk_logfile << "SDLWin closed in SDLWindow::sdlwin_close" << std::endl;
 }
 
 Response SDLWindow::createFrame(SDLWin *win, int width, int height)

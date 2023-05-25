@@ -19,9 +19,12 @@ const char *hvigtk_startdir = workingdir;
 std::ofstream hvigtk_logfile("hvigtk.log");
 
 SDLWindow::SDLWin *childwin = nullptr;
-int center;
 std::atomic<bool> bAutofocusing = 0; //Flag that controls the autofocusing while() loop
 
+Glib::Dispatcher m_errorSignal;
+
+int gtkAppLocationX = 42;
+int gtkAppLocationY = 10;
 
 int main(int argc, char **argv) 
 {
@@ -58,14 +61,14 @@ int main(int argc, char **argv)
 
     //Opens the GTK application GUI and stops main() execution. system.getWindow() returns a pointer to the MainWindow object created in system.cc
     int out = app->run(system.getWindow() );
-	std::cout << "app-> run loop ending gracefully";
+	hvigtk_logfile << "app-> run loop finished executing in main.cpp";
 
     //Closes logfile when GTK application exits
 	hvigtk_logfile.close();
 
     //Closes the SDL window
 	SDLWindow::sdlwin_close(childwin);
-    std::cout << "winchild closed correctly" << std::endl;
+    hvigtk_logfile << "sdlwin_close in main.cpp executed" << std::endl;
 
     // // Stops the autofocus thread. This should be a destructor in the autofocus object
     // if (tAutofocus.joinable() ) {
@@ -74,7 +77,7 @@ int main(int argc, char **argv)
     // }
 
     //Returns the exit code of the GTK application
-	std::cout << "main loop ending gracefully";
+	hvigtk_logfile << "main.cpp about to return 1";
 	return 1;
 }
 

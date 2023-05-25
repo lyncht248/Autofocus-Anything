@@ -112,6 +112,7 @@ public:
 	Condition& getFindFocusActive();
 	Condition& getHoldFocusActive();
 	Condition& get3DStabActive();
+	Condition& get2DStabActive();
 	Condition& getHasBuffer();
 	Condition& getLiveView();
 	Condition& getLoading();
@@ -150,6 +151,7 @@ private:
 
 	void whenHoldFocusToggled(bool holdingFocus);
 	void when3DStabToggled(bool active);
+	void when2DStabToggled(bool active2);
     void onFindFocusClicked(); 
     void onResetClicked(); 
 
@@ -195,7 +197,7 @@ private:
     Gtk::Button recordButton, backToStartButton, pauseButton, playButton, fileLoadButton, fileSaveButton;
     Gtk::Entry fileNameEntry;
     Gtk::FileChooserButton fileChooseButton;
-    Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, holdFocusToggle, tdStabToggle;
+    Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, holdFocusToggle, threedStabToggle, twodStabToggle;
 	Gtk::Button findFocusButton, resetButton;
 
     Gtk::Label fpsLabel;
@@ -205,7 +207,7 @@ private:
 	bool newDrawFrame;
 	int countFrames;
     
-    Condition makeMapActive, stabiliseActive, showMapActive, findFocusActive, holdFocusActive, tdStabActive, 
+    Condition makeMapActive, stabiliseActive, showMapActive, findFocusActive, holdFocusActive, threedStabActive, twodStabActive,
 			  hasBuffer, liveView, loading, saving, playingBuffer, seeking, recording, pausedRecording, trackingFPS;
 
 	SignalFrameDrawn sigFrameDrawn;

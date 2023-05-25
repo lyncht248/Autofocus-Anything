@@ -134,6 +134,7 @@ private:
 
 	void whenHoldFocusToggled(bool holdingFocus);
 	void when3DStabToggled(bool active);
+	void when2DStabToggled(bool active2);
 
 	void whenLoadingToggled(bool loading);
 	void whenSavingToggled(bool saving);
@@ -153,6 +154,8 @@ private:
 
 	bool onCloseClicked(const GdkEventAny* event);
 
+	void on_error();
+
 	struct Private;
 	MainWindow window; //object from mainwindow.cpp class
 	autofocus AF; //object from autofocus.cpp class
@@ -167,6 +170,7 @@ private:
 	Glib::Dispatcher sigNewFrame;
 
 	TSQueue<VidFrame *> frameQueue;
+
 	
 	FrameProcessor frameProcessor;
 	

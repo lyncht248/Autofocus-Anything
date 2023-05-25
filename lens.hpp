@@ -27,13 +27,13 @@ class lens { //This object handles autofocusing
   void mov_rel(double mmToMove, bool waitForLensToRead);
   
   private:
-  int currentLensLoc = 0;
+  double currentLensLoc = 11.5;
   // Gets the current position of the motor
   double get_pos();
   
-  //Converts a hexadecimal string to a double and back again
-  double hexstr2double (const std::string& hexstr);
-  std::string double2hexstr(double x);
+  //Converts a hexadecimal string to an int (hex strings are always whole numbers) and back again
+  int hexstr2int (const std::string& hexstr);
+  std::string int2hexstr(int pulsesToMove);
 
   //Closes the motor serial port
   void closemotor();

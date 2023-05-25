@@ -5,6 +5,7 @@
 #include "main.hpp"
 #include "logfile.hpp"
 #include "ASICamera2.h" //TODO: Remove this when you move capturevideo() to tiltedcam.cc
+#include "mainwindow.hpp"
 
 #include <opencv2/highgui.hpp>
 #include <opencv2/opencv.hpp>
@@ -25,7 +26,7 @@
 std::atomic<bool> bNewImage = 0; //Flag that is 1 for when the buffer image is new, 0 when buffer image is old
 
 const long img_size = 1280 * 960; //Replace with actual image size
-bool bSaveImages = 0; // Saves images from the tilted camera to output folder (check filepath is right)
+bool bSaveImages = 0; // Saves images from the tilted camera to output folder (check filepath is right). WARNING: will produce enourmous number of images!
 bool bBlinking = 1;
 
 unsigned char* img_buf = (unsigned char*)malloc(img_size); // Accessed by thread1 and thread2
@@ -40,57 +41,7 @@ int imgcount;
 bool bHoldFocus;
 bool bFindFocus = 0;
 bool bResetLens = 0;
-//int center; //TODO: Optimize for unique alignment 
-
-// void CallBackFunc(int event, int x, int y, int flags, void* userdata)
-// {
-//      if  ( event == cv::EVENT_LBUTTONDOWN )
-//      {
-//           std::cout << "Left button of the mouse is clicked" << endl;
-//           if (bHoldFocus){
-//             bHoldFocus = 0;
-//           } 
-//           else 
-//           {
-//             imgcount = 0;
-//             bHoldFocus = 1;
-//             std::cout << "HoldFocus = 1" << endl;
-//           }
-//      }
-//      else if  ( event == cv::EVENT_RBUTTONDOWN )
-//      {
-//           std::cout << "Right button of the mouse is clicked" << endl;
-//           lens lens2;
-//           lens2.return_to_start();
-//      }
-//      else if  ( event == cv::EVENT_MBUTTONDOWN )
-//      {
-//           std::cout << "Middle button of the mouse is clicked, bAutofocusing = 0" << endl;
-//           if (bAutofocusing){
-//             bAutofocusing = 0;
-//           } else bAutofocusing = 1;
-//      }
-// }
-
-// void autofocus::crapGUI(void)
-// {
-//     // Read image from file 
-//     Mat img = imread("/home/tom/projects/autofocus_v9/test/black.png");
-
-//     //Create a window
-//     namedWindow("My Window", WINDOW_NORMAL);
-//     //set the callback function for any mouse event
-//     setMouseCallback("My Window", CallBackFunc, NULL);
-//     Mat resize;
-//     cv::resize(img, resize, cv::Size(), 0.5, 0.55); //function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
-
-//     //show the image
-//     imshow("My Window", resize);
-
-//     // Wait until user press some key
-//     waitKey(0);
-//     std::cout << "exited waitkey";
-// }
+int desiredLocBestFocus;
 
 autofocus::autofocus() :
   lens1(), //calls lens constructor, which homes lens
@@ -123,8 +74,8 @@ void autofocus::run () {
 
   //The following variables assume imgWidth = 320; must be changed if this isn't the case.
   int moved = 1;
-  int previous = center; //TODO: should be in a mutex
-  int tol = 4; //Tolerance zone of pixels in the center of image where no lense movement is triggered. Lower than 4 causes constant signals to lens
+  int previous = desiredLocBestFocus; //TODO: should be in a mutex
+  int tol = 4; //Tolerance zone of pixels about the desiredLocBestFocus where no lense movement is triggered. Lower than 4 causes constant signals to lens
 
   int blink = 0; //Becomes 1 when a blink is detected
   int blinkframes = 15; //number of frames to ignore when blink is detected
@@ -151,7 +102,6 @@ void autofocus::run () {
   double Kd = 0; //Should try to add a small Kd; further testing required
   PID pid = PID(dt, max, min, Kp, Kd, Ki);
   
-
   while(!stop_thread.load()) {
     
     if(bResetLens) {
@@ -168,7 +118,7 @@ void autofocus::run () {
       imgcount++;
       imgcountfile++;
 
-      cv::Mat image = cv::Mat(imWidth, imHeight, CV_8U, img_calc_buf);
+      cv::Mat image = cv::Mat(imHeight, imWidth, CV_8U, img_calc_buf);
       cv::Mat resized;
       double scale = 0.25; //change to 0.5 to resize image to (0.5*current dimensions). INSTEAD, TRUNCATE IMAGE, OR REDUCE KERNEL!
       cv::resize(image, resized, cv::Size(), scale, scale); //function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
@@ -189,23 +139,23 @@ void autofocus::run () {
       // if (imgcount < 3) {
       //   //Ignore first three frames, just in case...
       // }
-      // If holding focus, center becomes the current location of best-focus, otherwise we use 160
+      // If holding focus, desiredLocBestFocus becomes the current location of best-focus, otherwise we use 160
 
       // if (imgcount > 1) {
-      //   center = int(window.getBestFocusScaleValue());
+      //   desiredLocBestFocus = int(window.getBestFocusScaleValue());
       // }
 
       if (imgcount == 1) {
           if (bHoldFocus) {
-            center = locBestFocus;
-            previous = center;
-            //window.setBestFocusScaleValue(center); //set the slider to be equal to the current location of best-focus
+            desiredLocBestFocus = locBestFocus;
+            previous = desiredLocBestFocus;
+            //window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to the current location of best-focus
           }
           else if (bFindFocus) {
-            center = 200;
+            desiredLocBestFocus = 200;
             previous = 200;
-         		std::cout << "Set center back to 160 in autofocus.cc" << std::endl;
-            //window.setBestFocusScaleValue(center); //set the slider to be equal to 160, the center-point
+         		std::cout << "Set desiredLocBestFocus back to 200 in autofocus.cc" << std::endl;
+            //window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to 160, the center-point
           }
       }
 
@@ -227,7 +177,7 @@ void autofocus::run () {
 
       else {
           //do nothing inside tol band
-          if (abs(locBestFocus - center) <= tol) { // tol
+          if (abs(locBestFocus - desiredLocBestFocus) <= tol) { // tol
               // std::cout << s_int.count() << " ms, ";
               // std::cout << "0\n";
               moved = 0;
@@ -235,7 +185,7 @@ void autofocus::run () {
 
           else {
               // PID CONTROLLER
-              double inc = pid.calculate(center, locBestFocus);
+              double inc = pid.calculate(desiredLocBestFocus, locBestFocus);
               inc = inc * -1.0;
               lens1.mov_rel(inc, waitForLensToRead);
               // std::cout << s_int.count() << ", ";
@@ -467,6 +417,6 @@ double autofocus::normpdf(double x, double u, double s) {
 
 void autofocus::adjust_bestFocus(int val) {
   //TODO: should be in mutex
-  center = val;
+  desiredLocBestFocus = val;
 
 }

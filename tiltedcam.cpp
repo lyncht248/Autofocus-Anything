@@ -9,7 +9,7 @@
 #include <thread>
 
 tiltedcam::tiltedcam() {
-    std::cout << "tiltedcam object created" << "\n";
+    hvigtk_logfile << "tiltedcam object created" << "\n";
 
     int iNumofConnectCameras = ASIGetNumOfConnectedCameras();
 

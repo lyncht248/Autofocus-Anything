@@ -53,7 +53,7 @@ MainWindow::Private::Private() :
 	recordingSizeLabel("Rec. Size: "),
     bestFocusLabel("Best-Focal Plane"),
 	autofocusTitle("Autofocus"),
-	stabilizationTitle("2D Stabilization"),
+	stabilizationTitle("XY Stabilization"),
 	playbackTitle("Playback Controls"),
 	cameraSettingsTitle("Camera Settings"),
 	fileTitle("File Load and Save"),
@@ -336,11 +336,12 @@ MainWindow::MainWindow() : Gtk::Window(),
     fileChooseButton(),
     liveToggle(),
     makeMapToggle("Make Map"),
-    stabiliseToggle("Stabilise"),
+    stabiliseToggle("XY Stab."),
     showMapToggle("Show Map"),
     findFocusButton("Find Focus"),
     holdFocusToggle("Hold Focus"),
-    tdStabToggle("3D Stab."),
+    threedStabToggle("3D Stab."),
+	twodStabToggle("2D Stab."),
     fpsLabel(""),
 	//display(*this),
 	drawFrame(nullptr),
@@ -351,7 +352,8 @@ MainWindow::MainWindow() : Gtk::Window(),
     showMapActive(),
     findFocusActive(),
 	holdFocusActive(),
-	tdStabActive(),
+	threedStabActive(),
+	twodStabActive(),
     hasBuffer(),
     liveView(),
 	loading(),
@@ -376,7 +378,6 @@ MainWindow::MainWindow() : Gtk::Window(),
     //set_default_size(1700,200);
     set_title("HVI-GTK " HVIGTK_VERSION_STR);
     add_events(Gdk::STRUCTURE_MASK);
-	//set_position(Gtk::WIN_POS_CENTER_ALWAYS, 0, 0);
 
 	stateChangeConnection = signal_window_state_event().connect(sigc::mem_fun(*this, &MainWindow::_on_state_event) );
     //gainScale.setScaleSizeRequest(150, 0);
@@ -394,6 +395,14 @@ MainWindow::MainWindow() : Gtk::Window(),
 
 	frameRateScaleConnection = frameRateScale.signalChanged().connect(sigc::mem_fun(*this, &MainWindow::onFrameRateChange) );
     
+	//Tooltip text for the buttons
+	makeMapToggle.set_tooltip_text("Make a vessel map of the current recording using given threshold and scale values");
+	stabiliseToggle.set_tooltip_text("Using vessel map, XY-stabilise the current recording");
+	showMapToggle.set_tooltip_text("Show the loaded vessel map");
+    findFocusButton.set_tooltip_text("Finds focal plane with highest sharpness");
+	holdFocusToggle.set_tooltip_text("Holds current focal plane in-focus (even if not ");
+	threedStabToggle.set_tooltip_text("Shortcut for live angiograms which uses 'Hold Focus' and 'XY-Stab'");
+
     recordButton.set_image_from_icon_name("media-record");
     recordButton.set_tooltip_text("Begin recording");
     recordButton.set_hexpand(false);
@@ -473,14 +482,12 @@ MainWindow::MainWindow() : Gtk::Window(),
     //scaleScale.setSpinButtonWidth(4);
     scaleScale.setSpinButtonPrec(2);
 	scaleScale.signalChanged().connect(sigc::mem_fun(*this, &MainWindow::onScaleScaleChange) );
-
-	waitScale.set_tooltip_text("Optimize the stabiliser (0: no optimization; 100,000: max optimization)");
-
 	recordingSizeScale.set_tooltip_text("Set the maximum number of frames for a single recording");
 	recordingSizeScale.signalChanged().connect(sigc::mem_fun(*this, &MainWindow::onRecordingSizeScaleChange) );
     
     holdFocusToggle.set_sensitive(true);
-    tdStabToggle.set_sensitive(true);
+    threedStabToggle.set_sensitive(true);
+    twodStabToggle.set_sensitive(true);
 	bestFocusScale.set_sensitive(false);
     
     //bestFocusScale.setScaleSizeRequest(100, 0);
@@ -508,7 +515,6 @@ MainWindow::MainWindow() : Gtk::Window(),
 	showMapActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenShowMapToggled) );
 
 	findFocusButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onFindFocusClicked));
-    findFocusButton.set_tooltip_text("Finds image with highest sharpness");
 
 	resetButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onResetClicked));
     resetButton.set_tooltip_text("Resets the lens to home position");
@@ -516,8 +522,11 @@ MainWindow::MainWindow() : Gtk::Window(),
 	holdFocusActive.toggleOnSignal(holdFocusToggle.signal_toggled() );
 	holdFocusActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenHoldFocusToggled) );
 
-	tdStabActive.toggleOnSignal(tdStabToggle.signal_toggled() );
-	tdStabActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::when3DStabToggled) );
+	threedStabActive.toggleOnSignal(threedStabToggle.signal_toggled() );
+	threedStabActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::when3DStabToggled) );
+
+	twodStabActive.toggleOnSignal(twodStabToggle.signal_toggled() );
+	twodStabActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::when2DStabToggled) );
 
 	hasBuffer.signalTrue().connect(sigc::mem_fun(*this, &MainWindow::bufferFilled) );
 	hasBuffer.signalFalse().connect(sigc::mem_fun(*this, &MainWindow::bufferEmptied) );
@@ -544,9 +553,9 @@ MainWindow::MainWindow() : Gtk::Window(),
     priv->controlGrid.attach(priv->space4[0], 0, 0);
 
 	priv->controlGrid.attach(priv->autofocusTitle, 1, 4, 3);
-    priv->controlGrid.attach(findFocusButton, 1, 0);
-    priv->controlGrid.attach(holdFocusToggle, 1, 1);
-    priv->controlGrid.attach(tdStabToggle, 1, 2);
+    priv->controlGrid.attach(findFocusButton, 1, 1);
+    priv->controlGrid.attach(holdFocusToggle, 1, 2);
+    priv->controlGrid.attach(threedStabToggle, 1, 0);
 	priv->controlGrid.attach(resetButton, 1, 3);
 
     priv->controlGrid.attach(priv->space4[1], 2, 0);
@@ -562,6 +571,7 @@ MainWindow::MainWindow() : Gtk::Window(),
     priv->controlGrid.attach(makeMapToggle, 7, 0);
     priv->controlGrid.attach(stabiliseToggle, 7, 1);
     priv->controlGrid.attach(showMapToggle, 7, 2);
+	//priv->controlGrid.attach(twodStabToggle, 7, 3); Retired functionality
 
     priv->controlGrid.attach(priv->space4[4], 8, 0);
 
@@ -831,7 +841,12 @@ Condition& MainWindow::getHoldFocusActive()
 
 Condition& MainWindow::get3DStabActive()
 {
-	return tdStabActive;
+	return threedStabActive;
+}
+
+Condition& MainWindow::get2DStabActive()
+{
+	return twodStabActive;
 }
 
 Condition& MainWindow::getHasBuffer()
@@ -976,6 +991,7 @@ void MainWindow::whenMakeMapToggled(bool makingMap)
 	{
     	stabiliseToggle.set_sensitive(true);
     	showMapToggle.set_sensitive(true);
+		
 		//showMapToggle.set_active();
 		//GUI CHANGES WHEN "MAKE MAP" IS ENABLED GO HERE
 	}
@@ -1025,10 +1041,11 @@ void MainWindow::onFindFocusClicked()
 
 void MainWindow::onResetClicked()
 {
-	std::cout << "Resetting Lens from mainwindow.cpp" << std::endl;
+	hvigtk_logfile << "Resetting Lens from mainwindow::onResetClicked" << std::endl;
 	//findFocusButton.set_active(false);
 	holdFocusToggle.set_active(false);
-	tdStabToggle.set_active(false);
+	threedStabToggle.set_active(false);
+	twodStabToggle.set_active(false);
 	bResetLens = 1;
 }
 
@@ -1036,16 +1053,19 @@ void MainWindow::whenHoldFocusToggled(bool holdingFocus)
 {
 	if (holdingFocus)
 	{
+		// Make best focus scale active and set value to the desired location of best-focus
 		bestFocusScale.set_sensitive(true);
+		//bestFocusScale.setValue(desiredLocBestFocus);
 
 		findFocusButton.set_sensitive(false);
-		tdStabToggle.set_sensitive(false);
+		//threedStabToggle.set_sensitive(false);
 		//GUI CHANGES WHEN "HOLD FOCUS" IS ENABLED GO HERE
 	}
 	else
 	{
 		findFocusButton.set_sensitive(true);
-		tdStabToggle.set_sensitive(true);
+		//threedStabToggle.set_sensitive(true);
+		bestFocusScale.set_sensitive(false);
 
 		//GUI CHANGES WHEN "FIND FOCUS" IS DISABLED GO HERE
 	}
@@ -1058,15 +1078,30 @@ void MainWindow::when3DStabToggled(bool active)
 		holdFocusToggle.set_active(true);
 		makeMapToggle.set_active(true);
 		stabiliseToggle.set_active(true);
-		usleep(1000000);
-		showMapToggle.set_active(false);
 		//GUI CHANGES WHEN "3D STABILISER" IS ENABLED GO HERE
 	}
 	else
 	{
 		holdFocusToggle.set_active(false);
+		makeMapToggle.set_active(false);
 		stabiliseToggle.set_active(false);
 		//GUI CHANGES WHEN "3D STABILISER" IS DISABLED GO HERE
+	}
+}
+
+void MainWindow::when2DStabToggled(bool active2)
+{
+	if (active2)
+	{
+		makeMapToggle.set_active(true);
+		stabiliseToggle.set_active(true);
+		//GUI CHANGES WHEN "2D STABILISER" IS ENABLED GO HERE
+	}
+	else
+	{
+		makeMapToggle.set_active(false);
+		stabiliseToggle.set_active(false);
+		//GUI CHANGES WHEN "2D STABILISER" IS DISABLED GO HERE
 	}
 }
 

@@ -8,11 +8,6 @@
 #include <atomic>
 #include <thread>
 
-//Global Variables
-//extern std::atomic<bool> bAutofocusing; //Flag that controls the autofocusing while() loop
-//extern std::atomic<bool> bNewImage; //Flag that is 1 for when the buffer image is new, 0 when buffer image is old
-
-
 // extern unsigned char* img_read_buf; // Video capture. Accessed by T1.
 // extern unsigned char* img_transfer_buf; // Transfer. Accessed by T1 and T2.
 // extern unsigned char* img_calc_buf; // Calculation. Accessed by T2.
@@ -21,7 +16,7 @@ extern int imgcount;
 extern bool bHoldFocus;
 extern bool bFindFocus;
 extern bool bResetLens;
-extern int center;
+extern int desiredLocBestFocus;
 
 
 class autofocus { //This class handles autofocusing
@@ -57,14 +52,12 @@ class autofocus { //This class handles autofocusing
   std::vector<double> fitnormalcurve(std::vector<double> curve, int kernel);
   double normpdf(double x, double u, double s); //helper function
 
-  private:
-    //MainWindow window;
-    bool waitForLensToRead = false;
-    std::atomic<bool> stop_thread;
-    std::thread tAutofocus;
+  bool waitForLensToRead = true;
+  std::atomic<bool> stop_thread;
+  std::thread tAutofocus;
 
-    lens lens1;
-    tiltedcam tiltedcam1;
+  lens lens1;
+  tiltedcam tiltedcam1;
 
 };
 
