@@ -16,7 +16,9 @@ extern int imgcount;
 extern bool bHoldFocus;
 extern bool bFindFocus;
 extern bool bResetLens;
+extern bool bNewMoveRel;
 extern int desiredLocBestFocus;
+extern std::atomic<double> mmToMove;
 
 
 class autofocus { //This class handles autofocusing
@@ -52,8 +54,7 @@ class autofocus { //This class handles autofocusing
   std::vector<double> fitnormalcurve(std::vector<double> curve, int kernel);
   double normpdf(double x, double u, double s); //helper function
 
-  bool waitForLensToRead = true;
-  std::atomic<bool> stop_thread;
+  std::atomic<bool> stop_thread; //Controls the autofocus, tilted camera, and lens threads
   std::thread tAutofocus;
 
   lens lens1;

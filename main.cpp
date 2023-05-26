@@ -78,6 +78,6 @@ int main(int argc, char **argv)
 
     //Returns the exit code of the GTK application
 	hvigtk_logfile << "main.cpp about to return 1";
-	return 1;
+	return 0;
 }
 

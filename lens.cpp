@@ -2,6 +2,7 @@
 #include "logfile.hpp"
 #include "system.hpp"
 #include "main.hpp"
+#include "autofocus.hpp"
 #include <iostream>
 
 #include <stdio.h>
@@ -15,7 +16,9 @@
 #include <string>
 #include <iomanip>
 
-lens::lens() {
+lens::lens() :
+    stop_thread(false)
+{
 
     // Check for errors
     if (serial_port < 0) {
@@ -61,7 +64,14 @@ lens::lens() {
         hvigtk_logfile << "failure to save tty settings for lens motor \n";
     }
 
+    hvigtk_logfile << "Serial Port initialized! \n";
 
+    // Start a thread to send and recieve signals from the lens motor asynchronously
+    std::thread tLens(&lens::lens_thread, this);
+    tLens.detach();
+}
+
+void lens::lens_thread() {
     ssize_t bytes_written; //Gets rid of the warn_unused_result error
 
     // Sets the home location offset to be 1mm (or __ encoder pulses, or 0x0400) from the factory home location. Doesn't move lens. 
@@ -76,15 +86,17 @@ lens::lens() {
 
     return_to_start(); // Moves lens to callibrated start position
 
-    hvigtk_logfile << "Serial Port iniialized! \n";
-
+    while(!stop_thread.load()) {
+        if(bNewMoveRel) {
+            mov_rel(mmToMove);
+            bNewMoveRel = 0;
+        }
+    }
 }
 
 void lens::return_to_start() {
-    // Absolute move of 0x2E00, or 11mm, relative to the offset home position
+    // Absolute move of 0x2E00, or 11.5mm, relative to the offset home position
     ssize_t bytes_written;
-    hvigtk_logfile << "Lens at home position! \n";
-
     unsigned char msg3[] = { '0', 'm', 'a', '0', '0', '0', '0', '2', 'E', '0', '0', '\r', '\n' };
     bytes_written = write(serial_port, msg3, sizeof(msg3));
     usleep(1000000); //Sleep for 1s
@@ -97,139 +109,75 @@ void lens::return_to_start() {
     currentLensLoc = 11.5;
 }
 
-void lens::mov_rel(double mmToMove, bool waitForLensToRead) {
+void lens::mov_rel(double mmToMove) {
     ssize_t bytes_written;
     int rate = 1024; //1024 encoder pulses per mm
     int pulsesToMove = round(mmToMove * rate);
     std::string hexToMove = int2hexstr(pulsesToMove);
-
-
-    //currentLensLoc = currentLensLoc + mmToMove;
-    //std::cout << currentLensLoc << std::endl;
-    
-    //TODO: Replace TRUE with a way to limit the lens moving out-of-bounds
     std::cout << currentLensLoc + mmToMove << std::endl;
+
+    // Check if the move is within the bounds of the lens
     if (currentLensLoc + mmToMove > 0.0 && currentLensLoc + mmToMove < 16.6) {
+        
         // Send move signal
         std::string pszBufStr = "0mr" + hexToMove + "\r\n";
         unsigned char msg[pszBufStr.length()];
         std::copy( pszBufStr.begin(), pszBufStr.end(), msg );
         bytes_written = write(serial_port, msg, sizeof(msg));
-        int pulses = round(mmToMove * 1024);
-        // std::cout << mmToMove << std::endl;
-        // currentLensLoc = currentLensLoc + mmToMove;
-        // std::cout << currentLensLoc << std::endl;
 
-        if (waitForLensToRead) {
-            int tryagain = 2;
-            char buf[256];
-            int n_read = 0;
-            bool line_received = false;
-            bool successfulmove = false;
-            while(!successfulmove){
-                //Reads one bit at a time until a new line recieved (end of message)
-                while (!line_received && n_read < sizeof(buf)) {
-                    int n = read(serial_port, &buf[n_read], 1);
-                    if (n < 0) {
-                        std::cerr << "Error reading from serial port\n";
-                        return;
-                    }
-                    if (buf[n_read] == '\n') {
-                        line_received = true;
-                    }
-                    n_read += n;
-                }
-                if (line_received) {
-                    buf[n_read-1] = '\0'; // remove the newline character from the buffer
-                    std::cout << "Received line: " << buf << std::endl;
-                } else {
-                    std::cerr << "Error: no line terminator received\n";
+        // Read response from lens, which includes the current lens position
+        int tryagain = 2;
+        char buf[256];
+        int n_read = 0;
+        bool line_received = false;
+        bool successfulmove = false;
+        while(!successfulmove){
+            //Reads one bit at a time until a new line recieved (end of message)
+            while (!line_received && n_read < sizeof(buf)) {
+                int n = read(serial_port, &buf[n_read], 1);
+                if (n < 0) {
+                    std::cerr << "Error reading from serial port\n";
                     return;
                 }
-                //If 'P' is recieved, the move was successful
-                if (buf[1] == 'P') {
-                    // std::cout << "successfully homed!" << std::endl;
-                    successfulmove = true;
-                    if (buf[3] != 'F') {
-                        std::string positionHex = std::string(buf).substr(7, 4);
-                        std::cout << positionHex << std::endl;
-                        // Convert positionHex to decimal
-                        int position = hexstr2int(positionHex);
-                        currentLensLoc = position / 1024.0;
-                    }
+                if (buf[n_read] == '\n') {
+                    line_received = true;
                 }
-                //If 'G' or something else was recieved, the move wasn't successful or is in-progress. Try again
-                else if (tryagain > 0) {
-                    tryagain--;
-                    std::cout << "Lens error in lens::mov_rel()... trying again" << std::endl;
-                }
-                else {
-                    std::cout << "Lens error in lens::mov_rel()... giving up." << std::endl;
-                    successfulmove = 1;
+                n_read += n;
+            }
+            if (line_received) {
+                buf[n_read-1] = '\0'; // remove the newline character from the buffer
+                std::cout << "Received line: " << buf << std::endl;
+            } else {
+                std::cerr << "Error: no line terminator received\n";
+                return;
+            }
+            //If 'P' is recieved, the move was successful
+            if (buf[1] == 'P') {
+                successfulmove = true;
+                if (buf[3] != 'F') {
+                    // Get lens position from response
+                    std::string positionHex = std::string(buf).substr(7, 4);
+                    std::cout << positionHex << std::endl;
+                    // Convert positionHex to decimal
+                    int position = hexstr2int(positionHex);
+                    currentLensLoc = position / 1024.0;
                 }
             }
+            //If 'G' or something else was recieved, the move wasn't successful or is in-progress. Try again
+            else if (tryagain > 0) {
+                tryagain--;
+                std::cout << "Lens error in lens::mov_rel()... trying again" << std::endl;
+            }
+            else {
+                std::cout << "Lens error in lens::mov_rel()... giving up." << std::endl;
+                successfulmove = 1;
+            }
         }
-
-    //        std::cout << msg << "\n";
-    //     //Sleep(20);
-
-    //     int wait_move = 0;
-    //     if (wait_move == 1) {
-    //         std::vector<char> rxBuf1;
-    //         rxBuf1.resize(13); //11 data bits and then 2 for the /l /n which terminates every ASCII string
-
-    //         int timeout = 0;
-    //         const DWORD dwRead = 1;
-
-    //         while (timeout < 50) {
-    //             const DWORD dwRead = port.Read(rxBuf1.data(), static_cast<DWORD>(rxBuf1.size()));
-    //             if (dwRead == 13) {
-    //                 break;
-    //             }
-    //             ++timeout;
-    //         }
-    //         //std::cout << "Motor stopped";
-    //         if (timeout == 50) {
-    //             printf("mov_rel function timed out");
-    //         }
-    //     }
-    // }
     }
     else {
         std::cout << "Lens is out of bounds!" << std::endl;
         //m_errorSignal.emit();
     }
-}
-
-//TODO
-double lens::get_pos() {
-    // const char* pszBuf = "0gp\r\n";
-    // write(serial_port, pszBuf, sizeof(pszBuf));
-
-    // std::vector<char> rxBuf;
-    // rxBuf.resize(13); //11 data bits and then 2 for the /l /n which terminates every ASCII string
-    
-    //const DWORD dwRead = read(rxBuf.data(), static_cast<DWORD>(rxBuf.size()));
-    // /*int timeout = 0;
-    // const DWORD dwRead = 0;
-    // do {
-    //     const DWORD dwRead = port.Read(rxBuf.data(), static_cast<DWORD>(rxBuf.size()));
-    //     ++timeout;
-    // } while (dwRead < 11 && timeout < 5000);
-
-    // if (timeout == 5000) {
-    //     printf("Get_pos function timed out");
-    //     return 0;
-    // }*/
-    // rxBuf.resize(11); //gets rid of the /l and /n
-    // std::string position{ rxBuf.begin(), rxBuf.end() };
-    // std::string hex_pos = position.substr(7, 4);
-    // double positiond = hexstr2double(hex_pos);
-    // port.TerminateOutstandingWrites();
-    // return positiond;
-
-    std::cout << "lens position is <THIS IS A TEST>" << "\n";
-    return 2.0;
 }
   
 // converts a hexadecimal string to an int
@@ -252,23 +200,10 @@ std::string lens::int2hexstr(int x) {
     return buf.str();
 }
 
-
-void lens::closemotor() {
-    // port.ClearWriteBuffer();
-    // port.ClearReadBuffer();
-    // port.Flush();
-    // port.CancelIo();
-    // port.Close();
-
-    close(serial_port);
-}
-
 lens::~lens() {
-    // port.ClearWriteBuffer();
-    // port.ClearReadBuffer();
-    // port.Flush();
-    // port.CancelIo();
-    // port.Close();
-    hvigtk_logfile << "serial port closed in lens destructor" << std::endl;
+    stop_thread.store(true);
+    if (tLens.joinable())
+        tLens.join();
     close(serial_port);
+    hvigtk_logfile << "serial port closed and Lens thread ended in lens destructor" << std::endl;
 }

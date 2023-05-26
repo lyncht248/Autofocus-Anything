@@ -93,6 +93,7 @@ FrameProcessor::~FrameProcessor()
 {
 	running = false;
 	ThreadStopper::stop({processorThread, stabThread});
+	hvigtk_logfile << "FrameProcessor threads stopped, destructor called" << std::endl;
 }
 
 void FrameProcessor::stabilise()
@@ -901,7 +902,8 @@ bool System::onCloseClicked(const GdkEventAny* event)
 System::~System()
 {
 	vsys.Shutdown();
-	delete priv;
+//	delete priv;
+	hvigtk_logfile << "system::~system ran" << std::endl;
 }
 
 MainWindow& System::getWindow()

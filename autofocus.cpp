@@ -41,10 +41,13 @@ int imgcount;
 bool bHoldFocus;
 bool bFindFocus = 0;
 bool bResetLens = 0;
+bool bNewMoveRel = 0;
 int desiredLocBestFocus;
 
+std::atomic<double> mmToMove = 0.0;
+
 autofocus::autofocus() :
-  lens1(), //calls lens constructor, which homes lens
+  lens1(), //calls lens constructor, which homes lens, and passes the stop_thread controller
   tiltedcam1(), //calls tiltedcam constructor, which opens tilted camera 
   stop_thread(false)
 {
@@ -59,7 +62,7 @@ autofocus::~autofocus() {
   if(tAutofocus.joinable()) {
       tAutofocus.join();
   }
-  hvigtk_logfile << "Autofocus thread stopped \n";
+  hvigtk_logfile << "Autofocus deconstructor called, thread stopped \n";
 }
 
 void autofocus::run () {
@@ -91,13 +94,7 @@ void autofocus::run () {
   double dt = 1.0 / 50.0; //time per frame. Assumes about 50Hz... TODO: use actual time in while loop
   double max = 3;  //maximum relative move the lens can be ordered to make. Set to +-3mm
   double min = -3; 
-  double Kp;
-  if(waitForLensToRead) {
-    Kp = 0.0018 * 3.0; //*4-5.0 is on the edge of instability; *3.0 seems stable
-  }
-  else {
-    Kp = 0.0018 * 1.0; //From experimental testing; and doubled since we are using actual pixel width, not 640 width
-  }
+  double Kp = 0.0018 * 3.0; //*4-5.0 is on the edge of instability; *3.0 seems stable
   double Ki = 0;
   double Kd = 0; //Should try to add a small Kd; further testing required
   PID pid = PID(dt, max, min, Kp, Kd, Ki);
@@ -154,7 +151,7 @@ void autofocus::run () {
           else if (bFindFocus) {
             desiredLocBestFocus = 200;
             previous = 200;
-         		std::cout << "Set desiredLocBestFocus back to 200 in autofocus.cc" << std::endl;
+         		hvigtk_logfile << "Set desiredLocBestFocus back to 200 in autofocus.cc" << std::endl;
             //window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to 160, the center-point
           }
       }
@@ -185,12 +182,12 @@ void autofocus::run () {
 
           else {
               // PID CONTROLLER
-              double inc = pid.calculate(desiredLocBestFocus, locBestFocus);
-              inc = inc * -1.0;
-              lens1.mov_rel(inc, waitForLensToRead);
+              mmToMove = pid.calculate(desiredLocBestFocus, locBestFocus) * -1.0;
+              bNewMoveRel = 1;
+
               // std::cout << s_int.count() << ", ";
-              // std::cout << locBestFocus << ", ";
-              // std::cout << inc << "\n";
+              std::cout << locBestFocus << ", ";
+              std::cout << mmToMove << "\n";
               moved = 1;
           }
       }
@@ -204,7 +201,7 @@ void autofocus::run () {
   
   }
   std::cout << imgcountfile << "\n";
-  //tcrapGUI.join();
+
   tCaptureVideo.join(); // Stops the CaptureVideo thread too
 
 } 
