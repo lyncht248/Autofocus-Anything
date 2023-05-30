@@ -66,14 +66,8 @@ autofocus::~autofocus() {
 }
 
 void autofocus::run () {
-  auto t1 = std::chrono::steady_clock::now();
-  usleep(10000);
-  auto t2 = std::chrono::steady_clock::now();
-  auto s_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
-
   //Starting the capture video thread
   std::thread tCaptureVideo(&autofocus::capturevideo, this);
-  int testcount = 1;
 
   //The following variables assume imgWidth = 320; must be changed if this isn't the case.
   int moved = 1;
@@ -82,8 +76,8 @@ void autofocus::run () {
 
   int blink = 0; //Becomes 1 when a blink is detected
   int blinkframes = 15; //number of frames to ignore when blink is detected
-  imgcount = 0; //Keeps track of the number of images recieved and analyzed from the camera
-  int imgcountfile = 0; //TODO: janky
+  imgcount = 0; //Keeps track of the number of images recieved and analyzed from the camera, but resets when switching between FindFocus and HoldFocus
+  int imgcountfile = 0; //Keeps track of TOTAL number of images, for filenaming and debugging
 
   bHoldFocus = 0;
 
@@ -97,8 +91,13 @@ void autofocus::run () {
   double Kp = 0.0018 * 3.0; //*4-5.0 is on the edge of instability; *3.0 seems stable
   double Ki = 0;
   double Kd = 0; //Should try to add a small Kd; further testing required
-  PID pid = PID(dt, max, min, Kp, Kd, Ki);
-  
+  PID pid = PID(dt, max, min, Kp, Kd, Ki);  
+
+  auto t1 = std::chrono::steady_clock::now();
+  usleep(10000);
+  auto t2 = std::chrono::steady_clock::now();
+  auto s_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+
   while(!stop_thread.load()) {
     
     if(bResetLens) {
@@ -107,6 +106,9 @@ void autofocus::run () {
     }
 
     if (bNewImage && (bHoldFocus || bFindFocus)) {
+
+      t1 = std::chrono::steady_clock::now();
+      
       { 
       std::lock_guard<std::mutex> lck{ mtx };
       img_calc_buf = img_buf;
@@ -175,8 +177,8 @@ void autofocus::run () {
       else {
           //do nothing inside tol band
           if (abs(locBestFocus - desiredLocBestFocus) <= tol) { // tol
-              // std::cout << s_int.count() << " ms, ";
-              // std::cout << "0\n";
+              std::cout << s_int.count() << ", ";
+              std::cout << "\n";
               moved = 0;
           }
 
@@ -185,23 +187,25 @@ void autofocus::run () {
               mmToMove = pid.calculate(desiredLocBestFocus, locBestFocus) * -1.0;
               bNewMoveRel = 1;
 
-              // std::cout << s_int.count() << ", ";
+              std::cout << s_int.count() << ", ";
               std::cout << locBestFocus << ", ";
               std::cout << mmToMove << "\n";
               moved = 1;
           }
       }
       previous = locBestFocus;
-
+      t2 = std::chrono::steady_clock::now();
+      s_int = s_int + std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
     }
-     t2 = std::chrono::steady_clock::now();
-     s_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+    // t2 = std::chrono::steady_clock::now();
+    // s_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
     // if (s_int.count() > (time_autofocusing_s*1000)) {
     // }
   
   }
-  std::cout << imgcountfile << "\n";
-
+  // t2 = std::chrono::steady_clock::now();
+  // s_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+  std::cout << " Analyzed " << imgcountfile << " images in " << s_int.count() << " milliseconds" << "\n";
   tCaptureVideo.join(); // Stops the CaptureVideo thread too
 
 } 

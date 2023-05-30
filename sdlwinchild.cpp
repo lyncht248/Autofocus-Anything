@@ -232,7 +232,7 @@ int SDLWindow::child_main()
 				case CMD_RAISE:
 				{
 					SDL_ShowWindow(window);
-					SDL_SetWindowAlwaysOnTop(window, SDL_TRUE);
+					//SDL_SetWindowAlwaysOnTop(window, SDL_TRUE);
 					SDL_Delay(10);
 					break;
 				}

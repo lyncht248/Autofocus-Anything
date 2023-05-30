@@ -3,6 +3,7 @@
 #include "system.hpp"
 #include "main.hpp"
 #include "autofocus.hpp"
+#include "notificationCenter.hpp"
 #include <iostream>
 
 #include <stdio.h>
@@ -73,16 +74,57 @@ lens::lens() :
 
 void lens::lens_thread() {
     ssize_t bytes_written; //Gets rid of the warn_unused_result error
+    char buf[256];
+    int n_read = 0;
+    bool line_received = false;
 
     // Sets the home location offset to be 1mm (or __ encoder pulses, or 0x0400) from the factory home location. Doesn't move lens. 
     unsigned char msg[] = { '0', 's', 'o', '0', '0', '0', '0', '0', '4', '0', '0', '\r', '\n' };
     bytes_written = write(serial_port, msg, sizeof(msg));
-    usleep(1000000); //Sleep for 1s
+    usleep(100000); //Sleep for 0.1s
+
+    while (!line_received && n_read < sizeof(buf)) {
+        int n = read(serial_port, &buf[n_read], 1);
+        if (n < 0) {
+            std::cerr << "Error reading from serial port\n";
+            return;
+        }
+        if (buf[n_read] == '\n') {
+            line_received = true;
+        }
+        n_read += n;
+    }
+    if (line_received) {
+        buf[n_read-1] = '\0'; // remove the newline character from the buffer
+        // std::cout << "Received line: " << buf << std::endl;
+    } else {
+        std::cerr << "Error: no line terminator received\n";
+        return;
+    }
 
     // The lens will move to the offset home position, quickly move to the home position for callibration (end of the slide right), and then back to the offset home position.
     unsigned char msg2[] = { '0', 'h', 'o', '0', '\r', '\n' };
     bytes_written = write(serial_port, msg2, sizeof(msg2));
-    usleep(1000000); //Sleep for 1s
+    usleep(1000000); //Sleep for 1s, can't go lower than this...
+
+    while (!line_received && n_read < sizeof(buf)) {
+        int n = read(serial_port, &buf[n_read], 1);
+        if (n < 0) {
+            std::cerr << "Error reading from serial port\n";
+            return;
+        }
+        if (buf[n_read] == '\n') {
+            line_received = true;
+        }
+        n_read += n;
+    }
+    if (line_received) {
+        buf[n_read-1] = '\0'; // remove the newline character from the buffer
+        // std::cout << "Received line: " << buf << std::endl;
+    } else {
+        std::cerr << "Error: no line terminator received\n";
+        return;
+    }
 
     return_to_start(); // Moves lens to callibrated start position
 
@@ -97,14 +139,59 @@ void lens::lens_thread() {
 void lens::return_to_start() {
     // Absolute move of 0x2E00, or 11.5mm, relative to the offset home position
     ssize_t bytes_written;
+    char buf[256];
+    int n_read = 0;
+    bool line_received = false;
+    int repeatThreeTimes = 4;
+
     unsigned char msg3[] = { '0', 'm', 'a', '0', '0', '0', '0', '2', 'E', '0', '0', '\r', '\n' };
     bytes_written = write(serial_port, msg3, sizeof(msg3));
-    usleep(1000000); //Sleep for 1s
+    usleep(250000); //Sleep for 0.25s
+    while (repeatThreeTimes > 0) { 
+        repeatThreeTimes--;
+        while (!line_received && n_read < sizeof(buf)) {
+            int n = read(serial_port, &buf[n_read], 1);
+            if (n < 0) {
+                std::cerr << "Error reading from serial port\n";
+                return;
+            }
+            if (buf[n_read] == '\n') {
+                line_received = true;
+            }
+            n_read += n;
+        }
+        if (line_received) {
+            buf[n_read-1] = '\0'; // remove the newline character from the buffer
+            //std::cout << "Received line: " << buf << std::endl;
+        } else {
+            std::cerr << "Error: no line terminator received\n";
+            return;
+        }
+    }
 
     // Sets the delay the slider waits between movements
     unsigned char msg4[] = { '0', 'v', 'v', '2', '5', '\r', '\n' };
     bytes_written = write(serial_port, msg4, sizeof(msg4));
     usleep(100000); //Sleep for 0.1s
+
+        while (!line_received && n_read < sizeof(buf)) {
+        int n = read(serial_port, &buf[n_read], 1);
+        if (n < 0) {
+            std::cerr << "Error reading from serial port\n";
+            return;
+        }
+        if (buf[n_read] == '\n') {
+            line_received = true;
+        }
+        n_read += n;
+    }
+    if (line_received) {
+        buf[n_read-1] = '\0'; // remove the newline character from the buffer
+        // std::cout << "Received line: " << buf << std::endl;
+    } else {
+        std::cerr << "Error: no line terminator received\n";
+        return;
+    }
 
     currentLensLoc = 11.5;
 }
@@ -114,10 +201,11 @@ void lens::mov_rel(double mmToMove) {
     int rate = 1024; //1024 encoder pulses per mm
     int pulsesToMove = round(mmToMove * rate);
     std::string hexToMove = int2hexstr(pulsesToMove);
-    std::cout << currentLensLoc + mmToMove << std::endl;
+    // std::cout << "Lens about to be instructed to mov_rel " << mmToMove << "mm" << std::endl;
+    // std::cout << "Absolute position after move should be " << currentLensLoc + mmToMove << "mm" << std::endl;
 
-    // Check if the move is within the bounds of the lens
-    if (currentLensLoc + mmToMove > 0.0 && currentLensLoc + mmToMove < 16.6) {
+    // Check if the move is within the bounds of the lens. Actual upper-limit is closer to 16.55, but aiming for safety
+    if (currentLensLoc + mmToMove > 0.1 && currentLensLoc + mmToMove < 16.4) {
         
         // Send move signal
         std::string pszBufStr = "0mr" + hexToMove + "\r\n";
@@ -132,7 +220,7 @@ void lens::mov_rel(double mmToMove) {
         bool line_received = false;
         bool successfulmove = false;
         while(!successfulmove){
-            //Reads one bit at a time until a new line recieved (end of message)
+            //Reads one bit at a time until a new line recieved (end of message). NOTE: Position seems to be delayed from expected
             while (!line_received && n_read < sizeof(buf)) {
                 int n = read(serial_port, &buf[n_read], 1);
                 if (n < 0) {
@@ -146,37 +234,42 @@ void lens::mov_rel(double mmToMove) {
             }
             if (line_received) {
                 buf[n_read-1] = '\0'; // remove the newline character from the buffer
-                std::cout << "Received line: " << buf << std::endl;
+                //std::cout << "Received line: " << buf << std::endl;
             } else {
                 std::cerr << "Error: no line terminator received\n";
                 return;
             }
-            //If 'P' is recieved, the move was successful
+            //If 'P' is recieved, the move was successful. 
             if (buf[1] == 'P') {
                 successfulmove = true;
+                if (outOfBoundsOnceOnly > 0) {outOfBoundsOnceOnly--;}
                 if (buf[3] != 'F') {
                     // Get lens position from response
                     std::string positionHex = std::string(buf).substr(7, 4);
-                    std::cout << positionHex << std::endl;
                     // Convert positionHex to decimal
                     int position = hexstr2int(positionHex);
                     currentLensLoc = position / 1024.0;
+                    // std::cout << "Given Lens Location after move (?) is: " << currentLensLoc << std::endl;
                 }
             }
             //If 'G' or something else was recieved, the move wasn't successful or is in-progress. Try again
             else if (tryagain > 0) {
                 tryagain--;
-                std::cout << "Lens error in lens::mov_rel()... trying again" << std::endl;
+                // std::cout << "Lens error in lens::mov_rel()... trying again" << std::endl;
             }
             else {
-                std::cout << "Lens error in lens::mov_rel()... giving up." << std::endl;
+                // std::cout << "Lens error in lens::mov_rel()... giving up." << std::endl;
+
                 successfulmove = 1;
             }
         }
     }
     else {
-        std::cout << "Lens is out of bounds!" << std::endl;
-        //m_errorSignal.emit();
+        hvigtk_logfile << "Lens is out of bounds!" << std::endl;
+        if (outOfBoundsOnceOnly == 0) {
+            NotificationCenter::instance().postNotification("error");
+            outOfBoundsOnceOnly = 10; //Ten successful moves means lens has returned from being out-of-bounds
+        }    
     }
 }
   

@@ -17,6 +17,7 @@
 #include "version.hpp"
 #include "main.hpp"
 #include "autofocus.hpp"
+#include "notificationCenter.hpp"
 
 
 
@@ -327,7 +328,10 @@ System::System(int argc, char **argv) :
 	AF() //Creates an autofocus object, calling constructor
 
 {
-
+	//Error message handling!
+	NotificationCenter::instance().registerListener("error", [this]() {
+		on_error();
+	});
 
 	recorder->connectTo(&sRecorderOperationComplete);
 	sRecorderOperationComplete.connect(sigc::mem_fun(*this, &System::onRecorderOperationComplete) );
@@ -918,9 +922,16 @@ Recorder& System::getRecorder()
 
 void System::on_error()
 {
+	// std::cout << "WOULD THROW AN ERROR DIALOGUE HERE!" << std::endl;
 	// Show an error dialog
 	// if (alreadyError) {
 	// 	Gtk::MessageDialog dialog("An error occurred", false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
 	// 	dialog.run();
 	// }
+	Gtk::MessageDialog dialog("Error: Air-Lens has hit the edge of the slide", false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
+	dialog.set_secondary_text("Please 'Reset' the lens and restart");
+	dialog.set_position(Gtk::WIN_POS_CENTER);
+	dialog.set_keep_above(true);
+	dialog.run();
+
 }

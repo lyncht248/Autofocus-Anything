@@ -33,6 +33,9 @@ class lens { //This object handles autofocusing
   std::string int2hexstr(int pulsesToMove);
   std::thread tLens;
   std::atomic<bool> stop_thread;
+
+  int outOfBoundsOnceOnly = 0;
+
 };
 
 #endif // LENS_H
