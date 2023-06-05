@@ -11,6 +11,8 @@
 #include "logfile.hpp"
 #include "autofocus.hpp"
 
+#include <opencv2/core/ocl.hpp>
+
 #include <thread>
 
 char workingdir[4096] = "";
@@ -35,6 +37,29 @@ int main(int argc, char **argv)
     if ( !getcwd(workingdir, 4096) )
     {
         workingdir[0] = 0;
+    }
+
+    if (cv::ocl::haveOpenCL())
+    {
+        cv::ocl::setUseOpenCL(true);
+        cv::ocl::Device dev = cv::ocl::Device::getDefault();
+        if (dev.available())
+        {
+            std::cout << "Device Name: " << dev.name() << std::endl;
+            std::cout << "Device Type: " << dev.type() << std::endl;
+            std::cout << "Device Vendor: " << dev.vendorName() << std::endl;
+            std::cout << "Device Version: " << dev.version() << std::endl;
+            std::cout << "Device OpenCL Version: " << dev.OpenCLVersion() << std::endl;
+            std::cout << "Device Driver Version: " << dev.driverVersion() << std::endl;
+        }
+        else
+        {
+            std::cout << "No OpenCL device available." << std::endl;
+        }
+    }
+    else
+    {
+        std::cout << "OpenCL is not available on this system." << std::endl;
     }
 
     // Creates a GTK application object

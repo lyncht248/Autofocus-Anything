@@ -35,8 +35,21 @@ tiltedcam::tiltedcam() {
         hvigtk_logfile << "Failed to initialize the tilted camera\n";
     }    
 
-    // Set to high-speed-mode, set gain, and set exposure. Only the first one needs to be uncommented... 
-    // TODO: add function to change gain and exposure for ASI ZWO camera, if neccessary. 
+    if (ASISetControlValue(0, ASI_EXPOSURE, 16000, ASI_FALSE) == ASI_SUCCESS) {
+        hvigtk_logfile << "Set tilted camera exposure to 16ms (and bAuto=FALSE) \n";
+    }
+    else {
+        hvigtk_logfile << "Failed to set tilted camera exposure\n";
+    }    
+
+
+    if (ASISetControlValue(0, ASI_GAIN, 0, ASI_TRUE) == ASI_SUCCESS) {
+        hvigtk_logfile << "Set tilted camera gain to automatically adjust \n";
+    }
+    else {
+        hvigtk_logfile << "Failed to set tilted camera gain\n";
+    }   
+
     if (ASISetControlValue(0, ASI_HIGH_SPEED_MODE, 1, ASI_FALSE) == ASI_SUCCESS) {
         hvigtk_logfile << "Set tilted camera to highspeed mode (and bAuto=FALSE) \n";
 
@@ -44,12 +57,11 @@ tiltedcam::tiltedcam() {
     else {
         hvigtk_logfile << "failed to set tilted camera to high speed mode\n";
     }
-    // TODO: Potentially set these to auto (so ASI_TRUE), but then the value has to be the current value, so need to use ASIGetControlValue first.
+
     //ASISetControlValue(0, ASI_AUTO_MAX_EXP, 15, ASI_TRUE);
     //ASISetControlValue(0,  ASI_EXPOSURE, 15, ASI_TRUE);
     //ASISetControlValue(0, ASI_BANDWIDTHOVERLOAD, 90, ASI_TRUE);
 
-    //Binning so that image recieved is 640x480. TODO: Try recieving images at 1280x960, as normal, since binning may cause data loss
     if (ASISetROIFormat(0, 1280, 960, 1, ASI_IMG_RAW8) == ASI_SUCCESS) {
     //if (ASISetROIFormat(0, 320, 240, 1, ASI_IMG_RAW8) == ASI_SUCCESS) {
         hvigtk_logfile << "Set tilted camera image to Raw8 and 1 bin, with image size 1280x960 \n";

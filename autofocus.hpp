@@ -37,6 +37,7 @@ class autofocus { //This class handles autofocusing
   //computes the location of best-focus, from 8 to 310
   int computebestfocus (cv::Mat image, int imgHeight, int imgWidth); 
 
+  int computebestfocusReversed (cv::Mat image, int imgHeight, int imgWidth);
   void adjust_bestFocus(int val);
 
   private:

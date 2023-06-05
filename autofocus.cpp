@@ -66,6 +66,11 @@ autofocus::~autofocus() {
 }
 
 void autofocus::run () {
+  auto t1 = std::chrono::steady_clock::now();
+  usleep(10000);
+  auto t2 = std::chrono::steady_clock::now();
+  auto s_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+
   //Starting the capture video thread
   std::thread tCaptureVideo(&autofocus::capturevideo, this);
 
@@ -85,18 +90,14 @@ void autofocus::run () {
   int imHeight = tiltedcam1.getImageHeight();
 
   //// PID CONTROLLER
-  double dt = 1.0 / 50.0; //time per frame. Assumes about 50Hz... TODO: use actual time in while loop
+  double dt = 1.0 / 60.0; //time per frame. Assumes 60Hz 
   double max = 3;  //maximum relative move the lens can be ordered to make. Set to +-3mm
   double min = -3; 
-  double Kp = 0.0018 * 3.0; //*4-5.0 is on the edge of instability; *3.0 seems stable
+  //double Kp = 0.0018 * 3.0; //*4-5.0 is on the edge of instability; *3.0 seems stable
+  double Kp = 0.003;
   double Ki = 0;
   double Kd = 0; //Should try to add a small Kd; further testing required
   PID pid = PID(dt, max, min, Kp, Kd, Ki);  
-
-  auto t1 = std::chrono::steady_clock::now();
-  usleep(10000);
-  auto t2 = std::chrono::steady_clock::now();
-  auto s_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
 
   while(!stop_thread.load()) {
     
@@ -117,14 +118,26 @@ void autofocus::run () {
       imgcount++;
       imgcountfile++;
 
-      cv::Mat image = cv::Mat(imHeight, imWidth, CV_8U, img_calc_buf);
-      cv::Mat resized;
-      double scale = 0.25; //change to 0.5 to resize image to (0.5*current dimensions). INSTEAD, TRUNCATE IMAGE, OR REDUCE KERNEL!
-      cv::resize(image, resized, cv::Size(), scale, scale); //function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
-      //cv::Mat cropped = image(std::Range(0,12), std::Range(0,12));
+      // cv::Mat image = cv::Mat(imHeight, imWidth, CV_8U, img_calc_buf);
+      // cv::Mat resized;
+      // double scale = 1;
+      // cv::resize(image, resized, cv::Size(), scale, scale); //function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
 
-      int locBestFocus = computebestfocus(resized, resized.rows, resized.cols);
-    
+      // Same as above but OpenCL-friendly
+      cv::Mat image = cv::Mat(imHeight, imWidth, CV_8U, img_calc_buf);
+      //cv::UMat image = temp_image.getUMat(cv::ACCESS_READ);
+      cv::Mat resized;
+      double scale = 0.5; 
+      cv::resize(image, resized, cv::Size(), scale, scale); //function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
+
+      //int locBestFocus = computebestfocus(resized, resized.rows, resized.cols); //drops to 0.5 fps if placed in while loop
+      int locBestFocus = computebestfocusReversed(resized, resized.rows, resized.cols);
+      std::cout << locBestFocus << ", ";
+
+      //int locBestFocus = 220; //this is fast AF, like 960 fps
+      // std::cout << locBestFocus << ", ";
+      // std::cout << locBestFocusReversed << ", ";
+      // std::cout << locBestFocus - locBestFocusReversed << ", ";
       // //Print image with line at the location of best focus
         cv::Point p1(locBestFocus, 0), p2(locBestFocus, resized.cols);
         cv::line(resized, p1, p2, cv::Scalar(0, 0, 255), 2);
@@ -151,8 +164,8 @@ void autofocus::run () {
             //window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to the current location of best-focus
           }
           else if (bFindFocus) {
-            desiredLocBestFocus = 200;
-            previous = 200;
+            desiredLocBestFocus = 400;
+            previous = 400;
          		hvigtk_logfile << "Set desiredLocBestFocus back to 200 in autofocus.cc" << std::endl;
             //window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to 160, the center-point
           }
@@ -188,7 +201,6 @@ void autofocus::run () {
               bNewMoveRel = 1;
 
               std::cout << s_int.count() << ", ";
-              std::cout << locBestFocus << ", ";
               std::cout << mmToMove << "\n";
               moved = 1;
           }
@@ -241,18 +253,71 @@ void autofocus::capturevideo() {
   }
 }
 
+int autofocus::computebestfocusReversed (cv::Mat image, int imgHeight, int imgWidth) {
+  cv::Mat blurred;
+  cv::GaussianBlur(image, blurred, cv::Size(3,3),1,1,cv::BORDER_DEFAULT);
+
+  ///// ROBERTS CROSS OVER THE WHOLE IMAGE ////
+  cv::Mat temp_matrixx = (cv::Mat_<double>(2, 2) << 1, 0, 0, -1);
+  cv::Mat temp_matrixy = (cv::Mat_<double>(2, 2) << 0, 1, -1, 0);
+  
+  // cv::UMat matrixx = temp_matrixx.getUMat(cv::ACCESS_READ);
+  // cv::UMat matrixy = temp_matrixy.getUMat(cv::ACCESS_READ);
+
+  //convolving imagedata with the matrices
+  cv::Mat img_x, img_y;  
+  cv::filter2D(blurred, img_x, -1, temp_matrixx);
+  cv::filter2D(blurred, img_y, -1, temp_matrixy);
+
+  //squaring and summing the resultant matrices, which gives us the sharpness (or, gradient) for each pixel in imagedata, and taking the average score over the portion of image
+  cv::Mat img_x_squared, img_y_squared;
+  cv::multiply(img_x, img_x, img_x_squared);
+  cv::multiply(img_y, img_y, img_y_squared);
+  cv::Mat sharpness_image;
+  cv::add(img_x_squared, img_y_squared, sharpness_image);  
+
+
+  // //// TENEGRAD OVER WHOLE IMAGE ///
+  // cv::UMat Gx, Gy;
+  // cv::Sobel(image, Gx, CV_64F, 1, 0, 3);
+  // cv::Sobel(image, Gy, CV_64F, 0, 1, 3);
+  // cv::UMat Gx2, Gy2;
+  // cv::multiply(Gx, Gx, Gx2);
+  // cv::multiply(Gy, Gy, Gy2);
+  // cv::UMat sharpness_image;
+  // cv::add(Gx2, Gy2, sharpness_image);
+
+  // ///// ROI'ING ////
+  std::vector<double> sharpnesscurve;
+  int kernel = 16; //must be an even number
+
+  for (int i = 0; i < imgWidth - kernel; i++) {
+    cv::Rect roi(i, 0, kernel, imgHeight);
+    cv::Mat regionSharpnessImage = sharpness_image(roi);
+    cv::Scalar regionSharpness = cv::mean(regionSharpnessImage);
+    double regionSharpnessScore = regionSharpness[0];
+    sharpnesscurve.push_back(regionSharpnessScore);
+  }
+  
+  //Fitting a normal curve to the sharpness curve, to avoid local peaks in the data around vessel edges
+  std::vector<double> sharpnesscurvenormalized = fitnormalcurve(sharpnesscurve, kernel);
+
+  int locBestFocus = distance( begin(sharpnesscurvenormalized), max_element(begin(sharpnesscurvenormalized), end(sharpnesscurvenormalized)));
+  return locBestFocus + kernel/2; 
+}
+
 int autofocus::computebestfocus (cv::Mat image, int imgHeight, int imgWidth) {
   // //Specular reflection rejection
   // cv::Mat thresh;
   // cv::threshold(image, thresh, 140, 255, cv::THRESH_TRUNC);
 
-  //Gaussian blurring
+  //Gaussian blurring, very little differences
   cv::Mat blurred;
   cv::GaussianBlur(image, blurred, cv::Size(3,3),1,1,cv::BORDER_DEFAULT);
 
   //Computing the sharpness curve along the horizontal of the image 
   int kernel = 16; //must be an even number
-  std::vector<double> sharpnesscurve = computesharpness(blurred, imgHeight, imgWidth, kernel);
+  std::vector<double> sharpnesscurve = computesharpness(image, imgHeight, imgWidth, kernel);
   
   //Fitting a normal curve to the sharpness curve, to avoid local peaks in the data around vessel edges
   std::vector<double> sharpnesscurvenormalized = fitnormalcurve(sharpnesscurve, kernel);
@@ -286,33 +351,57 @@ std::vector<double> autofocus::computesharpness(cv::Mat image, int imgHeight, in
   std::vector<double> sharpnesscurve;
 
   for (int i = 0; i < imgWidth - kernel; i++) {
-      //gets the region of interest, a rectangle of 'kernel' width for each pixel along the width of the image
-      cv::Rect roi(i, 0, kernel, imgHeight); 
-      cv::Mat imageofinterest = image(roi); 
-      //Mat pixels = img(cv::Rect(0, 0, kernel_width, h)).clone(); (another method of finding submatrix)
+    //gets the region of interest, a rectangle of 'kernel' width for each pixel along the width of the image
+    cv::Rect roi(i, 0, kernel, imgHeight); 
+    cv::Mat imageofinterest = image(roi); 
+    //Mat pixels = img(cv::Rect(0, 0, kernel_width, h)).clone(); (another method of finding submatrix)
 
-      cv::Scalar sharpness = robertscross(imageofinterest);
-      double sharpnessscore = cv::sum(sharpness)[0];
-      sharpnesscurve.push_back(sharpnessscore);
+    cv::Scalar sharpness = tenengrad(imageofinterest); //doesn't matter if tenegrad or robertscross!!!!
+    double sharpnessscore = cv::sum(sharpness)[0];
+    sharpnesscurve.push_back(sharpnessscore);
   }
 return sharpnesscurve;
 }
 
 
-cv::Scalar autofocus::robertscross(cv::Mat imagedata) {
-  // Creating Roberts Cross matrices
-  cv::Mat matrixx = (cv::Mat_<double>(2, 2) << 1, 0, 0, -1);
-  cv::Mat matrixy = (cv::Mat_<double>(2, 2) << 0, 1, -1, 0);
 
-  //convolving imagedata with the matrices
+cv::Scalar autofocus::robertscross(cv::Mat imagedata) {
+  // // Creating Roberts Cross matrices
+  // cv::Mat matrixx = (cv::Mat_<double>(2, 2) << 1, 0, 0, -1);
+  // cv::Mat matrixy = (cv::Mat_<double>(2, 2) << 0, 1, -1, 0);
+
+  // //convolving imagedata with the matrices
+  // cv::Mat img_x, img_y;
+  // cv::filter2D(imagedata, img_x, -1, matrixx);
+  // cv::filter2D(imagedata, img_y, -1, matrixy);
+
+  // //squaring and summing the resultant matrices, which gives us the sharpness (or, gradient) for each pixel in imagedata, and taking the average score over the portion of image
+  // cv::Scalar mean_sharpness = mean(img_x.mul(img_x) + img_y.mul(img_y));
+  // return mean_sharpness;
+
+  // OPENCL-FRIENDLY VERSION
+  // Creating Roberts Cross matrices
+  cv::Mat temp_matrixx = (cv::Mat_<double>(2, 2) << 1, 0, 0, -1);
+  cv::Mat temp_matrixy = (cv::Mat_<double>(2, 2) << 0, 1, -1, 0);
+  
+  // cv::UMat matrixx = temp_matrixx.getUMat(cv::ACCESS_READ);
+  // cv::UMat matrixy = temp_matrixy.getUMat(cv::ACCESS_READ);
+
+  //convolving imagedata with the matrices. WARNING, REPLACE TEMP_ WITH ACTUAL
   cv::Mat img_x, img_y;
-  cv::filter2D(imagedata, img_x, -1, matrixx);
-  cv::filter2D(imagedata, img_y, -1, matrixy);
+  cv::filter2D(imagedata, img_x, -1, temp_matrixx);
+  cv::filter2D(imagedata, img_y, -1, temp_matrixy);
 
   //squaring and summing the resultant matrices, which gives us the sharpness (or, gradient) for each pixel in imagedata, and taking the average score over the portion of image
-  cv::Scalar mean_sharpness = mean(img_x.mul(img_x) + img_y.mul(img_y));
+  cv::Mat img_x_squared, img_y_squared;
+  cv::multiply(img_x, img_x, img_x_squared);
+  cv::multiply(img_y, img_y, img_y_squared);
+  cv::Mat sum_xy;
+  cv::add(img_x_squared, img_y_squared, sum_xy);  
+  cv::Scalar mean_sharpness = cv::mean(sum_xy);
   return mean_sharpness;
 }
+
 cv::Scalar autofocus::tenengrad(cv::Mat img) {
     // Two sobel operations //
     cv::Mat Gx, Gy;
@@ -421,3 +510,4 @@ void autofocus::adjust_bestFocus(int val) {
   desiredLocBestFocus = val;
 
 }
+
