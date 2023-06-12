@@ -20,7 +20,8 @@
 #include "notificationCenter.hpp"
 
 
-
+// I don't believe these three code blocks are used anywhere
+/*
 Frame::Frame() :
 	buffer(nullptr),
 	bufsize(0),
@@ -49,6 +50,8 @@ Frame::~Frame()
 	if (buffer != nullptr)
 		delete[] buffer;
 }
+*/
+
 
 /*
 VidFrame::VidFrame(Frame &f) : CVD::Image<VmbUchar_t>(f.buffer, CVD::ImageRef(f.width, f.height) ),
@@ -68,6 +71,7 @@ VidFrame::~VidFrame()
 }
 */
 
+// Class that runs two threads: one which processes frames, and one which stabilises them
 FrameProcessor::FrameProcessor(System &sys) :
 	processed(nullptr),
 	filters(),
@@ -132,16 +136,18 @@ void FrameProcessor::stabilise()
 	}
 }
 
-void FrameProcessor::processFrame()
+void FrameProcessor::processFrame() //What to do with each received frame
 {
 	ThreadStopper::makeStoppable();
 	while (running)
 	{
+		// Get the frame when it's ready
 		ThreadStopper::lock(mutex);
-		vidFrame = system.getFrameQueue().pop();
+		vidFrame = system.getFrameQueue().pop(); // Takes frame from top of queue
 		_frameReleased = false;
 		ThreadStopper::unlock(mutex);
 
+		// If stabilising, put frame in Stabiliser queue
 		bool stabilising = system.window.getStabiliseActive().getValue();
 		if (stabilising)
 		{
@@ -153,12 +159,14 @@ void FrameProcessor::processFrame()
 			stabQueue.push(vidFrame);
 		}
 
+		// If recording, sends the frame to the recorder for saving
 		bool recording = system.window.getRecording().getValue() && !system.window.getPausedRecording().getValue();
 		if (recording)
 		{
 			system.getRecorder().putFrame(vidFrame);
 		}
 
+		// Draw the frame (still not rendered)
 		CVD::ImageRef vfDim = vidFrame->size();
 		if (vfDim.x != childwin->raster.w || vfDim.y != childwin->raster.h)
 		{
@@ -168,11 +176,13 @@ void FrameProcessor::processFrame()
 		
 		//convertToCairo(stabilising);
 
+		// Apply any filters
 		for (auto pair : filters)
 		{
 			pair.second->draw(processed);
 		}
 
+		// If stabilising, render frame using stabilised offset, otherwise just render normally
 		if (stabilising)
 		{
 			double stabWait = system.window.getStabWaitScaleValue();
@@ -199,29 +209,47 @@ void FrameProcessor::processFrame()
 
 		system.signalNewFrame().emit();
 
+		// Now that the current vframe is processed, release it
 		ThreadStopper::lock(mutex);
 		{
+			// Wait for frame to be released
 			while (!_frameReleased)
 			{
 				ThreadStopper::stopPoint(&frameReleased);
 				frameReleased.wait(mutex);
 			}
+
+			// If not stabilising, add frame to released queue
 			if (!stabilising)
 				released.push(vidFrame);
+
+			// If live view is ON and not recording, delete every single frame in the released queue
 			if (system.window.getLiveView().getValue() && !recording)
 			{
-				for (VidFrame *vframe = released.pop(); !released.empty(); vframe = released.pop() )
+				// Deletes every frame in the released queue... same as released.clear()?
+				for (VidFrame *vframe = released.pop(); !released.empty(); vframe = released.pop() ) 
 					delete vframe;
 				vidFrame = nullptr;
 			}
+
+			//TODO: THIS IS PROBABLY WHERE PROBLEM IS!
+			// Otherwise (if stabilising, or watching a recording, or recording live), clear the released queue
 			else
 				released.clear();
 		}
 		ThreadStopper::unlock(mutex);
+
+		// stabQueue.size() = 0 almost always
+		hvigtk_logfile << "FrameProcessor stabQueue is length: " << stabQueue.size() << std::endl;
+		hvigtk_logfile.flush();
+
+		// released.size() = 0 almost always
+		hvigtk_logfile << "FrameProcessor released queue is length: " << released.size() << std::endl;
+		hvigtk_logfile.flush();
 	}
 }
 
-void FrameProcessor::releaseFrame()
+void FrameProcessor::releaseFrame() //TODO: Should here be a delete frame command?
 {
 	mutex.lock();
 	_frameReleased = true;
@@ -240,6 +268,7 @@ void FrameProcessor::resetRaster()
 	return processed;
 }
 
+// This class is used to receive frames from the camera, but passes frames immediately to FrameProcessor
 class FrameObserver : public Glib::Object, virtual public Vimba::IFrameObserver
 {
 public :
@@ -248,6 +277,13 @@ public :
 		sysFrames(frameQueue)
 	{
 	}
+	// ~FrameObserver()
+	// {
+	// 	for (VidFrame *vframe = sysFrames.pop(); !sysFrames.empty(); vframe = sysFrames.pop())
+	// 		delete vframe;
+	// 	sysFrames.clear();
+	// }
+	
 	void FrameReceived ( const Vimba::FramePtr pFrame )
 	{
 		VmbFrameStatusType eReceiveStatus;
@@ -256,12 +292,13 @@ public :
 			if (VmbFrameStatusComplete == eReceiveStatus)
 			{
 
-				VmbUint32_t sz, width, height;
-				pFrame->GetImageSize(sz);
+				VmbUint32_t sz, width, height; 
+				pFrame->GetImageSize(sz); //TODO: These should be called once, not every frame
 				pFrame->GetWidth(width);
 				pFrame->GetHeight(height);
 
-				IVidFrame *sysFrame = new IVidFrame(CVD::ImageRef(width, height) );
+				IVidFrame *sysFrame = new IVidFrame(CVD::ImageRef(width, height) ); //Each of these must get deleted when processed by FrameProcessor
+
 				//sysFrame->resize(CVD::ImageRef(width, height) );
 
 				//pFrame->GetOffsetX(sysFrame.xoff);
@@ -272,11 +309,19 @@ public :
 				memcpy(sysFrame->data(), buf, sz);
 				sysFrames.push(sysFrame);
 
-				if (sysFrames.size() == 50)
+				// Here is where we check the queue size and drop a frame if needed
+				if (sysFrames.size() >= 15)
 				{
-					hvigtk_logfile << "Frame queue filling up - playback too slow?" << std::endl;
+					delete sysFrame; //delete the frame 
+					sysFrames.pop(); //remove the frame from the queue
+
+					hvigtk_logfile << "Dropped a frame from the queue - Frame queue was too long." << std::endl;
 					hvigtk_logfile.flush();
 				}
+				
+				// Quickly recieves 15 frames which are then emptied by FrameProcessor quickly
+				hvigtk_logfile << "FrameObserver sysFrames queue is length: " << sysFrames.size() << std::endl;
+				hvigtk_logfile.flush();
 
 				sigReceived.emit();
 			}
@@ -321,7 +366,7 @@ System::System(int argc, char **argv) :
 	frameQueue(100),
 	frameProcessor(*this),
 	thread(),
-	recorder(thread.createObject<Recorder, System&>(*this) ),
+	recorder(thread.createObject<Recorder, System&>(*this) ), //Creates a recorder object in a separate thread, passing it a thread pointer
 	sRecorderOperationComplete(),
 	stabiliser(),
 	madeMap(false),
@@ -438,13 +483,13 @@ void System::startStreaming()
 			VmbInt64_t nPLS;
 			pFeature->GetValue(nPLS);
 			
-			priv->observer.reset(new FrameObserver(cam, frameQueue) );
+			priv->observer.reset(new FrameObserver(cam, frameQueue) ); //reset means its a smart pointer and will delete itself when it goes out of scope
 
-			for (Vimba::FramePtrVector::iterator iter = priv->frames.begin(); iter != priv->frames.end(); ++iter)
+			for (Vimba::FramePtrVector::iterator iter = priv->frames.begin(); iter != priv->frames.end(); ++iter) //iter is the frame number
 			{
-				(*iter).reset( new Vimba::Frame ( nPLS ) );
-				(*iter)->RegisterObserver(priv->observer);
-				cam->AnnounceFrame(*iter);
+				(*iter).reset( new Vimba::Frame ( nPLS ) ); //create a frame of the correct size
+				(*iter)->RegisterObserver(priv->observer); //register the observer
+				cam->AnnounceFrame(*iter); //announce the frame to the camera
 			}
 
 			if (cam->StartCapture() == VmbErrorSuccess)
@@ -746,7 +791,7 @@ void System::whenSeekingToggled(bool seeking)
 		{
 			VidFrame *out = recorder->getFrame(window.getFrameSliderValue() );
 			if (out)
-				frameQueue.push(out);
+				frameQueue.push(out); //This is the only place where frameQueue is pushed to
 			window.setSeeking(false);
 		}
 		else 
@@ -897,8 +942,8 @@ bool System::onCloseClicked(const GdkEventAny* event)
 
 	//Close the streaming camera
 	stopStreaming();
-	vsys.Shutdown();
-	delete priv;
+	//vsys.Shutdown(); //TODO: Maybe move to ~System()?
+	//delete priv; //TODO: Maybe move to ~System()?
 	hvigtk_logfile << "system::onCloseClicked ran" << std::endl;
 	return false;
 }
@@ -906,7 +951,7 @@ bool System::onCloseClicked(const GdkEventAny* event)
 System::~System()
 {
 	vsys.Shutdown();
-//	delete priv;
+	delete priv;
 	hvigtk_logfile << "system::~system ran" << std::endl;
 }
 

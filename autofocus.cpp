@@ -94,7 +94,7 @@ void autofocus::run () {
   double max = 3;  //maximum relative move the lens can be ordered to make. Set to +-3mm
   double min = -3; 
   //double Kp = 0.0018 * 3.0; //*4-5.0 is on the edge of instability; *3.0 seems stable
-  double Kp = 0.003;
+  double Kp = 0.0025;
   double Ki = 0;
   double Kd = 0; //Should try to add a small Kd; further testing required
   PID pid = PID(dt, max, min, Kp, Kd, Ki);  
@@ -447,8 +447,8 @@ std::vector<double> autofocus::fitnormalcurve(std::vector<double> sharpnesscurve
     // Fits a normal curve to the data. Should try to find a proper curve-fitting library... 
     std::vector<double> norm_curve;
     std::vector<double> sum_of_diffs;
-
     double std_dev = 56.0 * (sharpnesscurve.size() / 304.0); //determined experimentally using 304-length data, and approximately scaled for larger images. Needs to be replaced! (was 58)
+    //double std_dev = 56.0 * (sharpnesscurve.size() / 304.0); //determined experimentally using 304-length data, and approximately scaled for larger images. Needs to be replaced! (was 58)
     double amplitude = (*max_element(begin(sharpnesscurve), end(sharpnesscurve)) - *min_element(begin(sharpnesscurve), end(sharpnesscurve))); 
     double offset = *min_element(begin(sharpnesscurve), end(sharpnesscurve));
 

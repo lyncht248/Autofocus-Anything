@@ -176,7 +176,8 @@ private:
 	
 	ObjectThread thread;
 
-	Recorder *recorder;
+	//Recorder *recorder;
+	std::unique_ptr<Recorder> recorder; //TODO: This causes a CRITICAL error, but fixes some memory management, so I'm leaving it for now
 	VDispatcher<RecOpRes> sRecorderOperationComplete;
 
 	Stabiliser stabiliser; //For running x-y stabilization

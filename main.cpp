@@ -15,10 +15,10 @@
 
 #include <thread>
 
-char workingdir[4096] = "";
+char workingdir[4096] = "/home/hvi/Desktop/HVI-log-report"; //Where the hvigtk.log file is saved
 const char *hvigtk_startdir = workingdir;
 
-std::ofstream hvigtk_logfile("hvigtk.log");
+std::ofstream hvigtk_logfile("/home/hvi/Desktop/HVI-log-report/hvigtk.log");
 
 SDLWindow::SDLWin *childwin = nullptr;
 std::atomic<bool> bAutofocusing = 0; //Flag that controls the autofocusing while() loop
@@ -34,10 +34,10 @@ int main(int argc, char **argv)
 	childwin = SDLWindow::sdlwin_open();
 	if (!childwin)
 		return 1;
-    if ( !getcwd(workingdir, 4096) )
-    {
-        workingdir[0] = 0;
-    }
+    // if ( !getcwd(workingdir, 4096) )
+    // {
+    //     workingdir[0] = 0;
+    // }
 
     if (cv::ocl::haveOpenCL())
     {

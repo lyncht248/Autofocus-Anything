@@ -32,6 +32,7 @@ Recorder::~Recorder()
 	{
 		delete vf;
 	}
+	frames.clear(); //Added this to try to fix a memory leak
 }
 
 VidFrame* Recorder::getFrame(int n)
@@ -48,9 +49,17 @@ int Recorder::putFrame(VidFrame *frame)
 {
 	frames.push_back(frame);
 	emitOperationComplete(Operation::RECOP_ADDFRAME, true);
+
+	//If the frames queue size is equal to the recording size scale value, emit the RECOP_FILLED signal
 	if (frames.size() == (int) system.getWindow().getRecordingSizeScaleValue() )
 		emitOperationComplete(Operation::RECOP_FILLED, true);
+
+	//Should always be the length of the recorded frames
+	hvigtk_logfile << "Recorder::putFrame frames queue is size: " << frames.size() << std::endl;
+	hvigtk_logfile.flush();	
+
 	return frames.size();
+
 }
 
 void Recorder::saveFrames(const std::string &location)
@@ -78,11 +87,14 @@ void Recorder::saveFrames(const std::string &location)
 
 void Recorder::loadFrames(const std::string &location)
 {
+	//Clears existing frames in recorder
 	for (VidFrame *vf : frames)
 	{
 		delete vf;
 	}
 	frames.clear();
+
+	//Loads new frames from location
 	int i = 0;
 	char fnum[FNUM_SIZE];
 	while (true)
@@ -139,6 +151,7 @@ void Recorder::emitOperationComplete(Operation op, bool success)
 		sigOperationComplete->emit(std::make_tuple(op, success) );
 }
 
+// Plays back frames at data.second frames per second, starting at data.first frame
 void Recorder::bufferFrames(std::pair<int, int> data)
 {
 	int start = data.first;
@@ -146,6 +159,7 @@ void Recorder::bufferFrames(std::pair<int, int> data)
 	hvigtk_logfile << "Recorder buffering started from frame: " << start << std::endl;
 	hvigtk_logfile.flush();
 	buffering = true;
+	//Plays all frames from start to end
 	for (unsigned long i = start; buffering && i < frames.size(); i++)
 	{
 		//mutex.lock();
@@ -156,7 +170,7 @@ void Recorder::bufferFrames(std::pair<int, int> data)
 		}
 		//mutex.unlock();
 	}
-	system.getFrameQueue().waitForEmpty();
+	system.getFrameQueue().waitForEmpty(); //Stops here until all frames have been played
 	buffering = false;
 	emitOperationComplete(Operation::RECOP_BUFFER, true);
 }

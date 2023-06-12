@@ -44,7 +44,7 @@ struct MainWindow::Private
 // For GUI elements that are static
 MainWindow::Private::Private() :
     gainLabel("Gain: "),
-    exposeLabel("Expose: "),
+    exposeLabel("Expose (us): "),
     gammaLabel("Gamma: "),
     frameRateLabel("Frame rate: "),
     thresLabel("Threshold: "),
@@ -316,14 +316,14 @@ bool MainWindow::_on_state_event(GdkEventWindowState* window_state_event)
 MainWindow::MainWindow() : Gtk::Window(),
     priv(new Private() ),
     gainScale(0, 50, 1, 0, 7, 150),
-    exposeScale(100, 50000, 1000, 15000, 7, 150),
+    exposeScale(100, 16000, 1000, 15000, 7, 150),
     gammaScale(0.5, 2.5, 0.01, 1, 7, 150),
 	frameRateScale(20, 80, 5, 60, 7, 150, true),
     frameSlider(0, 1799, 1, 0, 5, 200),
     thresScale(0, 1, 0.01, 0.4, 6, 100),
     scaleScale(0, 5, 0.01, 2.0, 6, 100),
     waitScale(0, HVIGTK_STAB_LIM, 100, 0, 6, 100),
-	recordingSizeScale(900, 3600, 10, 900, 6, 100),
+	recordingSizeScale(300, 3600, 10, 900, 6, 100),
     bestFocusScale(8, 632, 5, 200, 4, 100),
     recordButton(),
     backToStartButton(),
@@ -460,7 +460,7 @@ MainWindow::MainWindow() : Gtk::Window(),
     fileChooseButton.set_valign(Gtk::Align::ALIGN_FILL);
     fileChooseButton.set_halign(Gtk::Align::ALIGN_START);
     fileChooseButton.set_action(Gtk::FileChooserAction::FILE_CHOOSER_ACTION_SELECT_FOLDER);
-    fileChooseButton.set_filename(hvigtk_startdir);
+    fileChooseButton.set_filename("/home/hvi/Desktop/HVI-data");
     
     fileLoadButton.set_tooltip_text("Load frames from this location");
 	fileLoadButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onLoadButtonClicked) );
@@ -543,7 +543,8 @@ MainWindow::MainWindow() : Gtk::Window(),
 	pausedRecording.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenPausedRecordingToggled) );
 
 	trackingFPS.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenTrackingFPSToggled) );
-	
+	trackingFPS.setValue(true);
+
 	playingBuffer.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenPlayingBufferToggled) );
 
 	sigFrameDrawn.connect(sigc::mem_fun(*this, &MainWindow::onFrameDrawn) );
@@ -1185,7 +1186,7 @@ void MainWindow::whenRecordingToggled(bool recording)
 		playButton.set_sensitive(false);
 		liveToggle.set_sensitive(false);
 		
-		trackingFPS.setValue(false);
+		trackingFPS.setValue(false); // Stop tracking FPS when recording. TODO: Add second label to show FPS while recording.
 	}
 	else
 	{
@@ -1194,7 +1195,8 @@ void MainWindow::whenRecordingToggled(bool recording)
 		recordButton.set_sensitive(true);
 		pauseButton.set_sensitive(false);
 		liveToggle.set_sensitive(true);
-		trackingFPS.setValue();
+		
+		trackingFPS.setValue(true);
 	}
 }
 
@@ -1203,10 +1205,12 @@ void MainWindow::whenPausedRecordingToggled(bool paused)
 	if (paused)
 	{
 		recordButton.set_sensitive(true);
+	    fileSaveButton.set_sensitive(true);
 	}
 	else
 	{
 		recordButton.set_sensitive(false);
+	    fileSaveButton.set_sensitive(false);
 	}
 }
 
@@ -1278,7 +1282,7 @@ void MainWindow::whenPlayingBufferToggled(bool playing)
 	if (playing)
 	{
 		playButton.set_sensitive(false);
-		trackingFPS.setValue();
+		trackingFPS.setValue(true); //was just ()
 		fileLoadButton.set_sensitive(false);
 		recordingSizeScale.set_sensitive(false);
 	}

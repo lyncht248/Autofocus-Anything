@@ -31,7 +31,7 @@ public:
 	void saveFrames(const std::string &location);
 	void loadFrames(const std::string &location);
 
-	bool isBuffering() const;
+	bool isBuffering() const; 
 
 	void stopBuffering();
 
@@ -51,7 +51,7 @@ public:
 	VDispatcher<std::pair<int, int> >& signalBuffer();
 private:
 	void emitOperationComplete(Operation op, bool success);
-	void bufferFrames(std::pair<int, int> data);
+	void bufferFrames(std::pair<int, int> data); // 
 	System &system;
 	bool buffering;
 	std::vector<VidFrame*> frames;
