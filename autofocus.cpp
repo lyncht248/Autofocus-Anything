@@ -77,8 +77,8 @@ void autofocus::run () {
   //The following variables assume imgWidth = 320; must be changed if this isn't the case.
   int moved = 1;
   int previous = desiredLocBestFocus; //TODO: should be in a mutex
-  int tol = 4; //Tolerance zone of pixels about the desiredLocBestFocus where no lense movement is triggered. Lower than 4 causes constant signals to lens
-
+  int tol = 2; //Tolerance zone of pixels about the desiredLocBestFocus where no lense movement is triggered. Lower than 4 causes constant signals to lens
+  //Should be 4 for scale=0.5
   int blink = 0; //Becomes 1 when a blink is detected
   int blinkframes = 15; //number of frames to ignore when blink is detected
   imgcount = 0; //Keeps track of the number of images recieved and analyzed from the camera, but resets when switching between FindFocus and HoldFocus
@@ -127,7 +127,7 @@ void autofocus::run () {
       cv::Mat image = cv::Mat(imHeight, imWidth, CV_8U, img_calc_buf);
       //cv::UMat image = temp_image.getUMat(cv::ACCESS_READ);
       cv::Mat resized;
-      double scale = 0.5; 
+      double scale = 0.25; 
       cv::resize(image, resized, cv::Size(), scale, scale); //function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
 
       //int locBestFocus = computebestfocus(resized, resized.rows, resized.cols); //drops to 0.5 fps if placed in while loop
@@ -164,8 +164,8 @@ void autofocus::run () {
             //window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to the current location of best-focus
           }
           else if (bFindFocus) {
-            desiredLocBestFocus = 400;
-            previous = 400;
+            desiredLocBestFocus = 200;
+            previous = 200;
          		hvigtk_logfile << "Set desiredLocBestFocus back to 200 in autofocus.cc" << std::endl;
             //window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to 160, the center-point
           }
