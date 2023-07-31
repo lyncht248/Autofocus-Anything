@@ -646,6 +646,8 @@ MainWindow::MainWindow() : Gtk::Window(),
 	resize(priv->rootBox.get_width(), priv->rootBox.get_height() );
     
     priv->rootBox.show_all();
+
+	logger->info("[MainWindow::MainWindow] constructor completed");")
 }
 
 double MainWindow::getFrameRateScaleValue() const
@@ -685,6 +687,8 @@ void MainWindow::updateCameraValues(double gain, double expose, double gamma)
 	gainScaleConnection.unblock();
 	exposeScaleConnection.unblock();
 	gammaScaleConnection.unblock();
+
+    logger->info("[MainWindow::updateCameraValues] gainScale, exposeScale, gammaScale updated");
 }
 
 void MainWindow::getDisplayDimensions(double &w, double &h) const
@@ -694,6 +698,9 @@ void MainWindow::getDisplayDimensions(double &w, double &h) const
 	
 	w = 800;
 	h = 600;
+
+    logger->info("[MainWindow::getDisplayDimensions] GTK display dimensions of 800,600 returned");
+
 }
 
 void MainWindow::displayMessage(const std::string &msg)

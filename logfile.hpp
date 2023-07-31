@@ -2,7 +2,9 @@
 #define HVIGTK_LOGFILE_H
 
 #include <fstream>
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
 
-extern std::ofstream hvigtk_logfile;
+extern auto logger;
 
 #endif

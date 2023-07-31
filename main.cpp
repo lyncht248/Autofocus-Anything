@@ -3,106 +3,85 @@
 #include <iostream>
 #include <gtkmm.h>
 #include <unistd.h>
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
 
 #include "glibmm/main.h"
 #include "sdlwindow.hpp"
 #include "version.hpp"
 #include "system.hpp"
-#include "logfile.hpp"
 #include "autofocus.hpp"
 
 #include <opencv2/core/ocl.hpp>
-
 #include <thread>
 
-char workingdir[4096] = "/home/hvi/Desktop/HVI-log-report"; //Where the hvigtk.log file is saved
-const char *hvigtk_startdir = workingdir;
+constexpr char WorkingDir[] = "/home/hvi/Desktop/HVI-log-report"; // Where the hvigtk.log file is saved
+const char *hvigtk_startdir = WorkingDir;
 
-std::ofstream hvigtk_logfile("/home/hvi/Desktop/HVI-log-report/hvigtk.log");
+auto logger = spdlog::basic_logger_mt("basic_logger", "/home/hvi/Desktop/HVI-log-report/hvigtk.log");
+logger->set_pattern("[%H:%M:%S] [thread %t] *** %v ***");
 
 SDLWindow::SDLWin *childwin = nullptr;
-std::atomic<bool> bAutofocusing = 0; //Flag that controls the autofocusing while() loop
+std::atomic<bool> bAutofocusing = false; // Flag that controls the autofocusing while() loop
 
 Glib::Dispatcher m_errorSignal;
 
-int gtkAppLocationX = 42;
-int gtkAppLocationY = 10;
+int gtk_app_location_x = 42;
+int gtk_app_location_y = 10;
 
 int main(int argc, char **argv) 
 {
     // Spawns the SDL window, which is done in a separate process
-	childwin = SDLWindow::sdlwin_open();
-	if (!childwin)
-		return 1;
-    // if ( !getcwd(workingdir, 4096) )
-    // {
-    //     workingdir[0] = 0;
-    // }
+    childwin = SDLWindow::sdlwin_open();
+    if (!childwin) {
+        return 1;
+    }
 
-    if (cv::ocl::haveOpenCL())
-    {
+    if (cv::ocl::haveOpenCL()) {
         cv::ocl::setUseOpenCL(true);
         cv::ocl::Device dev = cv::ocl::Device::getDefault();
-        if (dev.available())
-        {
-            std::cout << "Device Name: " << dev.name() << std::endl;
-            std::cout << "Device Type: " << dev.type() << std::endl;
-            std::cout << "Device Vendor: " << dev.vendorName() << std::endl;
-            std::cout << "Device Version: " << dev.version() << std::endl;
-            std::cout << "Device OpenCL Version: " << dev.OpenCLVersion() << std::endl;
-            std::cout << "Device Driver Version: " << dev.driverVersion() << std::endl;
+        if (dev.available()) {
+            logger->info("[Main] Device Name: {}", dev.name());
+            logger->info("[Main] Device Type: {}", dev.type());
+            logger->info("[Main] Device Vendor: {}", dev.vendorName());
+            logger->info("[Main] Device Version: {}", dev.version());
+            logger->info("[Main] Device OpenCL Version: {}", dev.OpenCLVersion());
+            logger->info("[Main] Device Driver Version: {}", dev.driverVersion());
+        } else {
+            logger->info("[Main] No OpenCL device available.");
         }
-        else
-        {
-            std::cout << "No OpenCL device available." << std::endl;
-        }
-    }
-    else
-    {
-        std::cout << "OpenCL is not available on this system." << std::endl;
+    } else {
+        logger->info("[Main] OpenCL is not available on this system.");
     }
 
     // Creates a GTK application object
     auto app = Gtk::Application::create(argc, argv, HVIGTK_APPID); 
+    logger->info("[Main] GTK application object created");
 
-    //Sets to dark theme, which is useful for operator to see contrast better
+    // Sets to dark theme, which is useful for operator to see contrast better
     Glib::RefPtr<Gtk::Settings> settings = Gtk::Settings::get_default();
     if(settings) {
         settings->property_gtk_application_prefer_dark_theme() = true;
     }
 
     // Initializes the GTK thread system and sets the GTK thread to default (?)
-	if(!Glib::thread_supported() ) Glib::thread_init();
-	Glib::MainContext::get_default()->push_thread_default();
+    if(!Glib::thread_supported()) Glib::thread_init();
+    Glib::MainContext::get_default()->push_thread_default();
+    logger->info("[Main] GTK thread system initialized and GTK thread set to default");
 
     // Creates a System object to run the logic behind the app's main window
     System system(argc, argv);
+    logger->info("[Main] System object finished creating");
 
-    // // Creates an Autofocus object to run the autofocusing logic (perhaps should be done in system object)
-    // autofocus AF;
-
-    // //Starts an autofocusing thread (should be replaced by constructor for the AF object, I believe)
-    // std::thread tAutofocus(&autofocus::run2, &AF);
-
-    //Opens the GTK application GUI and stops main() execution. system.getWindow() returns a pointer to the MainWindow object created in system.cc
+    // Opens the GTK application GUI and stops main() execution. system.getWindow() returns a pointer to the MainWindow object created in system.cc
     int out = app->run(system.getWindow() );
-	hvigtk_logfile << "app-> run loop finished executing in main.cpp";
+    logger->info("[Main] app->run loop is finished executing");
 
-    //Closes logfile when GTK application exits
-	hvigtk_logfile.close();
+    // Closes the SDL window
+    SDLWindow::sdlwin_close(childwin);
+    logger->info("[Main] sdlwin_close is closed");
 
-    //Closes the SDL window
-	SDLWindow::sdlwin_close(childwin);
-    hvigtk_logfile << "sdlwin_close in main.cpp executed" << std::endl;
-
-    // // Stops the autofocus thread. This should be a destructor in the autofocus object
-    // if (tAutofocus.joinable() ) {
-    //     tAutofocus.join(); // Stops the CaptureVideo thread too. This should be a destructor in the autofocus object instead
-    //     std::cout << "Autofocus closed correctly" << std::endl;
-    // }
-
-    //Returns the exit code of the GTK application
-	hvigtk_logfile << "main.cpp about to return 1";
-	return 0;
+    // Returns the exit code of the GTK application
+    logger->info("[Main] main.cpp about to complete");
+    return 0;
 }
-
