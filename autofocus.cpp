@@ -23,6 +23,8 @@
 #include "opencv2/highgui/highgui.hpp"
 
 //Global variables 
+bool bAutofocusLogFlag = 0; //Flag that is 1 for when the autofocus log is being written to, 0 when it is not
+
 std::atomic<bool> bNewImage = 0; //Flag that is 1 for when the buffer image is new, 0 when buffer image is old
 
 const long img_size = 1280 * 960; //Replace with actual image size
@@ -53,7 +55,8 @@ autofocus::autofocus() :
 {
   // tiltedcam::settings camsettings = tiltedcam.getsettings();
   tAutofocus = std::thread(&autofocus::run, this); // starts a thread that executes autofocus::run()
-  hvigtk_logfile << "Autofocus thread started \n";
+	
+  if(bAutofocusLogFlag) {logger->info("[autofocus::autofocus] constructor completed and autofocus::run thread started");}
 }
 
 autofocus::~autofocus() { 
@@ -62,7 +65,7 @@ autofocus::~autofocus() {
   if(tAutofocus.joinable()) {
       tAutofocus.join();
   }
-  hvigtk_logfile << "Autofocus deconstructor called, thread stopped \n";
+  if(bAutofocusLogFlag) {logger->info("[autofocus::~autofocus] destructor completed");}
 }
 
 void autofocus::run () {
@@ -99,6 +102,7 @@ void autofocus::run () {
   double Kd = 0; //Should try to add a small Kd; further testing required
   PID pid = PID(dt, max, min, Kp, Kd, Ki);  
 
+  if(bAutofocusLogFlag) {logger->info("[autofocus::run] while thread loop about to start");}
   while(!stop_thread.load()) {
     
     if(bResetLens) {
@@ -224,6 +228,7 @@ void autofocus::run () {
 
 //TODO: This should be in tiltedcam.cc, but I need to use the global variables... Poor code!
 void autofocus::capturevideo() {
+  if(bAutofocusLogFlag) {logger->info("[autofocus::capturevideo] thread started");}
   while(!stop_thread.load()) {
 
     //for testing

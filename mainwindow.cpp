@@ -21,6 +21,8 @@
 #include "logfile.hpp"
 #include "autofocus.hpp"
 
+bool bMainWindowLogFlag = 1; // 1 = log, 0 = no log
+
 struct MainWindow::Private
 {
     Gtk::Label gainLabel, exposeLabel, gammaLabel, frameRateLabel, thresLabel, scaleLabel, recordingSizeLabel, bestFocusLabel;
@@ -647,7 +649,7 @@ MainWindow::MainWindow() : Gtk::Window(),
     
     priv->rootBox.show_all();
 
-	logger->info("[MainWindow::MainWindow] constructor completed");")
+	if(bMainWindowLogFlag) {if(bMainWindowLogFlag) {logger->info("[MainWindow::MainWindow] constructor completed");}
 }
 
 double MainWindow::getFrameRateScaleValue() const
@@ -688,7 +690,7 @@ void MainWindow::updateCameraValues(double gain, double expose, double gamma)
 	exposeScaleConnection.unblock();
 	gammaScaleConnection.unblock();
 
-    logger->info("[MainWindow::updateCameraValues] gainScale, exposeScale, gammaScale updated");
+    if(bMainWindowLogFlag) {logger->info("[MainWindow::updateCameraValues] gainScale, exposeScale, gammaScale updated");}
 }
 
 void MainWindow::getDisplayDimensions(double &w, double &h) const
@@ -699,7 +701,7 @@ void MainWindow::getDisplayDimensions(double &w, double &h) const
 	w = 800;
 	h = 600;
 
-    logger->info("[MainWindow::getDisplayDimensions] GTK display dimensions of 800,600 returned");
+    if(bMainWindowLogFlag) {logger->info("[MainWindow::getDisplayDimensions] GTK display dimensions of 800,600 returned");}
 
 }
 
@@ -942,6 +944,8 @@ void MainWindow::on_show()
 	//std::cout << x << " " << y << " " << x2 << " " << y2 << std::endl;
 
 	SDLWindow::move(childwin, (dim.get_width() - 800) / 2, y + get_height() );
+
+    if(bMainWindowLogFlag) {logger->info("[MainWindow::on_show] SDL childwin moved to " + std::to_string((dim.get_width() - 800) / 2) + "," + std::to_string(y + get_height() ) );
 }
  
 bool MainWindow::renderDisplay(const ::Cairo::RefPtr< ::Cairo::Context>& cr)
@@ -1000,9 +1004,11 @@ void MainWindow::whenMakeMapToggled(bool makingMap)
 	{
     	stabiliseToggle.set_sensitive(true);
     	showMapToggle.set_sensitive(true);
-		
+
 		//showMapToggle.set_active();
 		//GUI CHANGES WHEN "MAKE MAP" IS ENABLED GO HERE
+	    if(bMainWindowLogFlag) {logger->info("[MainWindow::whenMakeMapToggled] MakeMap toggled on");}
+
 	}
 	else
 	{
@@ -1011,6 +1017,7 @@ void MainWindow::whenMakeMapToggled(bool makingMap)
 		setShowingMap(false);
     	showMapToggle.set_sensitive(false);
 		//GUI CHANGES WHEN "MAKE MAP" IS DISABLED GO HERE
+	    if(bMainWindowLogFlag) {logger->info("[MainWindow::whenMakeMapToggled] MakeMap toggled off");}
 	}
 }
 
@@ -1019,10 +1026,12 @@ void MainWindow::whenStabiliseToggled(bool stabilising)
 	if (stabilising)
 	{
 		//GUI CHANGES WHEN STABILISER IS ENABLED GO HERE
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenStabiliseToggled] Stabilise toggled on")
 	}
 	else
 	{
 		//GUI CHANGES WHEN STABILISER IS DISABLED GO HERE
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenStabiliseToggled] Stabilise toggled off")
 	}
 }
 
@@ -1031,10 +1040,12 @@ void MainWindow::whenShowMapToggled(bool showingMap)
 	if (showingMap)
 	{
 		//GUI CHANGES WHEN "SHOW MAP" IS ENABLED GO HERE
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenShowMapToggled] ShowMap toggled on")
 	}
 	else
 	{
 		//GUI CHANGES WHEN "SHOW MAP" IS DISABLED GO HERE
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenShowMapToggled] ShowMap toggled off")
 	}
 }
 
@@ -1046,16 +1057,18 @@ void MainWindow::onFindFocusClicked()
 
 	usleep(1000000);
 	bFindFocus = 0;
+	if(bMainWindowLogFlag) {logger->info("[MainWindow::onFindFocusClicked] FindFocus clicked, so bFindFocus set to 1 and then 0");}
 }
 
 void MainWindow::onResetClicked()
 {
-	hvigtk_logfile << "Resetting Lens from mainwindow::onResetClicked" << std::endl;
 	//findFocusButton.set_active(false);
 	holdFocusToggle.set_active(false);
 	threedStabToggle.set_active(false);
 	twodStabToggle.set_active(false);
 	bResetLens = 1;
+	//GUI CHANGES WHEN "RESET" IS CLICKED
+	if(bMainWindowLogFlag) {logger->info("[MainWindow::onResetClicked] Reset clicked, so bResetLens set to 1");}
 }
 
 void MainWindow::whenHoldFocusToggled(bool holdingFocus)
@@ -1069,6 +1082,7 @@ void MainWindow::whenHoldFocusToggled(bool holdingFocus)
 		findFocusButton.set_sensitive(false);
 		//threedStabToggle.set_sensitive(false);
 		//GUI CHANGES WHEN "HOLD FOCUS" IS ENABLED GO HERE
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenHoldFocusToggled] HoldFocus toggled on")
 	}
 	else
 	{
@@ -1077,6 +1091,7 @@ void MainWindow::whenHoldFocusToggled(bool holdingFocus)
 		bestFocusScale.set_sensitive(false);
 
 		//GUI CHANGES WHEN "FIND FOCUS" IS DISABLED GO HERE
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenHoldFocusToggled] HoldFocus toggled off")
 	}
 }
 
@@ -1088,6 +1103,7 @@ void MainWindow::when3DStabToggled(bool active)
 		makeMapToggle.set_active(true);
 		stabiliseToggle.set_active(true);
 		//GUI CHANGES WHEN "3D STABILISER" IS ENABLED GO HERE
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::when3DStabToggled] 3DStab toggled on")
 	}
 	else
 	{
@@ -1095,6 +1111,7 @@ void MainWindow::when3DStabToggled(bool active)
 		makeMapToggle.set_active(false);
 		stabiliseToggle.set_active(false);
 		//GUI CHANGES WHEN "3D STABILISER" IS DISABLED GO HERE
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::when3DStabToggled] 3DStab toggled off")
 	}
 }
 
@@ -1105,12 +1122,14 @@ void MainWindow::when2DStabToggled(bool active2)
 		makeMapToggle.set_active(true);
 		stabiliseToggle.set_active(true);
 		//GUI CHANGES WHEN "2D STABILISER" IS ENABLED GO HERE
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::when2DStabToggled] 2DStab toggled on")
 	}
 	else
 	{
 		makeMapToggle.set_active(false);
 		stabiliseToggle.set_active(false);
 		//GUI CHANGES WHEN "2D STABILISER" IS DISABLED GO HERE
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::when2DStabToggled] 2DStab toggled off")
 	}
 }
 
@@ -1123,6 +1142,8 @@ void MainWindow::bufferFilled()
     playButton.set_sensitive(true);
     fileSaveButton.set_sensitive(true);
 	liveToggle.set_sensitive(true);
+
+	if(bMainWindowLogFlag) {logger->info("[MainWindow::bufferFilled] Recording buffer filled");}
 }
 
 void MainWindow::bufferEmptied()
@@ -1135,6 +1156,8 @@ void MainWindow::bufferEmptied()
 		fileSaveButton.set_sensitive(false);
 		liveToggle.set_sensitive(false);
 		liveToggle.set_active(true);
+
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::bufferEmptied] Recording buffer emptied... although nothing is deleted??");}
 	}
 }
 
@@ -1144,6 +1167,8 @@ void MainWindow::viewingLive()
 	recordButton.set_sensitive(true);
 	frameSlider.set_sensitive(false);
 	trackingFPS.setValue();
+
+	if(bMainWindowLogFlag) {logger->info("[MainWindow::viewingLive] Set to viewing live");}
 }
 
 void MainWindow::viewingBuffer()
@@ -1151,6 +1176,7 @@ void MainWindow::viewingBuffer()
 	recordButton.set_sensitive(false);
 	frameSlider.set_sensitive(true);
 	trackingFPS.setValue(playingBuffer.getValue() );
+	if(bMainWindowLogFlag) {logger->info("[MainWindow::viewingBuffer] Set to viewing buffer");}
 }
 
 void MainWindow::whenLoadingToggled(bool loading)
@@ -1173,12 +1199,14 @@ void MainWindow::whenSavingToggled(bool saving)
 		fileLoadButton.set_sensitive(false);
 		fileSaveButton.set_sensitive(false);
 		recordButton.set_sensitive(false);
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenSavingToggled] Saving toggled on");}
 	}
 	else
 	{
 		fileLoadButton.set_sensitive(true);
 		fileSaveButton.set_sensitive(true);
 		recordButton.set_sensitive(true);
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenSavingToggled] Saving toggled off");}
 	}
 }
 
@@ -1195,6 +1223,8 @@ void MainWindow::whenRecordingToggled(bool recording)
 		liveToggle.set_sensitive(false);
 		
 		trackingFPS.setValue(false); // Stop tracking FPS when recording. TODO: Add second label to show FPS while recording.
+
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenRecordingToggled] Recording toggled on");}
 	}
 	else
 	{
@@ -1205,6 +1235,8 @@ void MainWindow::whenRecordingToggled(bool recording)
 		liveToggle.set_sensitive(true);
 		
 		trackingFPS.setValue(true);
+
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenRecordingToggled] Recording toggled off");}
 	}
 }
 
@@ -1214,11 +1246,13 @@ void MainWindow::whenPausedRecordingToggled(bool paused)
 	{
 		recordButton.set_sensitive(true);
 	    fileSaveButton.set_sensitive(true);
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenPausedRecordingToggled] Paused recording toggled on");}
 	}
 	else
 	{
 		recordButton.set_sensitive(false);
 	    fileSaveButton.set_sensitive(false);
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenPausedRecordingToggled] Paused recording toggled off");}
 	}
 }
 
@@ -1228,6 +1262,7 @@ void MainWindow::whenTrackingFPSToggled(bool tracking)
 	{
 		countFrames = 0;
 		Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::updateFPSCounter), 1000);
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenTrackingFPSToggled] Tracking FPS toggled on");}
 	}
 }
 
@@ -1293,6 +1328,7 @@ void MainWindow::whenPlayingBufferToggled(bool playing)
 		trackingFPS.setValue(true); //was just ()
 		fileLoadButton.set_sensitive(false);
 		recordingSizeScale.set_sensitive(false);
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenPlayingBufferToggled] Playing buffer toggled on");}
 	}
 	else
 	{
@@ -1300,6 +1336,7 @@ void MainWindow::whenPlayingBufferToggled(bool playing)
 		trackingFPS.setValue(false);
 		fileLoadButton.set_sensitive(true);
 		recordingSizeScale.set_sensitive(true);
+		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenPlayingBufferToggled] Playing buffer toggled off");}
 	}
 }
 
@@ -1318,6 +1355,8 @@ void MainWindow::onExposeScaleChange(double val)
 	sigFeatureUpdated.emit("ExposureTime", val);
 	//According to Vimba changing ExposureTime may also change camera frame rate
 	sigFeatureUpdated.emit("AcquisitionFrameRate", frameRateScale.getValue() );
+
+	if(bMainWindowLogFlag) {logger->info("[MainWindow::onExposeScaleChange] ExposureTime changed, AcquisitionFrameRate updated to " + std::to_string(frameRateScale.getValue() ) + "in case they are linked");}
 }
 
 void MainWindow::onFrameRateChange(double val)
@@ -1353,4 +1392,6 @@ void MainWindow::onBestFocusScaleChange(double val)
 MainWindow::~MainWindow()
 {
     delete priv;
+
+	if(bMainWindowLogFlag) {logger->info("[MainWindow::~MainWindow] destructor completed, priv deleted");}
 }

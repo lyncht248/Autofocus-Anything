@@ -19,6 +19,8 @@
 #include "autofocus.hpp"
 #include "notificationCenter.hpp"
 
+bool bSystemLogFlag = 1; // 1 = log, 0 = no log
+bool bSystemQueueLengthFlag = 1; // 1 = log, 0 = no log
 
 // I don't believe these three code blocks are used anywhere
 /*
@@ -92,17 +94,21 @@ FrameProcessor::FrameProcessor(System &sys) :
 {
 	processorThread = Glib::Threads::Thread::create(sigc::mem_fun(*this, &FrameProcessor::processFrame) );
 	stabThread = Glib::Threads::Thread::create(sigc::mem_fun(*this, &FrameProcessor::stabilise) );
+	if(bSystemLogFlag) {logger->info("[FrameProcessor::FrameProcessor] constructor finished");}
 }
 
 FrameProcessor::~FrameProcessor()
 {
 	running = false;
 	ThreadStopper::stop({processorThread, stabThread});
-	hvigtk_logfile << "FrameProcessor threads stopped, destructor called" << std::endl;
+
+	if(bSystemLogFlag) {logger->info("[FrameProcessor::~FrameProcessor] destructor called, processorThread and stabThread stopped");}
 }
 
 void FrameProcessor::stabilise()
 {
+	if(bSystemLogFlag) {logger->info("[FrameProcessor::stabilise] Thread started");}
+
 	ThreadStopper::makeStoppable();
 	while (running)
 	{
@@ -136,8 +142,10 @@ void FrameProcessor::stabilise()
 	}
 }
 
-void FrameProcessor::processFrame() //What to do with each received frame
+void FrameProcessor::processFrame() //What to do with each frame received from FrameObserver
 {
+	if(bSystemLogFlag) {logger->info("[FrameProcessor::processFrame] Thread started");}
+
 	ThreadStopper::makeStoppable();
 	while (running)
 	{
@@ -159,14 +167,16 @@ void FrameProcessor::processFrame() //What to do with each received frame
 			stabQueue.push(vidFrame);
 		}
 
-		// If recording, sends the frame to the recorder for saving
+		// recording = 1 if incoming frames need to be added to the recorder
 		bool recording = system.window.getRecording().getValue() && !system.window.getPausedRecording().getValue();
+
+		// If recording, sends the frame to the recorder for saving
 		if (recording)
 		{
 			system.getRecorder().putFrame(vidFrame);
 		}
 
-		// Draw the frame (still not rendered)
+		// Draw the frame at the size neccessary to fit the window
 		CVD::ImageRef vfDim = vidFrame->size();
 		if (vfDim.x != childwin->raster.w || vfDim.y != childwin->raster.h)
 		{
@@ -176,7 +186,7 @@ void FrameProcessor::processFrame() //What to do with each received frame
 		
 		//convertToCairo(stabilising);
 
-		// Apply any filters
+		// deprecated code (I believe) TODO remove
 		for (auto pair : filters)
 		{
 			pair.second->draw(processed);
@@ -212,7 +222,7 @@ void FrameProcessor::processFrame() //What to do with each received frame
 		// Now that the current vframe is processed, release it
 		ThreadStopper::lock(mutex);
 		{
-			// Wait for frame to be released
+			// Signal to release frame from thread and then wait for frame to be released
 			while (!_frameReleased)
 			{
 				ThreadStopper::stopPoint(&frameReleased);
@@ -221,31 +231,52 @@ void FrameProcessor::processFrame() //What to do with each received frame
 
 			// If not stabilising, add frame to released queue
 			if (!stabilising)
-				released.push(vidFrame);
-
-			// If live view is ON and not recording, delete every single frame in the released queue
-			if (system.window.getLiveView().getValue() && !recording)
 			{
-				// Deletes every frame in the released queue... same as released.clear()?
+				released.push(vidFrame);
+			}
+
+			// //// PREVIOUS ////
+			// // If live view is ON and not recording, delete every frame in the released queue
+			// if (system.window.getLiveView().getValue() && !recording)
+			// {
+			// 	// Deletes every frame in the released queue... same as released.clear()?
+			// 	for (VidFrame *vframe = released.pop(); !released.empty(); vframe = released.pop() ) 
+			// 		delete vframe;
+			// 	vidFrame = nullptr;
+			// }
+			
+			// // Otherwise, delete the frame! (if live view is off (ie. on a recording) or live view is on and currently taking a recording), then clear the released queue
+			// else
+			// {
+			// 	released.clear();
+			// 	if(bSystemLogFlag) {logger->info("[FrameProcessor::processFrame] released queue cleared, but NOT deleted!!!");}
+			// }
+
+			//// NEW ////
+			if (recording)
+			{
+				// If recording, then don't delete the frame, but clear the released queue. These frames can be deleted when the recording is saved.
+				released.clear();
+				if(bSystemLogFlag) {logger->info("[FrameProcessor::processFrame] released queue cleared, but NOT deleted!!!");}
+			}
+			else 
+			{
+				// Not recording, so can delete the released frames.
 				for (VidFrame *vframe = released.pop(); !released.empty(); vframe = released.pop() ) 
 					delete vframe;
 				vidFrame = nullptr;
-			}
-
-			//TODO: THIS IS PROBABLY WHERE PROBLEM IS!
-			// Otherwise (if stabilising, or watching a recording, or recording live), clear the released queue
-			else
 				released.clear();
+			}
 		}
 		ThreadStopper::unlock(mutex);
 
 		// stabQueue.size() = 0 almost always
-		hvigtk_logfile << "FrameProcessor stabQueue is length: " << stabQueue.size() << std::endl;
-		hvigtk_logfile.flush();
+		if(bSystemQueueLengthFlag) {logger->info("[FrameProcessor::processFrame] stabQueue is length: {}", stabQueue.size());}
 
 		// released.size() = 0 almost always
-		hvigtk_logfile << "FrameProcessor released queue is length: " << released.size() << std::endl;
-		hvigtk_logfile.flush();
+		if(bSystemQueueLengthFlag) {logger->info("[FrameProcessor::processFrame] released queue is length: {}", released.size());}
+
+		if(bSystemQueueLengthFlag) {logger->info("[FrameProcessor::processFrame] frameQueue is length: {}", system.getFrameQueue().size());}
 	}
 }
 
@@ -261,6 +292,7 @@ void FrameProcessor::resetRaster()
 {
 	rasterPos = offset = currentOff = TooN::Zeros;
 	SDLWindow::setRaster(childwin);
+	if(bSystemLogFlag) {logger->info("[FrameProcessor::resetRaster] Stabilise offset reset to 0");}
 }
 
 ::Cairo::RefPtr< ::Cairo::Surface> FrameProcessor::getFrame()
@@ -309,19 +341,17 @@ public :
 				memcpy(sysFrame->data(), buf, sz);
 				sysFrames.push(sysFrame);
 
-				// Here is where we check the queue size and drop a frame if needed
+				// Here is where we check the queue size and drop a frame if needed. TODO: just change in frameQueue in System::System
 				if (sysFrames.size() >= 15)
 				{
-					delete sysFrame; //delete the frame 
-					sysFrames.pop(); //remove the frame from the queue
+					IVidFrame* frame_to_delete = sysFrames.pop(); // remove the frame from the queue
+					delete frame_to_delete; // delete the frame 
 
-					hvigtk_logfile << "Dropped a frame from the queue - Frame queue was too long." << std::endl;
-					hvigtk_logfile.flush();
+					if(bSystemQueueLengthFlag) {logger->info("[FrameObserver::FrameReceived] Deleted a frame from the sysFrames queue as it was too long.");}
 				}
 				
 				// Quickly recieves 15 frames which are then emptied by FrameProcessor quickly
-				hvigtk_logfile << "FrameObserver sysFrames queue is length: " << sysFrames.size() << std::endl;
-				hvigtk_logfile.flush();
+				if(bSystemQueueLengthFlag) {logger->info("[FrameObserver::FrameReceived] sysFrames queue is length: {}", sysFrames.size());}
 
 				sigReceived.emit();
 			}
@@ -371,8 +401,9 @@ System::System(int argc, char **argv) :
 	stabiliser(),
 	madeMap(false),
 	AF() //Creates an autofocus object, calling constructor
-
 {
+	if(bSystemLogFlag) {logger->info("[System::System] constructor beginning");}
+
 	//Error message handling!
 	NotificationCenter::instance().registerListener("error", [this]() {
 		on_error();
@@ -420,26 +451,20 @@ System::System(int argc, char **argv) :
 	//Signals that the window has been closed, and other threads must close
 	window.signal_delete_event().connect(sigc::mem_fun(*this, &System::onCloseClicked));
 
-	hvigtk_logfile << "HVI-GTK " << HVIGTK_VERSION_STR << std::endl;
-	hvigtk_logfile.flush();
-
 	auto now = std::chrono::system_clock::now();
 	std::time_t time = std::chrono::system_clock::to_time_t(now);
 	
  	char buf[64] = { 0 };
     std::strftime(buf, sizeof(buf), "%F %R %Z", std::localtime(&time) );
-	hvigtk_logfile << "Run time: " << buf << std::endl;
-	hvigtk_logfile.flush();
 
 	if (vsys.Startup() == VmbErrorSuccess)
 	{
-		hvigtk_logfile << "Starting up Vimba: success" << std::endl;
+		if(bSystemLogFlag) {logger->info("[System::System] Starting up Vimba: success");}
 		Vimba::CameraPtrVector cameras;
 
 		if (vsys.GetCameras(cameras) == VmbErrorSuccess)
 		{
-			hvigtk_logfile << "Found: " << cameras.size() << " cameras" << std::endl;
-			hvigtk_logfile.flush();
+			if(bSystemLogFlag) {logger->info("[System::System] Found: {} cameras", cameras.size());}
 			if (!cameras.empty() )
 			{
 				cam = cameras[0];
@@ -451,27 +476,23 @@ System::System(int argc, char **argv) :
 		}
 		else
 		{
-			hvigtk_logfile << "Camera search failed" << std::endl;
-			hvigtk_logfile.flush();
+			if(bSystemLogFlag) {logger->info("[System::System] Failed to find cameras");}
 		}
 	}
 	else
 	{
-		hvigtk_logfile << "Failed to start Vimba" << std::endl;
-		hvigtk_logfile.flush();
+		logger->error("[System::System] Failed to start Vimba");
 	}
 	whenLiveViewToggled(true); // calls startStreaming
 }
 
 void System::startStreaming()
 {
-
 	if (cam != nullptr)
 	{
 		if (cam->Open(VmbAccessModeFull) == VmbErrorSuccess)
 		{
-			hvigtk_logfile << "Successfully opened camera" << std::endl;
-			hvigtk_logfile.flush();
+			if(bSystemLogFlag) {logger->info("[System::startStreaming] Successfully opened camera");}
 			
 			setFeature("PixelFormat", VmbPixelFormatMono8);
 			window.updateCameraValues(getFeature<double>("Gain"), getFeature<double>("ExposureTime"), getFeature<double>("Gamma") );
@@ -501,8 +522,7 @@ void System::startStreaming()
 				
 				if (cam->GetFeatureByName("AcquisitionStart", pFeature) == VmbErrorSuccess && pFeature->RunCommand() == VmbErrorSuccess)
 				{
-					hvigtk_logfile << "Started frame capture" << std::endl;
-					hvigtk_logfile.flush();
+					if(bSystemLogFlag) {logger->info("[System::startStreaming] Started frame capture");}
 				}
 				else
 				{
@@ -512,8 +532,7 @@ void System::startStreaming()
 			else
 			{
 			fail:;
-				hvigtk_logfile << "Failed to start frame capture" << std::endl;
-				hvigtk_logfile.flush();
+				if(bSystemLogFlag) {logger->info("[System::startStreaming] Failed to start frame capture");} //TODO might need to mem manage below here
 			}
 		}
 	}
@@ -527,20 +546,17 @@ void System::stopStreaming()
 
 		if (cam->GetFeatureByName ("AcquisitionStop", pFeature ) == VmbErrorSuccess && pFeature->RunCommand() == VmbErrorSuccess)
 		{
-			hvigtk_logfile << "Stopped acquisition" << std::endl;
-			hvigtk_logfile.flush();
+			if(bSystemLogFlag) {logger->info("[System::stopStreaming] Stopped acquisition");}
 		}
 
 		if (cam->EndCapture() == VmbErrorSuccess)
 		{
-			hvigtk_logfile << "Stopped capture" << std::endl;
-			hvigtk_logfile.flush();
+			if(bSystemLogFlag) {logger->info("[System::stopStreaming] Stopped capture");}
 		}
 
 		if (cam->FlushQueue() == VmbErrorSuccess)
 		{
-			hvigtk_logfile << "Flushed queue" << std::endl;
-			hvigtk_logfile.flush();
+			if(bSystemLogFlag) {logger->info("[System::stopStreaming] Flushed queue");}
 		}
 
 		for (Vimba::FramePtrVector::iterator iter = priv->frames.begin(); iter != priv->frames.end(); ++iter)
@@ -550,14 +566,12 @@ void System::stopStreaming()
 		
 		if (cam->RevokeAllFrames() == VmbErrorSuccess)
 		{
-			hvigtk_logfile << "Revoked frames" << std::endl;
-			hvigtk_logfile.flush();
+			if(bSystemLogFlag) {logger->info("[System::stopStreaming] Revoked frames");}
 		}
 
 		if (cam->Close() == VmbErrorSuccess)
 		{
-			hvigtk_logfile << "Closed camera" << std::endl;
-			hvigtk_logfile.flush();
+			if(bSystemLogFlag) {logger->info("[System::stopStreaming] Closed camera");}
 		}
 	}
 }
@@ -600,10 +614,12 @@ void System::whenLiveViewToggled(bool viewingLive)
 	window.setMakingMap(false);
 	if (viewingLive)
 	{
+		if(bSystemLogFlag) {logger->info("[System::whenLiveViewToggled] Live view toggled on");}
 		startStreaming();
 	}
 	else
 	{
+		if(bSystemLogFlag) {logger->info("[System::whenLiveViewToggled] Live view toggled off");}
 		stopStreaming();
 	}
 }
@@ -615,6 +631,7 @@ void System::whenMakeMapToggled(bool makingMap)
 		frameProcessor.stabComplete.wait(frameProcessor.stabMutex);
 	if (makingMap)
 	{
+		if(bSystemLogFlag) {logger->info("[System::whenMakeMapToggled] Making map toggled on");}
 		frameProcessor.resetRaster();
 		if (!window.getLiveView().getValue() )
 		{
@@ -634,8 +651,9 @@ void System::whenMakeMapToggled(bool makingMap)
 			madeMap = false;
 	}
 	else
+	if(bSystemLogFlag) {logger->info("[System::whenMakeMapToggled] Making map toggled off");}
 	{
-		stabiliser.invalidate();
+		stabiliser.invalidate(); //TODO: May need to memory manage?
 	}
 	frameProcessor.stabMutex.unlock();
 }
@@ -649,10 +667,12 @@ void System::whenStabiliseToggled(bool stabilising)
 	frameProcessor.resetRaster();
 	if (stabilising)
 	{
+		if(bSystemLogFlag) {logger->info("[System::whenStabiliseToggled] Stabilise toggled on");}
 		//CODE TO BE EXECUTED WHEN "STABILISER" IS ENABLED GOES HERE
 	}
 	else
 	{
+		if(bSystemLogFlag) {logger->info("[System::whenStabiliseToggled] Stabilise toggled off");}
 		//CODE TO BE EXECUTED WHEN "STABILISER" IS DISABLED GOES HERE
 	}
 	frameProcessor.stabMutex.unlock();
@@ -662,12 +682,14 @@ void System::whenShowMapToggled(bool showingMap)
 {
 	if (showingMap)
 	{
+		if(bSystemLogFlag) {logger->info("[System::whenShowMapToggled] Show map toggled on");}
 		stabiliser.predraw();
 		frameProcessor.filters["map"] = &stabiliser;
 		SDLWindow::setShowingMap(childwin, true);
 	}
 	else
 	{
+		if(bSystemLogFlag) {logger->info("[System::whenShowMapToggled] Show map toggled off");}
 		frameProcessor.filters.erase("map");
 		SDLWindow::setShowingMap(childwin, false);
 	}
@@ -686,8 +708,8 @@ void System::whenShowMapToggled(bool showingMap)
 }
 
 void System::onFindFocusClicked() {
-	hvigtk_logfile << "system::onFindFocusClicked is activated!" << std::endl;
-
+	//TODO: see if this fires or not
+	if(bSystemLogFlag) {logger->info("[System::onFindFocusClicked] Find focus button clicked!");}
 	imgcount = 0;
 	bFindFocus = 1;
 
@@ -697,15 +719,16 @@ void System::onFindFocusClicked() {
 
 
 void System::onResetClicked() {
-	hvigtk_logfile << "Lens reset button clicked!" << std::endl;
+	if(bSystemLogFlag) {logger->info("[System::onResetClicked] Lens reset button clicked");}
 }
 
 void System::whenHoldFocusToggled(bool holdingFocus)
 {
-	hvigtk_logfile << "holdingFocus is " << holdingFocus << "in System::whenHoldFocusToggled" << std::endl;
-
+	//TODO: Fix this
 	if (holdingFocus)
 	{
+		if(bSystemLogFlag) {logger->info("[System::whenHoldFocusToggled] Hold focus toggled on");}
+
 		//CODE TO BE EXECUTED WHEN "HOLD FOCUS" IS ENABLED GOES HERE
 		imgcount = 0;
 		bHoldFocus = 1;
@@ -715,6 +738,7 @@ void System::whenHoldFocusToggled(bool holdingFocus)
 	}
 	else
 	{
+		if(bSystemLogFlag) {logger->info("[System::whenHoldFocusToggled] Hold focus toggled off");}
 		//CODE TO BE EXECUTED WHEN "HOLD FOCUS" IS DISABLED GOES HERE
 		bHoldFocus = 0;
 	}
@@ -724,10 +748,12 @@ void System::when3DStabToggled(bool active)
 {
 	if (active)
 	{
+		if(bSystemLogFlag) {logger->info("[System::when3DStabToggled] 3D stab toggled on");}
 		//CODE TO BE EXECUTED WHEN "3D STAB" IS ENABLED GOES HERE
 	}
 	else
 	{
+		if(bSystemLogFlag) {logger->info("[System::when3DStabToggled] 3D stab toggled off");}
 		//CODE TO BE EXECUTED WHEN "3D STAB" IS DISABLED GOES HERE
 	}
 }
@@ -736,10 +762,12 @@ void System::when2DStabToggled(bool active2)
 {
 	if (active2)
 	{
+		if(bSystemLogFlag) {logger->info("[System::when2DStabToggled] 2D stab toggled on");}
 		//CODE TO BE EXECUTED WHEN "2D STAB" IS ENABLED GOES HERE
 	}
 	else
 	{
+		if(bSystemLogFlag) {logger->info("[System::when2DStabToggled] 2D stab toggled off");}
 		//CODE TO BE EXECUTED WHEN "2D STAB" IS DISABLED GOES HERE
 	}
 }
@@ -767,13 +795,15 @@ void System::whenPlayingToggled(bool playing)
 		int frameRate = window.getFrameRateScaleValue();
 		if (!recorder->isBuffering() )
 		{
-			hvigtk_logfile << "Start playing from frame: " << start << " at rate: " << frameRate << std::endl;
-			hvigtk_logfile.flush();
+			if(bSystemLogFlag) {logger->info("[System::whenPlayingToggled] Start playing from frame: {} at rate: {}", start, frameRate);}
+		
 			recorder->signalBuffer().emit(std::make_pair(start, frameRate) );
 		}
 	}
 	else
 	{
+		if(bSystemLogFlag) {logger->info("[System::whenPlayingToggled] Stop playing toggled off");}
+		//TODO: Need to delete frames in frameQueue? Or manage in recorder?
 		recorder->stopBuffering();
 		frameQueue.clear();
 	}
@@ -783,6 +813,8 @@ void System::whenSeekingToggled(bool seeking)
 {
 	if (seeking)
 	{
+		if(bSystemLogFlag) {logger->info("[System::whenSeekingToggled] Seeking toggled on");}
+
 		if (window.getPlayingBuffer().getValue() )
 		{
 			recorder->stopBuffering();
@@ -791,7 +823,7 @@ void System::whenSeekingToggled(bool seeking)
 		{
 			VidFrame *out = recorder->getFrame(window.getFrameSliderValue() );
 			if (out)
-				frameQueue.push(out); //This is the only place where frameQueue is pushed to
+				frameQueue.push(out); //frameQueue is the same as sysQueue in FrameObserver
 			window.setSeeking(false);
 		}
 		else 
@@ -799,6 +831,7 @@ void System::whenSeekingToggled(bool seeking)
 	}
 	else
 	{
+		if(bSystemLogFlag) {logger->info("[System::whenSeekingToggled] Seeking toggled off");}
 		if (window.getPlayingBuffer().getValue() )
 			whenPlayingToggled(true);
 	}
@@ -808,7 +841,7 @@ void System::whenRecordingToggled(bool recording)
 {
 	if (recording)
 	{
-		recorder->clearFrames();
+		recorder->clearFrames(); //When a new recording is started, clear the previous frames
 	}
 }
 
@@ -819,8 +852,7 @@ void System::onRecorderOperationComplete(RecOpRes res)
 	switch (op)
 	{
 		case Recorder::Operation::RECOP_FILLED:
-			hvigtk_logfile << "Recorder stopped recording" << std::endl;
-			hvigtk_logfile.flush();
+			if(bSystemLogFlag) {logger->info("[System::onRecorderOperationComplete] Recorder stopped recording");}
 			if (success)
 				window.displayMessage("Recording complete");
 			else
@@ -849,8 +881,7 @@ void System::onRecorderOperationComplete(RecOpRes res)
 			break;
 
 		case Recorder::Operation::RECOP_BUFFER:
-			hvigtk_logfile << "Recorder stopped buffering" << std::endl;
-			hvigtk_logfile.flush();
+			if(bSystemLogFlag) {logger->info("[System::onRecorderOperationComplete] Recorder stopped buffering");}
 			window.setPlayingBuffer(false);
 			break;
 
@@ -873,6 +904,7 @@ void System::onWindowFeatureUpdated(std::string fname, double val)
 
 void System::onWindowThresholdChanged(double val)
 {
+	if(bSystemLogFlag) {logger->info("[System::onWindowThresholdChanged] Threshold changed to: {} recalculating map", val);}
 	frameProcessor.stabMutex.lock();
 	while (!frameProcessor._stabComplete)
 		frameProcessor.stabComplete.wait(frameProcessor.stabMutex);
@@ -899,6 +931,8 @@ void System::onWindowThresholdChanged(double val)
 
 void System::onWindowScaleChanged(double val)
 {
+	if(bSystemLogFlag) {logger->info("[System::onWindowScaleChanged] Scale changed to: {} recalculating map", val);}
+
 	frameProcessor.stabMutex.lock();
 	while (!frameProcessor._stabComplete)
 		frameProcessor.stabComplete.wait(frameProcessor.stabMutex);
@@ -925,9 +959,10 @@ void System::onWindowScaleChanged(double val)
 void System::onWindowBestFocusChanged(double val)
 {
 	//CODE TO EXECUTE WHEN BEST FOCUS SCALE CHANGED
+	if(bSystemLogFlag) {logger->info("[System::onWindowBestFocusChanged] Best focus location changed to: {}, updating desiredLocBestFocus", val);}
 
 	int val2 = round(val);
-	//This should be in a mutex, but it's not critical
+	//TODO: This should be in a mutex, and done much better. but it's not critical
 	desiredLocBestFocus = val2;
 
 }
@@ -944,15 +979,16 @@ bool System::onCloseClicked(const GdkEventAny* event)
 	stopStreaming();
 	//vsys.Shutdown(); //TODO: Maybe move to ~System()?
 	//delete priv; //TODO: Maybe move to ~System()?
-	hvigtk_logfile << "system::onCloseClicked ran" << std::endl;
-	return false;
+	if(bSystemLogFlag) {logger->info("[System::onCloseClicked] Close button clicked");}
+
 }
 
 System::~System()
 {
 	vsys.Shutdown();
 	delete priv;
-	hvigtk_logfile << "system::~system ran" << std::endl;
+
+	if(bSystemLogFlag) {logger->info("[System::~System] destructor ran");}
 }
 
 MainWindow& System::getWindow()

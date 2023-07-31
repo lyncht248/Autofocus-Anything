@@ -17,13 +17,15 @@
 #include <string>
 #include <iomanip>
 
+bool bLensLogFlag = 0; //Flag that is 1 for when the autofocus log is being written to, 0 when it is not
+
 lens::lens() :
     stop_thread(false)
 {
 
     // Check for errors
     if (serial_port < 0) {
-        hvigtk_logfile << "Error opening serial port \n";
+        logger->error("[lens::lens] Error opening serial port");
     }
 
       // Create new termios struct, we call it 'tty' for convention
@@ -31,8 +33,7 @@ lens::lens() :
 
     // Read in existing settings, and handle any error
     if(tcgetattr(serial_port, &tty) != 0) {
-        printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
-        hvigtk_logfile << "Error opening serial port \n";
+        logger->error("[lens::lens] Error opening serial port");
     }
     
 
@@ -65,9 +66,11 @@ lens::lens() :
         hvigtk_logfile << "failure to save tty settings for lens motor \n";
     }
 
-    hvigtk_logfile << "Serial Port initialized! \n";
+
+    if(bLensLogFlag) {logger->info("Serial Port initialized!")};
 
     // Start a thread to send and recieve signals from the lens motor asynchronously
+    if(bLensLogFlag) {logger->info("[lens::lens] Starting and detaching lens thread")};
     std::thread tLens(&lens::lens_thread, this);
     tLens.detach();
 }
@@ -81,12 +84,13 @@ void lens::lens_thread() {
     // Sets the home location offset to be 1mm (or __ encoder pulses, or 0x0400) from the factory home location. Doesn't move lens. 
     unsigned char msg[] = { '0', 's', 'o', '0', '0', '0', '0', '0', '4', '0', '0', '\r', '\n' };
     bytes_written = write(serial_port, msg, sizeof(msg));
+    if(bLensLogFlag) {logger->info("[lens::lens_thread] Sets home location to be 1mm, 0so00000400")}
     usleep(100000); //Sleep for 0.1s
 
     while (!line_received && n_read < sizeof(buf)) {
         int n = read(serial_port, &buf[n_read], 1);
         if (n < 0) {
-            std::cerr << "Error reading from serial port\n";
+            logger->error("[lens::lens_thread] Error reading from serial port");
             return;
         }
         if (buf[n_read] == '\n') {
@@ -98,7 +102,7 @@ void lens::lens_thread() {
         buf[n_read-1] = '\0'; // remove the newline character from the buffer
         // std::cout << "Received line: " << buf << std::endl;
     } else {
-        std::cerr << "Error: no line terminator received\n";
+        logger->error("[lens::lens_thread] Error: no line terminator received");
         return;
     }
 
@@ -110,7 +114,7 @@ void lens::lens_thread() {
     while (!line_received && n_read < sizeof(buf)) {
         int n = read(serial_port, &buf[n_read], 1);
         if (n < 0) {
-            std::cerr << "Error reading from serial port\n";
+            logger->error("[lens::lens_thread] Error reading from serial port");
             return;
         }
         if (buf[n_read] == '\n') {
@@ -122,7 +126,7 @@ void lens::lens_thread() {
         buf[n_read-1] = '\0'; // remove the newline character from the buffer
         // std::cout << "Received line: " << buf << std::endl;
     } else {
-        std::cerr << "Error: no line terminator received\n";
+        logger->error("[lens::lens_thread] Error: no line terminator received");
         return;
     }
 
@@ -152,7 +156,7 @@ void lens::return_to_start() {
         while (!line_received && n_read < sizeof(buf)) {
             int n = read(serial_port, &buf[n_read], 1);
             if (n < 0) {
-                std::cerr << "Error reading from serial port\n";
+                logger->error("[lens::return_to_start] Error reading from serial port");
                 return;
             }
             if (buf[n_read] == '\n') {
@@ -164,7 +168,7 @@ void lens::return_to_start() {
             buf[n_read-1] = '\0'; // remove the newline character from the buffer
             //std::cout << "Received line: " << buf << std::endl;
         } else {
-            std::cerr << "Error: no line terminator received\n";
+            logger->error("[lens::return_to_start] Error: no line terminator received");
             return;
         }
     }
@@ -177,7 +181,7 @@ void lens::return_to_start() {
         while (!line_received && n_read < sizeof(buf)) {
         int n = read(serial_port, &buf[n_read], 1);
         if (n < 0) {
-            std::cerr << "Error reading from serial port\n";
+            logger->error("[lens::return_to_start] Error reading from serial port");
             return;
         }
         if (buf[n_read] == '\n') {
@@ -189,11 +193,12 @@ void lens::return_to_start() {
         buf[n_read-1] = '\0'; // remove the newline character from the buffer
         // std::cout << "Received line: " << buf << std::endl;
     } else {
-        std::cerr << "Error: no line terminator received\n";
+        logger->error("[lens::return_to_start] Error: no line terminator received");
         return;
     }
 
     currentLensLoc = 11.5;
+    if(bLensLogFlag) {logger->info("[lens::return_to_start] Lens returned to start position")};
 }
 
 void lens::mov_rel(double mmToMove) {
@@ -224,7 +229,7 @@ void lens::mov_rel(double mmToMove) {
             while (!line_received && n_read < sizeof(buf)) {
                 int n = read(serial_port, &buf[n_read], 1);
                 if (n < 0) {
-                    std::cerr << "Error reading from serial port\n";
+                    logger->error("[lens::mov_rel] Error reading from serial port");
                     return;
                 }
                 if (buf[n_read] == '\n') {
@@ -236,7 +241,7 @@ void lens::mov_rel(double mmToMove) {
                 buf[n_read-1] = '\0'; // remove the newline character from the buffer
                 //std::cout << "Received line: " << buf << std::endl;
             } else {
-                std::cerr << "Error: no line terminator received\n";
+                logger->error("[lens::mov_rel] Error: no line terminator received");
                 return;
             }
             //If 'P' is recieved, the move was successful. 
@@ -256,16 +261,17 @@ void lens::mov_rel(double mmToMove) {
             else if (tryagain > 0) {
                 tryagain--;
                 // std::cout << "Lens error in lens::mov_rel()... trying again" << std::endl;
+                if(bLensLogFlag) {logger->info("[lens::mov_rel] Lens read error... trying again")};
             }
             else {
                 // std::cout << "Lens error in lens::mov_rel()... giving up." << std::endl;
-
+                if(bLensLogFlag) {logger->info("[lens::mov_rel] Lens read error... giving up.")};
                 successfulmove = 1;
             }
         }
     }
     else {
-        hvigtk_logfile << "Lens is out of bounds!" << std::endl;
+        logger->error("[lens::mov_rel] Lens is out of bounds!");
         if (outOfBoundsOnceOnly == 0) {
             NotificationCenter::instance().postNotification("error");
             outOfBoundsOnceOnly = 10; //Ten successful moves means lens has returned from being out-of-bounds
@@ -298,5 +304,5 @@ lens::~lens() {
     if (tLens.joinable())
         tLens.join();
     close(serial_port);
-    hvigtk_logfile << "serial port closed and Lens thread ended in lens destructor" << std::endl;
+    if(bLensLogFlag) {logger->info("[lens::~lens] Lens destructor called, lens thread ended, serial port closed")};
 }

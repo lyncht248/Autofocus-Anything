@@ -9,6 +9,8 @@
 
 #define FNUM_SIZE 21
 
+bool bRecorderLogFlag = 0; // 1 = log, 0 = don't log
+
 Recorder::Recorder(System &sys) :
 	system(sys),
 	buffering(false),
@@ -24,6 +26,8 @@ Recorder::Recorder(System &sys) :
 	sigOperationLoad.connect(sigc::mem_fun(*this, &Recorder::loadFrames) );
 	sigOperationSave.connect(sigc::mem_fun(*this, &Recorder::saveFrames) );
 	sigBuffer.connect(sigc::mem_fun(*this, &Recorder::bufferFrames) );
+
+	if(bRecorderLogFlag) logger->info("[Recorder::Recorder()] constructor called");
 }
 
 Recorder::~Recorder()
@@ -33,6 +37,7 @@ Recorder::~Recorder()
 		delete vf;
 	}
 	frames.clear(); //Added this to try to fix a memory leak
+	if(bRecorderLogFlag) logger->info("[Recorder::~Recorder()] destructor called");
 }
 
 VidFrame* Recorder::getFrame(int n)
@@ -55,9 +60,7 @@ int Recorder::putFrame(VidFrame *frame)
 		emitOperationComplete(Operation::RECOP_FILLED, true);
 
 	//Should always be the length of the recorded frames
-	hvigtk_logfile << "Recorder::putFrame frames queue is size: " << frames.size() << std::endl;
-	hvigtk_logfile.flush();	
-
+	if(bRecorderLogFlag) logger->info("[Recorder::putFrame()] frames queue is size: {}", frames.size());
 	return frames.size();
 
 }
@@ -72,8 +75,6 @@ void Recorder::saveFrames(const std::string &location)
 		std::ofstream ofs(location + fnum);
 		if (ofs.is_open() )
 		{
-			hvigtk_logfile << "Saving: " << location << fnum << std::endl;
-			hvigtk_logfile.flush();
 			CVD::img_save(*(frames[i]), ofs, CVD::ImageType::PNM);
 		}
 		else
@@ -82,6 +83,15 @@ void Recorder::saveFrames(const std::string &location)
 			return;
 		}
 	}
+	if(bRecorderLogFlag) logger->info("[Recorder::saveFrames()] frames saved to: {}", location);
+
+    // Delete the frames. TODO is this correct?? Not sure... 
+    for (unsigned long i = 0; i < frames.size();)
+    {
+        delete frames[i];
+        frames.erase(frames.begin() + i);
+    }
+
 	emitOperationComplete(Operation::RECOP_SAVE, true);
 }
 
@@ -106,8 +116,6 @@ void Recorder::loadFrames(const std::string &location)
 			IVidFrame *frame = new IVidFrame();
 			CVD::img_load(*frame, ifs);
 			auto sz = frame->size();
-			hvigtk_logfile << "Loading: " << location << fnum << " (" << sz.x << ", " << sz.y << ")" << std::endl;
-			hvigtk_logfile.flush();
 			frames.push_back(frame);
 			i++;
 			emitOperationComplete(Operation::RECOP_ADDFRAME, true);
@@ -118,6 +126,7 @@ void Recorder::loadFrames(const std::string &location)
 			return;
 		}
 	}
+	if(bRecorderLogFlag) logger->info("[Recorder::loadFrames()] frames loaded from: {}", location);
 }
 
 int Recorder::countFrames()
@@ -137,7 +146,7 @@ void Recorder::releaseFrame()
 	mutex.unlock();
 }
 
-void Recorder::clearFrames()
+void Recorder::clearFrames() //Called ONLY when a new recording is started... call more often?
 {
 	for (VidFrame *frame : frames)
 		delete frame;
@@ -156,8 +165,7 @@ void Recorder::bufferFrames(std::pair<int, int> data)
 {
 	int start = data.first;
 	int bufSleep = round(1000.0 / data.second);
-	hvigtk_logfile << "Recorder buffering started from frame: " << start << std::endl;
-	hvigtk_logfile.flush();
+	if(bRecorderLogFlag) logger->info("[Recorder::bufferFrames()] buffering started from frame: {}", start);
 	buffering = true;
 	//Plays all frames from start to end
 	for (unsigned long i = start; buffering && i < frames.size(); i++)

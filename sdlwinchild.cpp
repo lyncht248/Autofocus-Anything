@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <signal.h>
 #include <iostream>
-
+#include "logfile.hpp"
 #include "SDL_render.h"
 #include "SDL_video.h"
 #include "sdlwinchild.hpp"

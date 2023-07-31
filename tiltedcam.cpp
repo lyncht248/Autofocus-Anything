@@ -8,54 +8,55 @@
 #include <atomic>
 #include <thread>
 
+bool bTiltedCamLogFlag = 1; // 1 = log, 0 = don't log
+
 tiltedcam::tiltedcam() {
-    hvigtk_logfile << "tiltedcam object created" << "\n";
 
     int iNumofConnectCameras = ASIGetNumOfConnectedCameras();
 
     if (iNumofConnectCameras > 0) {
-        hvigtk_logfile << "Connected to the tilted camera \n";
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] connected to the tilted camera");
      }
     else {
-        hvigtk_logfile << "Failed to conect to the tilted camera \n";
+        logger->error("[tiltedcam::tiltedcam()] failed to connect to the tilted camera");
     }
 
 
     if (ASIOpenCamera(0) == ASI_SUCCESS) {
-        hvigtk_logfile << "Opened the tilted camera \n";
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] opened the tilted camera");
     }
     else {
-        hvigtk_logfile << "Failed to open the tilted camera \n";
+        logger->error("[tiltedcam::tiltedcam()] failed to open the tilted camera");
     }
 
     if (ASIInitCamera(0) == ASI_SUCCESS) {
-        hvigtk_logfile << "Initialized the tilted camera \n";
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] initialized the tilted camera"
     }
     else {
-        hvigtk_logfile << "Failed to initialize the tilted camera\n";
+        logger->error("[tiltedcam::tiltedcam()] failed to initialize the tilted camera");
     }    
 
     if (ASISetControlValue(0, ASI_EXPOSURE, 16000, ASI_FALSE) == ASI_SUCCESS) {
-        hvigtk_logfile << "Set tilted camera exposure to 16ms (and bAuto=FALSE) \n";
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] set tilted camera exposure to 16ms (and bAuto=FALSE)");
     }
     else {
-        hvigtk_logfile << "Failed to set tilted camera exposure\n";
+        logger->error("[tiltedcam::tiltedcam()] failed to set tilted camera exposure");
     }    
 
 
     if (ASISetControlValue(0, ASI_GAIN, 0, ASI_TRUE) == ASI_SUCCESS) {
         hvigtk_logfile << "Set tilted camera gain to automatically adjust \n";
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] set tilted camera gain to automatically adjust");
     }
     else {
-        hvigtk_logfile << "Failed to set tilted camera gain\n";
+        logger->error("[tiltedcam::tiltedcam()] failed to set tilted camera gain");
     }   
 
     if (ASISetControlValue(0, ASI_HIGH_SPEED_MODE, 1, ASI_FALSE) == ASI_SUCCESS) {
-        hvigtk_logfile << "Set tilted camera to highspeed mode (and bAuto=FALSE) \n";
-
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] set tilted camera to highspeed mode");
     }
     else {
-        hvigtk_logfile << "failed to set tilted camera to high speed mode\n";
+        logger->error("[tiltedcam::tiltedcam()] failed to set tilted camera to highspeed mode");
     }
 
     //ASISetControlValue(0, ASI_AUTO_MAX_EXP, 15, ASI_TRUE);
@@ -64,21 +65,22 @@ tiltedcam::tiltedcam() {
 
     if (ASISetROIFormat(0, 1280, 960, 1, ASI_IMG_RAW8) == ASI_SUCCESS) {
     //if (ASISetROIFormat(0, 320, 240, 1, ASI_IMG_RAW8) == ASI_SUCCESS) {
-        hvigtk_logfile << "Set tilted camera image to Raw8 and 1 bin, with image size 1280x960 \n";
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] set tilted camera image to Raw8 and 1 bin, with image size 1280x960");
     }
     else {
-        hvigtk_logfile << "Failed to set ROI format for tilted camera\n";
+        logger->error("[tiltedcam::tiltedcam()] failed to set ROI format for tilted camera");
     }; 
 
     usleep(100000);
     
     if (ASIStartVideoCapture(0) == ASI_SUCCESS) {
-        hvigtk_logfile << "Started tilted camera video capture\n";
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] started tilted camera video capture");
     }
     else {
-        hvigtk_logfile << "Failed to start video capture\n";
+        logger->error("[tiltedcam::tiltedcam()] failed to start video capture");
     }; 
 
+    if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] constructor finished");
 }
 
 
@@ -156,18 +158,20 @@ unsigned char* tiltedcam::capturevideowrapper(const long img_size) {
 
 tiltedcam::~tiltedcam() {
     if (ASIStopVideoCapture(0) == ASI_SUCCESS) {
-        hvigtk_logfile << "Stopped tilted camera video capture\n";
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::~tiltedcam()] stopped tilted camera video capture");
     }
     else {
-        hvigtk_logfile << "Failed to stop video capture\n";
+        logger->error("[tiltedcam::~tiltedcam()] failed to stop video capture");
     }; 
 
     if (ASICloseCamera(0) == ASI_SUCCESS) {
-        hvigtk_logfile << "Tilted camera is closed\n";
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::~tiltedcam()] closed tilted camera");
     } 
     else {
-        hvigtk_logfile << "Failed to close tilted camera\n";
+        logger->error("[tiltedcam::~tiltedcam()] failed to close tilted camera");
     }
+
+    if(bTiltedCamLogFlag) logger->info("[tiltedcam::~tiltedcam()] destructor finished");
 }
 
 
@@ -177,28 +181,28 @@ long tiltedcam::getGain() {
     long gain; //new variable of type settings
     ASI_BOOL asiAuto = ASI_FALSE;
     ASIGetControlValue(0, ASI_GAIN, &gain, &asiAuto);
-    hvigtk_logfile << "Got gain = " << gain << "\n";
+    if(bTiltedCamLogFlag) logger->info("[tiltedcam::getGain()] got gain = {}", gain);
     return gain;
 }
 long tiltedcam::getExposure() {
     long exposure; //new variable of type settings
     ASI_BOOL asiAuto = ASI_FALSE;
     ASIGetControlValue(0, ASI_EXPOSURE, &exposure, &asiAuto);
-    hvigtk_logfile << "Got exposure = " << exposure << "\n";
+    if(bTiltedCamLogFlag) logger->info("[tiltedcam::getExposure()] got exposure = {}", exposure);
     return exposure;
 }
 long tiltedcam::getGamma() {
     long gamma; //new variable of type settings
     ASI_BOOL asiAuto = ASI_FALSE;
     ASIGetControlValue(0, ASI_GAMMA, &gamma, &asiAuto);
-    hvigtk_logfile << "Got gamma = " << gamma << "\n";
+    if(bTiltedCamLogFlag) logger->info("[tiltedcam::getGamma()] got gamma = {}", gamma);
     return gamma;
 }
 long tiltedcam::getHighSpeedMode() {
     long highSpeedMode; //new variable of type settings
     ASI_BOOL asiAuto = ASI_FALSE;
     ASIGetControlValue(0, ASI_HIGH_SPEED_MODE, &highSpeedMode, &asiAuto);
-    hvigtk_logfile << "Got high speed mode = " << highSpeedMode << "\n";
+    if(bTiltedCamLogFlag) logger->info("[tiltedcam::getHighSpeedMode()] got high speed mode = {}", highSpeedMode);
     return highSpeedMode;
 }
 int tiltedcam::getImageWidth() {
@@ -208,7 +212,7 @@ int tiltedcam::getImageWidth() {
     ASI_IMG_TYPE imageType;
     ASI_BOOL asiAuto = ASI_FALSE;
     ASIGetROIFormat(0, &width, &height, &bins, &imageType);
-    hvigtk_logfile << "Got tiltedcam image width = " << width << "\n";
+    if(bTiltedCamLogFlag) logger->info("[tiltedcam::getImageWidth()] got image width = {}", width);
     return width;
 }
 int tiltedcam::getImageHeight() {
@@ -218,7 +222,7 @@ int tiltedcam::getImageHeight() {
     ASI_IMG_TYPE imageType;
     ASI_BOOL asiAuto = ASI_FALSE;
     ASIGetROIFormat(0, &width, &height, &bins, &imageType);
-    hvigtk_logfile << "Got tiltedcam image height = " << height << "\n";
+    if(bTiltedCamLogFlag) logger->info("[tiltedcam::getImageHeight()] got image height = {}", height);
     return height;
 }
 int tiltedcam::getBins() {
@@ -228,7 +232,7 @@ int tiltedcam::getBins() {
     ASI_IMG_TYPE imageType;
     ASI_BOOL asiAuto = ASI_FALSE;
     ASIGetROIFormat(0, &width, &height, &bins, &imageType);
-    hvigtk_logfile << "Got tiltedcam image bins = " << bins << "\n";
+    if(bTiltedCamLogFlag) logger->info("[tiltedcam::getBins()] got image bins = {}", bins);
     return bins;
 }
 ASI_IMG_TYPE tiltedcam::getImageType() {
@@ -238,7 +242,7 @@ ASI_IMG_TYPE tiltedcam::getImageType() {
     ASI_IMG_TYPE imageType;
     ASI_BOOL asiAuto = ASI_FALSE;
     ASIGetROIFormat(0, &width, &height, &bins, &imageType);
-    hvigtk_logfile << "Got tiltedcam image type = " << imageType << "\n";
+    if(bTiltedCamLogFlag) logger->info("[tiltedcam::getImageType()] got image type = {}", imageType);
     return imageType;
 }
 
@@ -246,34 +250,34 @@ ASI_IMG_TYPE tiltedcam::getImageType() {
 //Setters
 void tiltedcam::setGain(long newGain) {
     if (ASISetControlValue(0, ASI_GAIN, newGain, ASI_FALSE) == ASI_SUCCESS) {
-        hvigtk_logfile << "Set tilted camera's gain (and bAuto=FALSE) \n";
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::setGain()] set tilted camera gain to {}", newGain);
     }
     else {
-        hvigtk_logfile << "failed to change setting of tilted camera \n";
+        logger->error("[tiltedcam::setGain()] failed to change setting of tilted camera");
     }
 }
 void tiltedcam::setExposure(long newExposure) {
     if (ASISetControlValue(0, ASI_EXPOSURE, newExposure, ASI_FALSE) == ASI_SUCCESS) {
-        hvigtk_logfile << "Set tilted camera's gain (and bAuto=FALSE) \n";
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::setExposure()] set tilted camera exposure to {}", newExposure);
     }
     else {
-        hvigtk_logfile << "failed to change setting of tilted camera \n";
+        logger->error("[tiltedcam::setExposure()] failed to change setting of tilted camera");
     }
 }
 void tiltedcam::setGamma(long newGamma) {
     if (ASISetControlValue(0, ASI_GAMMA, newGamma, ASI_FALSE) == ASI_SUCCESS) {
-        hvigtk_logfile << "Set tilted camera's gain (and bAuto=FALSE) \n";
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::setGamma()] set tilted camera gamma to {}", newGamma);
     }
     else {
-        hvigtk_logfile << "failed to change setting of tilted camera \n";
+        logger->error("[tiltedcam::setGamma()] failed to change setting of tilted camera");
     }
 }
 void tiltedcam::setHighSpeedMode(long newHighSpeedMode) {
     if (ASISetControlValue(0, ASI_HIGH_SPEED_MODE, newHighSpeedMode, ASI_FALSE) == ASI_SUCCESS) {
-        hvigtk_logfile << "Set tilted camera's gain (and bAuto=FALSE) \n";
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::setHighSpeedMode()] set tilted camera high speed mode to {}", newHighSpeedMode);
     }
     else {
-        hvigtk_logfile << "failed to change setting of tilted camera \n";
+        logger->error("[tiltedcam::setHighSpeedMode()] failed to change setting of tilted camera");
     }
 }
 
