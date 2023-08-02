@@ -5,6 +5,6 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
-extern auto logger;
+extern std::shared_ptr<spdlog::logger> logger;
 
 #endif

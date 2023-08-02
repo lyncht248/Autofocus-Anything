@@ -30,7 +30,7 @@ tiltedcam::tiltedcam() {
     }
 
     if (ASIInitCamera(0) == ASI_SUCCESS) {
-        if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] initialized the tilted camera"
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] initialized the tilted camera");
     }
     else {
         logger->error("[tiltedcam::tiltedcam()] failed to initialize the tilted camera");
@@ -45,7 +45,6 @@ tiltedcam::tiltedcam() {
 
 
     if (ASISetControlValue(0, ASI_GAIN, 0, ASI_TRUE) == ASI_SUCCESS) {
-        hvigtk_logfile << "Set tilted camera gain to automatically adjust \n";
         if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] set tilted camera gain to automatically adjust");
     }
     else {

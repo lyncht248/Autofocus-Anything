@@ -20,6 +20,7 @@ struct Frame
 		VmbPixelFormatType pixf;
 };
 
+//(I think) Image has data management, so you must delete, but BasicImage does not, so don't need to delete
 using VidFrame = CVD::BasicImage<VmbUchar_t>;
 using IVidFrame = CVD::Image<VmbUchar_t>;
 

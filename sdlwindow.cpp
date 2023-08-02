@@ -83,7 +83,6 @@ void SDLWindow::sdlwin_close(SDLWin* win)
 	pthread_cond_destroy(&win->hasCommand);
 	pthread_mutex_destroy(&win->mutex);
 	munmap(win, sizeof(struct SDLWin) );
-	hvigtk_logfile << "SDLWin closed in SDLWindow::sdlwin_close" << std::endl;
 }
 
 Response SDLWindow::createFrame(SDLWin *win, int width, int height)

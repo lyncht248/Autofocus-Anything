@@ -23,7 +23,7 @@
 #include "opencv2/highgui/highgui.hpp"
 
 //Global variables 
-bool bAutofocusLogFlag = 0; //Flag that is 1 for when the autofocus log is being written to, 0 when it is not
+bool bAutofocusLogFlag = 1; //Flag that is 1 for when the autofocus log is being written to, 0 when it is not
 
 std::atomic<bool> bNewImage = 0; //Flag that is 1 for when the buffer image is new, 0 when buffer image is old
 
@@ -136,7 +136,7 @@ void autofocus::run () {
 
       //int locBestFocus = computebestfocus(resized, resized.rows, resized.cols); //drops to 0.5 fps if placed in while loop
       int locBestFocus = computebestfocusReversed(resized, resized.rows, resized.cols);
-      std::cout << locBestFocus << ", ";
+      //std::cout << locBestFocus << ", ";
 
       //int locBestFocus = 220; //this is fast AF, like 960 fps
       // std::cout << locBestFocus << ", ";
@@ -170,7 +170,7 @@ void autofocus::run () {
           else if (bFindFocus) {
             desiredLocBestFocus = 200;
             previous = 200;
-         		hvigtk_logfile << "Set desiredLocBestFocus back to 200 in autofocus.cc" << std::endl;
+            if(bAutofocusLogFlag) {logger->info("[autofocus::run] Set desiredLocBestFocus back to 200 in autofocus.cc");}
             //window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to 160, the center-point
           }
       }
@@ -178,11 +178,11 @@ void autofocus::run () {
       //// BLINK DETECTION. TODO: try removing 'moved' variable
       else if (moved == 0 && blink == 0 && abs(locBestFocus - previous) > (50) && bBlinking) { // if the location of best focus changes by more than 50 pixels with no move, it is a blink
           //Blink starts
-          std::cout << "Frame ignored; blink detected\n";
+          if(bAutofocusLogFlag) logger->info("[autofocus::run] Frame ignored; blink detected");
           blink = 1;
       }
       else if (blink == 1) {
-          std::cout << "Frame ignored; blink detected\n";
+          if(bAutofocusLogFlag) logger->info("[autofocus::run] Frame ignored; blink detected");
           blinkframes--;
           if (blinkframes == 0) {
               blinkframes = 15; //resets blinkframes
@@ -194,8 +194,8 @@ void autofocus::run () {
       else {
           //do nothing inside tol band
           if (abs(locBestFocus - desiredLocBestFocus) <= tol) { // tol
-              std::cout << s_int.count() << ", ";
-              std::cout << "\n";
+              // std::cout << s_int.count() << ", ";
+              // std::cout << "\n";
               moved = 0;
           }
 
@@ -204,8 +204,8 @@ void autofocus::run () {
               mmToMove = pid.calculate(desiredLocBestFocus, locBestFocus) * -1.0;
               bNewMoveRel = 1;
 
-              std::cout << s_int.count() << ", ";
-              std::cout << mmToMove << "\n";
+              // std::cout << s_int.count() << ", ";
+              // std::cout << mmToMove << "\n";
               moved = 1;
           }
       }
@@ -221,7 +221,7 @@ void autofocus::run () {
   }
   // t2 = std::chrono::steady_clock::now();
   // s_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
-  std::cout << " Analyzed " << imgcountfile << " images in " << s_int.count() << " milliseconds" << "\n";
+  // std::cout << " Analyzed " << imgcountfile << " images in " << s_int.count() << " milliseconds" << "\n";
   tCaptureVideo.join(); // Stops the CaptureVideo thread too
 
 } 
@@ -242,7 +242,7 @@ void autofocus::capturevideo() {
     //Actually pulling from camera. TODO: get img_size from camera, not from global variables... 
      if (ASIGetVideoData(0, img_get_buf, img_size, -1) != ASI_SUCCESS)
      {
-         std::cout << "Error getting image from camera!\n";
+         logger->error("[autofocus::capturevideo] Error getting image from tilted camera!");
      }
 
     

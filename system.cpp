@@ -120,7 +120,8 @@ void FrameProcessor::stabilise()
 		if (system.stabiliser.is_valid() )
 		{
 			TooN::Vector<2> off = system.stabiliser.stabilise(*vframe, offset);
-
+			//TODO vframe seems to point to the same image regardless of whether its a loaded recording or a live view...
+			// but when its a loaded recording, offset and off become NULL. Why? 
 			stabMutex.lock();
 			currentOff = off;
 			offset += currentOff;
@@ -229,7 +230,7 @@ void FrameProcessor::processFrame() //What to do with each frame received from F
 				frameReleased.wait(mutex);
 			}
 
-			// If not stabilising, add frame to released queue
+			// If not stabilising, add frame to released queue. If you are stabilising, it should already have been added
 			if (!stabilising)
 			{
 				released.push(vidFrame);
@@ -344,10 +345,9 @@ public :
 				// Here is where we check the queue size and drop a frame if needed. TODO: just change in frameQueue in System::System
 				if (sysFrames.size() >= 15)
 				{
-					IVidFrame* frame_to_delete = sysFrames.pop(); // remove the frame from the queue
-					delete frame_to_delete; // delete the frame 
+					VidFrame* frame_to_delete = sysFrames.pop(); // remove the frame from the queue
 
-					if(bSystemQueueLengthFlag) {logger->info("[FrameObserver::FrameReceived] Deleted a frame from the sysFrames queue as it was too long.");}
+					if(bSystemQueueLengthFlag) {logger->info("[FrameObserver::FrameReceived] Popped a frame (should auto-delete) from the sysFrames queue as it was too long.");}
 				}
 				
 				// Quickly recieves 15 frames which are then emptied by FrameProcessor quickly
@@ -400,7 +400,7 @@ System::System(int argc, char **argv) :
 	sRecorderOperationComplete(),
 	stabiliser(),
 	madeMap(false),
-	AF() //Creates an autofocus object, calling constructor
+	AF() //Creates an autofocus object
 {
 	if(bSystemLogFlag) {logger->info("[System::System] constructor beginning");}
 
@@ -424,8 +424,6 @@ System::System(int argc, char **argv) :
 	window.signalBestFocusChanged().connect(sigc::mem_fun(*this, &System::onWindowBestFocusChanged) );
 	window.signalPauseClicked().connect(sigc::mem_fun(*this, &System::onWindowPauseClicked) );
 	sigNewFrame.connect(sigc::mem_fun(*this, &System::renderFrame) );
-
-	m_errorSignal.connect(sigc::mem_fun(*this, &System::on_error));
 
 	//CONDITIONS
 	
@@ -650,9 +648,10 @@ void System::whenMakeMapToggled(bool makingMap)
 		else
 			madeMap = false;
 	}
-	else
-	if(bSystemLogFlag) {logger->info("[System::whenMakeMapToggled] Making map toggled off");}
+	else 
 	{
+		if(bSystemLogFlag) {logger->info("[System::whenMakeMapToggled] Making map toggled off");}
+	
 		stabiliser.invalidate(); //TODO: May need to memory manage?
 	}
 	frameProcessor.stabMutex.unlock();
@@ -974,20 +973,20 @@ void System::onWindowPauseClicked()
 bool System::onCloseClicked(const GdkEventAny* event)
 {
 	//CODE TO EXECUTE WHEN CLOSE BUTTON CLICKED
-
+	if(bSystemLogFlag) {logger->info("[System::onCloseClicked] Close button clicked");}
 	//Close the streaming camera
 	stopStreaming();
-	//vsys.Shutdown(); //TODO: Maybe move to ~System()?
-	//delete priv; //TODO: Maybe move to ~System()?
-	if(bSystemLogFlag) {logger->info("[System::onCloseClicked] Close button clicked");}
-
+	// vsys.Shutdown(); //TODO: Maybe move to ~System()?
+	// delete priv; //TODO: Maybe move to ~System()?
+	return false;
 }
 
 System::~System()
 {
+    //m_conn.disconnect();
 	vsys.Shutdown();
-	delete priv;
-
+    delete priv;
+    priv = nullptr; // Set to nullptr after deleting to avoid dangling pointer
 	if(bSystemLogFlag) {logger->info("[System::~System] destructor ran");}
 }
 
@@ -1003,12 +1002,6 @@ Recorder& System::getRecorder()
 
 void System::on_error()
 {
-	// std::cout << "WOULD THROW AN ERROR DIALOGUE HERE!" << std::endl;
-	// Show an error dialog
-	// if (alreadyError) {
-	// 	Gtk::MessageDialog dialog("An error occurred", false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
-	// 	dialog.run();
-	// }
 	Gtk::MessageDialog dialog("Error: Air-Lens has hit the edge of the slide", false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
 	dialog.set_secondary_text("Please 'Reset' the lens and restart");
 	dialog.set_position(Gtk::WIN_POS_CENTER);

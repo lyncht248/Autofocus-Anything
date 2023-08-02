@@ -7,7 +7,7 @@
 #include "system.hpp"
 #include "main.hpp"
 
-#define FNUM_SIZE 21
+#define FNUM_SIZE 26
 
 bool bRecorderLogFlag = 0; // 1 = log, 0 = don't log
 
@@ -85,7 +85,7 @@ void Recorder::saveFrames(const std::string &location)
 	}
 	if(bRecorderLogFlag) logger->info("[Recorder::saveFrames()] frames saved to: {}", location);
 
-    // Delete the frames. TODO is this correct?? Not sure... 
+    // Delete the frames. TODO is this correct?? 
     for (unsigned long i = 0; i < frames.size();)
     {
         delete frames[i];
@@ -113,12 +113,22 @@ void Recorder::loadFrames(const std::string &location)
 		std::ifstream ifs(location + fnum);
 		if (ifs.is_open() )
 		{
-			IVidFrame *frame = new IVidFrame();
-			CVD::img_load(*frame, ifs);
-			auto sz = frame->size();
+			// IVidFrame *frame = new IVidFrame();
+			// CVD::img_load(*frame, ifs);
+			// auto sz = frame->size();
+			// frames.push_back(frame);
+			// i++;
+			//emitOperationComplete(Operation::RECOP_ADDFRAME, true);
+
+			IVidFrame *tempFrame = new IVidFrame();
+			CVD::img_load(*tempFrame, ifs);
+
+			VidFrame *frame = new VidFrame(*tempFrame); // Use the copy constructor
+
 			frames.push_back(frame);
 			i++;
 			emitOperationComplete(Operation::RECOP_ADDFRAME, true);
+
 		}
 		else
 		{
@@ -160,7 +170,7 @@ void Recorder::emitOperationComplete(Operation op, bool success)
 		sigOperationComplete->emit(std::make_tuple(op, success) );
 }
 
-// Plays back frames at data.second frames per second, starting at data.first frame
+// Loads frames into FrameQueue (see FrameObserver) at data.second frames per second, starting at data.first frame
 void Recorder::bufferFrames(std::pair<int, int> data)
 {
 	int start = data.first;

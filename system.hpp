@@ -83,13 +83,11 @@ public:
 			Vimba::FeaturePtr pFeature;
 			if (cam->GetFeatureByName(fname.c_str(), pFeature ) == VmbErrorSuccess && pFeature->SetValue(val) == VmbErrorSuccess)
 			{
-				hvigtk_logfile << "Set " << fname << " to: " << val << std::endl;
-				hvigtk_logfile.flush();
+				logger->info("[System.hpp] Set {} to: {}", fname, val);
 			}
 			else
 			{
-				hvigtk_logfile << "FAILED to set " << fname << " to: " << val << std::endl;
-				hvigtk_logfile.flush();
+				logger->error("[System.hpp] FAILED to set {} to: {}", fname, val);
 			}
 		}
 	}
@@ -104,12 +102,12 @@ public:
 			{
 				T out;
 				pFeature->GetValue(out);
+				logger->info("[System.hpp] Got {} = {}", fname, out);
 				return out;
 			}
 			else
 			{
-				hvigtk_logfile << "FAILED to get " << fname << std::endl;
-				hvigtk_logfile.flush();
+				logger->error("[System.hpp] FAILED to get {}", fname);
 			}
 		}
 
@@ -182,6 +180,7 @@ private:
 
 	Stabiliser stabiliser; //For running x-y stabilization
 	bool madeMap;
+
 };
 
 #endif

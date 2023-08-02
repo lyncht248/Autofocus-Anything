@@ -21,7 +21,7 @@
 #include "logfile.hpp"
 #include "autofocus.hpp"
 
-bool bMainWindowLogFlag = 1; // 1 = log, 0 = no log
+bool bMainWindowLogFlag = 0; // 1 = log, 0 = no log
 
 struct MainWindow::Private
 {
@@ -320,7 +320,7 @@ MainWindow::MainWindow() : Gtk::Window(),
     gainScale(0, 50, 1, 0, 7, 150),
     exposeScale(100, 16000, 1000, 15000, 7, 150),
     gammaScale(0.5, 2.5, 0.01, 1, 7, 150),
-	frameRateScale(20, 80, 5, 30, 7, 150),
+	frameRateScale(20, 80, 5, 60, 7, 150),
     frameSlider(0, 1799, 1, 0, 5, 200),
     thresScale(0, 1, 0.01, 0.4, 6, 100),
     scaleScale(0, 5, 0.01, 2.0, 6, 100),
@@ -649,7 +649,7 @@ MainWindow::MainWindow() : Gtk::Window(),
     
     priv->rootBox.show_all();
 
-	if(bMainWindowLogFlag) {if(bMainWindowLogFlag) {logger->info("[MainWindow::MainWindow] constructor completed");}
+	if(bMainWindowLogFlag) logger->info("[MainWindow::MainWindow] constructor completed");
 }
 
 double MainWindow::getFrameRateScaleValue() const
@@ -945,7 +945,7 @@ void MainWindow::on_show()
 
 	SDLWindow::move(childwin, (dim.get_width() - 800) / 2, y + get_height() );
 
-    if(bMainWindowLogFlag) {logger->info("[MainWindow::on_show] SDL childwin moved to " + std::to_string((dim.get_width() - 800) / 2) + "," + std::to_string(y + get_height() ) );
+    if(bMainWindowLogFlag) logger->info("[MainWindow::on_show] SDL childwin moved to " + std::to_string((dim.get_width() - 800) / 2) + "," + std::to_string(y + get_height() ) );
 }
  
 bool MainWindow::renderDisplay(const ::Cairo::RefPtr< ::Cairo::Context>& cr)
@@ -1026,12 +1026,12 @@ void MainWindow::whenStabiliseToggled(bool stabilising)
 	if (stabilising)
 	{
 		//GUI CHANGES WHEN STABILISER IS ENABLED GO HERE
-		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenStabiliseToggled] Stabilise toggled on")
+		if(bMainWindowLogFlag) logger->info("[MainWindow::whenStabiliseToggled] Stabilise toggled on");
 	}
 	else
 	{
 		//GUI CHANGES WHEN STABILISER IS DISABLED GO HERE
-		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenStabiliseToggled] Stabilise toggled off")
+		if(bMainWindowLogFlag) logger->info("[MainWindow::whenStabiliseToggled] Stabilise toggled off");
 	}
 }
 
@@ -1040,12 +1040,12 @@ void MainWindow::whenShowMapToggled(bool showingMap)
 	if (showingMap)
 	{
 		//GUI CHANGES WHEN "SHOW MAP" IS ENABLED GO HERE
-		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenShowMapToggled] ShowMap toggled on")
+		if(bMainWindowLogFlag) logger->info("[MainWindow::whenShowMapToggled] ShowMap toggled on");
 	}
 	else
 	{
 		//GUI CHANGES WHEN "SHOW MAP" IS DISABLED GO HERE
-		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenShowMapToggled] ShowMap toggled off")
+		if(bMainWindowLogFlag) logger->info("[MainWindow::whenShowMapToggled] ShowMap toggled off");
 	}
 }
 
@@ -1082,7 +1082,7 @@ void MainWindow::whenHoldFocusToggled(bool holdingFocus)
 		findFocusButton.set_sensitive(false);
 		//threedStabToggle.set_sensitive(false);
 		//GUI CHANGES WHEN "HOLD FOCUS" IS ENABLED GO HERE
-		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenHoldFocusToggled] HoldFocus toggled on")
+		if(bMainWindowLogFlag) logger->info("[MainWindow::whenHoldFocusToggled] HoldFocus toggled on");
 	}
 	else
 	{
@@ -1091,7 +1091,7 @@ void MainWindow::whenHoldFocusToggled(bool holdingFocus)
 		bestFocusScale.set_sensitive(false);
 
 		//GUI CHANGES WHEN "FIND FOCUS" IS DISABLED GO HERE
-		if(bMainWindowLogFlag) {logger->info("[MainWindow::whenHoldFocusToggled] HoldFocus toggled off")
+		if(bMainWindowLogFlag) logger->info("[MainWindow::whenHoldFocusToggled] HoldFocus toggled off");
 	}
 }
 
@@ -1103,7 +1103,7 @@ void MainWindow::when3DStabToggled(bool active)
 		makeMapToggle.set_active(true);
 		stabiliseToggle.set_active(true);
 		//GUI CHANGES WHEN "3D STABILISER" IS ENABLED GO HERE
-		if(bMainWindowLogFlag) {logger->info("[MainWindow::when3DStabToggled] 3DStab toggled on")
+		if(bMainWindowLogFlag) logger->info("[MainWindow::when3DStabToggled] 3DStab toggled on");
 	}
 	else
 	{
@@ -1111,7 +1111,7 @@ void MainWindow::when3DStabToggled(bool active)
 		makeMapToggle.set_active(false);
 		stabiliseToggle.set_active(false);
 		//GUI CHANGES WHEN "3D STABILISER" IS DISABLED GO HERE
-		if(bMainWindowLogFlag) {logger->info("[MainWindow::when3DStabToggled] 3DStab toggled off")
+		if(bMainWindowLogFlag) logger->info("[MainWindow::when3DStabToggled] 3DStab toggled off");
 	}
 }
 
@@ -1122,14 +1122,14 @@ void MainWindow::when2DStabToggled(bool active2)
 		makeMapToggle.set_active(true);
 		stabiliseToggle.set_active(true);
 		//GUI CHANGES WHEN "2D STABILISER" IS ENABLED GO HERE
-		if(bMainWindowLogFlag) {logger->info("[MainWindow::when2DStabToggled] 2DStab toggled on")
+		if(bMainWindowLogFlag) logger->info("[MainWindow::when2DStabToggled] 2DStab toggled on");
 	}
 	else
 	{
 		makeMapToggle.set_active(false);
 		stabiliseToggle.set_active(false);
 		//GUI CHANGES WHEN "2D STABILISER" IS DISABLED GO HERE
-		if(bMainWindowLogFlag) {logger->info("[MainWindow::when2DStabToggled] 2DStab toggled off")
+		if(bMainWindowLogFlag) logger->info("[MainWindow::when2DStabToggled] 2DStab toggled off");
 	}
 }
 

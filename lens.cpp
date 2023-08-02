@@ -63,14 +63,14 @@ lens::lens() :
     // Save tty settings, also checking for error
     if (tcsetattr(serial_port, TCSANOW, &tty) != 0) {
         //printf("Error %i from tcsetattr: %s\n", errno, strerror(errno));
-        hvigtk_logfile << "failure to save tty settings for lens motor \n";
+        logger->error("[lens::lens] Error saving serial port settings");
     }
 
 
-    if(bLensLogFlag) {logger->info("Serial Port initialized!")};
+    if(bLensLogFlag) logger->info("Serial Port initialized!");
 
     // Start a thread to send and recieve signals from the lens motor asynchronously
-    if(bLensLogFlag) {logger->info("[lens::lens] Starting and detaching lens thread")};
+    if(bLensLogFlag) logger->info("[lens::lens] Starting and detaching lens thread");
     std::thread tLens(&lens::lens_thread, this);
     tLens.detach();
 }
@@ -84,7 +84,7 @@ void lens::lens_thread() {
     // Sets the home location offset to be 1mm (or __ encoder pulses, or 0x0400) from the factory home location. Doesn't move lens. 
     unsigned char msg[] = { '0', 's', 'o', '0', '0', '0', '0', '0', '4', '0', '0', '\r', '\n' };
     bytes_written = write(serial_port, msg, sizeof(msg));
-    if(bLensLogFlag) {logger->info("[lens::lens_thread] Sets home location to be 1mm, 0so00000400")}
+    if(bLensLogFlag) logger->info("[lens::lens_thread] Sets home location to be 1mm, 0so00000400");
     usleep(100000); //Sleep for 0.1s
 
     while (!line_received && n_read < sizeof(buf)) {
@@ -198,7 +198,7 @@ void lens::return_to_start() {
     }
 
     currentLensLoc = 11.5;
-    if(bLensLogFlag) {logger->info("[lens::return_to_start] Lens returned to start position")};
+    if(bLensLogFlag) logger->info("[lens::return_to_start] Lens returned to start position");
 }
 
 void lens::mov_rel(double mmToMove) {
@@ -261,11 +261,11 @@ void lens::mov_rel(double mmToMove) {
             else if (tryagain > 0) {
                 tryagain--;
                 // std::cout << "Lens error in lens::mov_rel()... trying again" << std::endl;
-                if(bLensLogFlag) {logger->info("[lens::mov_rel] Lens read error... trying again")};
+                if(bLensLogFlag) logger->info("[lens::mov_rel] Lens read error... trying again");
             }
             else {
                 // std::cout << "Lens error in lens::mov_rel()... giving up." << std::endl;
-                if(bLensLogFlag) {logger->info("[lens::mov_rel] Lens read error... giving up.")};
+                if(bLensLogFlag) logger->info("[lens::mov_rel] Lens read error... giving up.");
                 successfulmove = 1;
             }
         }
@@ -275,7 +275,7 @@ void lens::mov_rel(double mmToMove) {
         if (outOfBoundsOnceOnly == 0) {
             NotificationCenter::instance().postNotification("error");
             outOfBoundsOnceOnly = 10; //Ten successful moves means lens has returned from being out-of-bounds
-        }    
+        }
     }
 }
   
@@ -304,5 +304,5 @@ lens::~lens() {
     if (tLens.joinable())
         tLens.join();
     close(serial_port);
-    if(bLensLogFlag) {logger->info("[lens::~lens] Lens destructor called, lens thread ended, serial port closed")};
+    if(bLensLogFlag) logger->info("[lens::~lens] Lens destructor called, lens thread ended, serial port closed");
 }

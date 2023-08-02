@@ -5,6 +5,8 @@
 #include <cvd/image_ref.h>
 #include <cvd/vector_image_ref.h>
 #include <cvd/convolution.h>
+#include <cvd/image_io.h>
+#include <cvd/byte.h>
 #include <TooN/helpers.h>
 #include <TooN/irls.h>
 
@@ -41,6 +43,8 @@ void Stabiliser::make_map(const CVD::BasicImage<unsigned char>& im, int num_trac
   tracker_edgels.resize(num_trackers);
   vessel_edgels.resize(num_trackers);
 
+  std::cout << "vessel_edgels.size: "<< vessel_edgels.size() << std::endl;
+
   dim.resize(size);
   ImageRef scan;
   scan.home();
@@ -52,6 +56,7 @@ void Stabiliser::make_map(const CVD::BasicImage<unsigned char>& im, int num_trac
   //for predrawing
   frameWidth = size.x;
   frameHeight = size.y;
+
   recompute_chains();
 }
 
@@ -156,7 +161,7 @@ void Stabiliser::recompute_chains(){
 
 
 
-  cout << "got " << chains.size() << " chains" << endl;
+  //cout << "got " << chains.size() << " chains" << endl;
 
 
   valid=true;
@@ -231,7 +236,7 @@ int sq_diff(const BasicImage<unsigned char>& im,
 }
 
 
-
+//int increment = 0;
 
 Vector<2> Stabiliser::stabilise(CVD::BasicImage<unsigned char>& im,
 				const Vector<2>& offset){
@@ -241,6 +246,7 @@ Vector<2> Stabiliser::stabilise(CVD::BasicImage<unsigned char>& im,
 
   const int num_trackers=vessel_edgels.size();
     // match the trackers against the new frame
+
   IRLS<2,double, RobustI> irls;
   irls.sd_inlier=1.0;
 

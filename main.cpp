@@ -15,44 +15,56 @@
 #include <opencv2/core/ocl.hpp>
 #include <thread>
 
-constexpr char WorkingDir[] = "/home/hvi/Desktop/HVI-log-report"; // Where the hvigtk.log file is saved
-const char *hvigtk_startdir = WorkingDir;
+#include <memory>
+#include <chrono>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 
-auto logger = spdlog::basic_logger_mt("basic_logger", "/home/hvi/Desktop/HVI-log-report/hvigtk.log");
-logger->set_pattern("[%H:%M:%S] [thread %t] *** %v ***");
+std::shared_ptr<spdlog::logger> logger;
 
 SDLWindow::SDLWin *childwin = nullptr;
 std::atomic<bool> bAutofocusing = false; // Flag that controls the autofocusing while() loop
 
-Glib::Dispatcher m_errorSignal;
-
-int gtk_app_location_x = 42;
-int gtk_app_location_y = 10;
+int gtkAppLocationX = 42;
+int gtkAppLocationY = 10;
 
 int main(int argc, char **argv) 
 {
+    // Creates the logger file output and sets the pattern
+    auto now = std::chrono::system_clock::now();
+    auto in_time_t = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    std::tm buf;
+    std::tm* tm = localtime_r(&in_time_t, &buf);
+    ss << std::put_time(tm, "%Y%m%d_%H:%M:%S") << "_hvikgtk.log";
+    std::string filename = "/home/hvi/Desktop/HVI-log-report/" + ss.str();
+    logger = spdlog::basic_logger_mt("basic_logger", filename);
+    logger->set_pattern("[%H:%M:%S] [thread %t] %v");    
+
     // Spawns the SDL window, which is done in a separate process
     childwin = SDLWindow::sdlwin_open();
     if (!childwin) {
         return 1;
     }
 
-    if (cv::ocl::haveOpenCL()) {
-        cv::ocl::setUseOpenCL(true);
-        cv::ocl::Device dev = cv::ocl::Device::getDefault();
-        if (dev.available()) {
-            logger->info("[Main] Device Name: {}", dev.name());
-            logger->info("[Main] Device Type: {}", dev.type());
-            logger->info("[Main] Device Vendor: {}", dev.vendorName());
-            logger->info("[Main] Device Version: {}", dev.version());
-            logger->info("[Main] Device OpenCL Version: {}", dev.OpenCLVersion());
-            logger->info("[Main] Device Driver Version: {}", dev.driverVersion());
-        } else {
-            logger->info("[Main] No OpenCL device available.");
-        }
-    } else {
-        logger->info("[Main] OpenCL is not available on this system.");
-    }
+    // // Checks if OpenCL is available on the system, and if so, prints out the device information
+    // if (cv::ocl::haveOpenCL()) {
+    //     cv::ocl::setUseOpenCL(true);
+    //     cv::ocl::Device dev = cv::ocl::Device::getDefault();
+    //     if (dev.available()) {
+    //         logger->info("[Main] Device Name: {}", dev.name());
+    //         logger->info("[Main] Device Type: {}", dev.type());
+    //         logger->info("[Main] Device Vendor: {}", dev.vendorName());
+    //         logger->info("[Main] Device Version: {}", dev.version());
+    //         logger->info("[Main] Device OpenCL Version: {}", dev.OpenCLVersion());
+    //         logger->info("[Main] Device Driver Version: {}", dev.driverVersion());
+    //     } else {
+    //         logger->info("[Main] No OpenCL device available.");
+    //     }
+    // } else {
+    //     logger->info("[Main] OpenCL is not available on this system.");
+    // }
 
     // Creates a GTK application object
     auto app = Gtk::Application::create(argc, argv, HVIGTK_APPID); 
@@ -85,3 +97,4 @@ int main(int argc, char **argv)
     logger->info("[Main] main.cpp about to complete");
     return 0;
 }
+

@@ -14,7 +14,6 @@ extern const char *hvigtk_startdir;
 extern SDLWindow::SDLWin *childwin;
 
 //Global Variables (minimize)
-extern Glib::Dispatcher m_errorSignal;
 extern int gtkAppLocationX;
 extern int gtkAppLocationY;
 
