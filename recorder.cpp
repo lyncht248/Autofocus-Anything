@@ -9,7 +9,7 @@
 
 #define FNUM_SIZE 26
 
-bool bRecorderLogFlag = 0; // 1 = log, 0 = don't log
+bool bRecorderLogFlag = 1; // 1 = log, 0 = don't log
 
 Recorder::Recorder(System &sys) :
 	system(sys),
@@ -50,6 +50,7 @@ VidFrame* Recorder::getFrame(int n)
 		return nullptr;
 }
 
+//Fills up the frames buffer (or the RAM) with frames, either from live camera or from loaded file
 int Recorder::putFrame(VidFrame *frame)
 {
 	frames.push_back(frame);
@@ -84,25 +85,13 @@ void Recorder::saveFrames(const std::string &location)
 		}
 	}
 	if(bRecorderLogFlag) logger->info("[Recorder::saveFrames()] frames saved to: {}", location);
-
-    // Delete the frames. TODO is this correct?? 
-    for (unsigned long i = 0; i < frames.size();)
-    {
-        delete frames[i];
-        frames.erase(frames.begin() + i);
-    }
-
 	emitOperationComplete(Operation::RECOP_SAVE, true);
 }
 
 void Recorder::loadFrames(const std::string &location)
 {
 	//Clears existing frames in recorder
-	for (VidFrame *vf : frames)
-	{
-		delete vf;
-	}
-	frames.clear();
+	clearFrames();
 
 	//Loads new frames from location
 	int i = 0;
@@ -113,21 +102,21 @@ void Recorder::loadFrames(const std::string &location)
 		std::ifstream ifs(location + fnum);
 		if (ifs.is_open() )
 		{
-			// IVidFrame *frame = new IVidFrame();
-			// CVD::img_load(*frame, ifs);
-			// auto sz = frame->size();
-			// frames.push_back(frame);
-			// i++;
-			//emitOperationComplete(Operation::RECOP_ADDFRAME, true);
-
-			IVidFrame *tempFrame = new IVidFrame();
-			CVD::img_load(*tempFrame, ifs);
-
-			VidFrame *frame = new VidFrame(*tempFrame); // Use the copy constructor
-
+			IVidFrame *frame = new IVidFrame();
+			CVD::img_load(*frame, ifs);
+			auto sz = frame->size();
 			frames.push_back(frame);
 			i++;
 			emitOperationComplete(Operation::RECOP_ADDFRAME, true);
+
+			// IVidFrame *tempFrame = new IVidFrame();
+			// CVD::img_load(*tempFrame, ifs);
+
+			// VidFrame *frame = new VidFrame(*tempFrame); // Use the copy constructor
+
+			// frames.push_back(frame);
+			// i++;
+			// emitOperationComplete(Operation::RECOP_ADDFRAME, true);
 
 		}
 		else
@@ -149,18 +138,32 @@ VidFrame* Recorder::getFrame()
 	return current;
 }
 
-void Recorder::releaseFrame()
-{
-	mutex.lock();
-	frameReleased.broadcast();
-	mutex.unlock();
-}
+// void Recorder::releaseFrame()
+// {
+// 	mutex.lock();
+// 	frameReleased.broadcast();
+// 	mutex.unlock();
+// }
 
 void Recorder::clearFrames() //Called ONLY when a new recording is started... call more often?
 {
+	buffering = false;
+	std::cout << "buffering set to false" << std::endl;
+	mutex.lock();
 	for (VidFrame *frame : frames)
+	{
+		std::cout << "deleting frame in Recorder::clearFrames()" << std::endl;
+		std::cout << "frame address: " << frame << std::endl;
+		std::cout << "frame size: " << frame->size() << std::endl;
+		std::cout << "frames.size(): " << frames.size() << std::endl;
 		delete frame;
+		std::cout << "frame deleted in Recorder::clearFrames()" << std::endl;
+	}
+	std::cout << "about to clear frames in Recorder::clearFrames()" << std::endl;
 	frames.clear();
+	mutex.unlock();
+	std::cout << "frames cleared in Recorder::clearFrames()" << std::endl;
+	if(bRecorderLogFlag) logger->info("[Recorder::clearFrames()] frames cleared");
 	emitOperationComplete(Operation::RECOP_EMPTIED, true);
 }
 
@@ -178,18 +181,20 @@ void Recorder::bufferFrames(std::pair<int, int> data)
 	if(bRecorderLogFlag) logger->info("[Recorder::bufferFrames()] buffering started from frame: {}", start);
 	buffering = true;
 	//Plays all frames from start to end
+	std::cout << "ENTERING BUFFERFRAMES LOOP" << std::endl;
 	for (unsigned long i = start; buffering && i < frames.size(); i++)
 	{
-		//mutex.lock();
 		{
+			mutex.lock();
 			current = frames[i];
-			system.getFrameQueue().push(frames[i]);
+			system.getFrameQueue().push(frames[i]);		
+			mutex.unlock();
 			std::this_thread::sleep_for(std::chrono::milliseconds(bufSleep) );
 		}
-		//mutex.unlock();
 	}
 	system.getFrameQueue().waitForEmpty(); //Stops here until all frames have been played
 	buffering = false;
+	std::cout << "EXITING BUFFERFRAMES LOOP" << std::endl;
 	emitOperationComplete(Operation::RECOP_BUFFER, true);
 }
 

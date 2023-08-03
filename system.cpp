@@ -20,7 +20,8 @@
 #include "notificationCenter.hpp"
 
 bool bSystemLogFlag = 1; // 1 = log, 0 = no log
-bool bSystemQueueLengthFlag = 1; // 1 = log, 0 = no log
+bool bSystemQueueLengthFlag = 0; // 1 = log, 0 = no log
+bool bSystemFramesFlag = 1; // Used to track how each frame passes through the system
 
 // I don't believe these three code blocks are used anywhere
 /*
@@ -94,7 +95,7 @@ FrameProcessor::FrameProcessor(System &sys) :
 {
 	processorThread = Glib::Threads::Thread::create(sigc::mem_fun(*this, &FrameProcessor::processFrame) );
 	stabThread = Glib::Threads::Thread::create(sigc::mem_fun(*this, &FrameProcessor::stabilise) );
-	if(bSystemLogFlag) {logger->info("[FrameProcessor::FrameProcessor] constructor finished");}
+	if(bSystemFramesFlag) {logger->info("[FrameProcessor::FrameProcessor] constructor finished");}
 }
 
 FrameProcessor::~FrameProcessor()
@@ -102,12 +103,12 @@ FrameProcessor::~FrameProcessor()
 	running = false;
 	ThreadStopper::stop({processorThread, stabThread});
 
-	if(bSystemLogFlag) {logger->info("[FrameProcessor::~FrameProcessor] destructor called, processorThread and stabThread stopped");}
+	if(bSystemFramesFlag) {logger->info("[FrameProcessor::~FrameProcessor] destructor called, processorThread and stabThread stopped");}
 }
 
 void FrameProcessor::stabilise()
 {
-	if(bSystemLogFlag) {logger->info("[FrameProcessor::stabilise] Thread started");}
+	if(bSystemFramesFlag) {logger->info("[FrameProcessor::stabilise] Thread started");}
 
 	ThreadStopper::makeStoppable();
 	while (running)
@@ -145,16 +146,18 @@ void FrameProcessor::stabilise()
 
 void FrameProcessor::processFrame() //What to do with each frame received from FrameObserver
 {
-	if(bSystemLogFlag) {logger->info("[FrameProcessor::processFrame] Thread started");}
+	if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] Thread started");}
 
 	ThreadStopper::makeStoppable();
 	while (running)
 	{
 		// Get the frame when it's ready
+		if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] About to take vidFrame from FrameQueue");}
 		ThreadStopper::lock(mutex);
 		vidFrame = system.getFrameQueue().pop(); // Takes frame from top of queue
 		_frameReleased = false;
 		ThreadStopper::unlock(mutex);
+		if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] vidFrame taken from FrameQueue");}
 
 		// If stabilising, put frame in Stabiliser queue
 		bool stabilising = system.window.getStabiliseActive().getValue();
@@ -170,6 +173,9 @@ void FrameProcessor::processFrame() //What to do with each frame received from F
 
 		// recording = 1 if incoming frames need to be added to the recorder
 		bool recording = system.window.getRecording().getValue() && !system.window.getPausedRecording().getValue();
+		
+		if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] recording = {}", recording);}
+		if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] stabilising = {}", stabilising);}
 
 		// If recording, sends the frame to the recorder for saving
 		if (recording)
@@ -177,12 +183,15 @@ void FrameProcessor::processFrame() //What to do with each frame received from F
 			system.getRecorder().putFrame(vidFrame);
 		}
 
+		
 		// Draw the frame at the size neccessary to fit the window
 		CVD::ImageRef vfDim = vidFrame->size();
+		if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] vidFrame size: {}x{}, about to draw", vfDim.x, vfDim.y);}
 		if (vfDim.x != childwin->raster.w || vfDim.y != childwin->raster.h)
 		{
 			//processed = Cairo::ImageSurface::create(Cairo::FORMAT_RGB24, vfDim.x, vfDim.y);
 			SDLWindow::createFrame(childwin, vfDim.x, vfDim.y);
+			if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] SDLWindow::createFrame called");}
 		}
 		
 		//convertToCairo(stabilising);
@@ -191,6 +200,7 @@ void FrameProcessor::processFrame() //What to do with each frame received from F
 		for (auto pair : filters)
 		{
 			pair.second->draw(processed);
+			if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] filter drawn");}
 		}
 
 		// If stabilising, render frame using stabilised offset, otherwise just render normally
@@ -216,11 +226,15 @@ void FrameProcessor::processFrame() //What to do with each frame received from F
 			SDLWindow::setRaster(childwin, rasterPos[0], rasterPos[1]);
 		}
 		else
+		{
 			SDLWindow::setRaster(childwin);
-
+			if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] SDLWindow::setRaster called");}
+		}
 		system.signalNewFrame().emit();
+		if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] system.signalNewFrame called");}
 
 		// Now that the current vframe is processed, release it
+		if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] About to release vidFrame, locking mutex");}
 		ThreadStopper::lock(mutex);
 		{
 			// Signal to release frame from thread and then wait for frame to be released
@@ -229,11 +243,13 @@ void FrameProcessor::processFrame() //What to do with each frame received from F
 				ThreadStopper::stopPoint(&frameReleased);
 				frameReleased.wait(mutex);
 			}
-
+			if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] _frameReleased is True");}
+			
 			// If not stabilising, add frame to released queue. If you are stabilising, it should already have been added
 			if (!stabilising)
 			{
 				released.push(vidFrame);
+				if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] vidFrame pushed to released queue");}
 			}
 
 			// //// PREVIOUS ////
@@ -256,32 +272,49 @@ void FrameProcessor::processFrame() //What to do with each frame received from F
 			//// NEW ////
 			if (recording)
 			{
-				// If recording, then don't delete the frame, but clear the released queue. These frames can be deleted when the recording is saved.
+				// If recording, then don't delete the frame data, but clear the released queue of pointers. These frames can be deleted when the recording is saved.
 				released.clear();
 				if(bSystemLogFlag) {logger->info("[FrameProcessor::processFrame] released queue cleared, but NOT deleted!!!");}
 			}
 			else 
 			{
 				// Not recording, so can delete the released frames.
-				for (VidFrame *vframe = released.pop(); !released.empty(); vframe = released.pop() ) 
-					delete vframe;
-				vidFrame = nullptr;
-				released.clear();
-			}
+				// while(!released.empty()) {
+				// 	VidFrame *vframe = released.pop();
+				// 	delete vframe;
+				// }
+				// if(bSystemFramesFlag) logger->info("[FrameProcessor::processFrame] released queue is empty now");
+				// //vidFrame = nullptr;
+				// released.clear();			
+				// if(bSystemFramesFlag) logger->info("[FrameProcessor::processFame] released queue cleared");
+				//     // Not recording, so can delete the released frames.
+				// for (VidFrame *vframe = released.pop(); !released.empty(); vframe = released.pop() ) 
+				// 	delete vframe;
+				// vidFrame = nullptr;
+				// released.clear();
+
+				//This code fixes a problem where the frame memory would leak (steadily increasing RAM use) when not stabilizing or recording
+				if (released.size() >= 15)
+				{
+					VidFrame* frame_to_delete = released.pop(); // remove the frame from the queue
+					delete frame_to_delete; // delete the frame
+					if(bSystemFramesFlag) {logger->info("[FrameProcessor::ProcessFrame] Popped a frame (should auto-delete) from the released queue.");}
+				}
+  			}
+			
 		}
 		ThreadStopper::unlock(mutex);
 
 		// stabQueue.size() = 0 almost always
-		if(bSystemQueueLengthFlag) {logger->info("[FrameProcessor::processFrame] stabQueue is length: {}", stabQueue.size());}
+		if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] stabQueue is length: {}", stabQueue.size());}
 
 		// released.size() = 0 almost always
-		if(bSystemQueueLengthFlag) {logger->info("[FrameProcessor::processFrame] released queue is length: {}", released.size());}
+		if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] released queue is length: {}", released.size());}
 
-		if(bSystemQueueLengthFlag) {logger->info("[FrameProcessor::processFrame] frameQueue is length: {}", system.getFrameQueue().size());}
+		if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] frameQueue is length: {}", system.getFrameQueue().size());}
 	}
 }
-
-void FrameProcessor::releaseFrame() //TODO: Should here be a delete frame command?
+void FrameProcessor::releaseFrame()
 {
 	mutex.lock();
 	_frameReleased = true;
@@ -308,7 +341,9 @@ public :
 	FrameObserver(Vimba::CameraPtr pCamera, TSQueue<VidFrame *> &frameQueue) :  IFrameObserver ( pCamera ), Object(),
 		sigReceived(),
 		sysFrames(frameQueue)
-	{
+	{		
+		if(bSystemFramesFlag) {logger->info("[FrameObserver::FrameObserver] constructor finished");}
+
 	}
 	// ~FrameObserver()
 	// {
@@ -330,8 +365,10 @@ public :
 				pFrame->GetWidth(width);
 				pFrame->GetHeight(height);
 
+				if(bSystemFramesFlag) {logger->info("[FrameObserver::FrameReceived] Frame size: {}x{}", width, height);}
 				IVidFrame *sysFrame = new IVidFrame(CVD::ImageRef(width, height) ); //Each of these must get deleted when processed by FrameProcessor
 
+				if(bSystemFramesFlag) {logger->info("[FrameObserver::FrameReceived] sysFrame created");}
 				//sysFrame->resize(CVD::ImageRef(width, height) );
 
 				//pFrame->GetOffsetX(sysFrame.xoff);
@@ -341,22 +378,24 @@ public :
 				pFrame->GetImage(buf);
 				memcpy(sysFrame->data(), buf, sz);
 				sysFrames.push(sysFrame);
+				if(bSystemFramesFlag) {logger->info("[FrameObserver::FrameReceived] sysFrame pushed to sysFrames queue");}
 
 				// Here is where we check the queue size and drop a frame if needed. TODO: just change in frameQueue in System::System
 				if (sysFrames.size() >= 15)
 				{
 					VidFrame* frame_to_delete = sysFrames.pop(); // remove the frame from the queue
-
-					if(bSystemQueueLengthFlag) {logger->info("[FrameObserver::FrameReceived] Popped a frame (should auto-delete) from the sysFrames queue as it was too long.");}
+					//delete frame_to_delete; // delete the frame
+					if(bSystemFramesFlag) {logger->info("[FrameObserver::FrameReceived] Popped a frame (should auto-delete) from the sysFrames queue as it was too long.");}
 				}
 				
 				// Quickly recieves 15 frames which are then emptied by FrameProcessor quickly
-				if(bSystemQueueLengthFlag) {logger->info("[FrameObserver::FrameReceived] sysFrames queue is length: {}", sysFrames.size());}
+				if(bSystemFramesFlag) {logger->info("[FrameObserver::FrameReceived] sysFrames queue is length: {}", sysFrames.size());}
 
 				sigReceived.emit();
 			}
 		}
 		m_pCamera -> QueueFrame ( pFrame );
+		if(bSystemFramesFlag) {logger->info("[FrameObserver::FrameReceived] Frame queued");}
 	}
 
     using SignalReceived = sigc::signal<void()>;
@@ -507,8 +546,11 @@ void System::startStreaming()
 			for (Vimba::FramePtrVector::iterator iter = priv->frames.begin(); iter != priv->frames.end(); ++iter) //iter is the frame number
 			{
 				(*iter).reset( new Vimba::Frame ( nPLS ) ); //create a frame of the correct size
+				if(bSystemFramesFlag) {logger->info("[System::startStreaming] Frame {} created", iter - priv->frames.begin() );}
 				(*iter)->RegisterObserver(priv->observer); //register the observer
+				if(bSystemFramesFlag) {logger->info("[System::startStreaming] Frame {} registered", iter - priv->frames.begin() );}
 				cam->AnnounceFrame(*iter); //announce the frame to the camera
+				if(bSystemFramesFlag) {logger->info("[System::startStreaming] Frame {} announced", iter - priv->frames.begin() );}
 			}
 
 			if (cam->StartCapture() == VmbErrorSuccess)
@@ -516,11 +558,13 @@ void System::startStreaming()
 				for (Vimba::FramePtrVector::iterator iter = priv->frames.begin(); iter != priv->frames.end(); ++iter)
 				{
 					cam->QueueFrame(*iter);
+					if(bSystemFramesFlag) {logger->info("[System::startStreaming] Frame {} queued", iter - priv->frames.begin() );}
 				}
 				
 				if (cam->GetFeatureByName("AcquisitionStart", pFeature) == VmbErrorSuccess && pFeature->RunCommand() == VmbErrorSuccess)
 				{
 					if(bSystemLogFlag) {logger->info("[System::startStreaming] Started frame capture");}
+					if(bSystemFramesFlag) {logger->info("[System::startStreaming] Started camera aquisition");}
 				}
 				else
 				{
@@ -609,11 +653,25 @@ void System::releaseFrame()
 
 void System::whenLiveViewToggled(bool viewingLive)
 {
+	std::cout << "whenLiveViewToggled called" << std::endl;
 	window.setMakingMap(false);
+	std::cout << "setMakingMap called" << std::endl;
 	if (viewingLive)
 	{
+		std::cout << "viewingLive is true" << std::endl;
 		if(bSystemLogFlag) {logger->info("[System::whenLiveViewToggled] Live view toggled on");}
 		startStreaming();
+		std::cout << "startStreaming called" << std::endl;
+		//recorder->clearFrames(); //clears any frames in the recorder
+		
+
+		//Clear the recorder, any frames saved in RAM, make pause and play buttons deactive
+		std::cout << "frameQueue.size(): " << frameQueue.size() << std::endl;
+		frameQueue.clear(); //clears any frames in the recorder... too?
+		std::cout << "frameQueue.size(): " << frameQueue.size() << std::endl;
+		recorder->clearFrames(); //clears any frames in the recorder
+		window.setHasBuffer(false);
+		
 	}
 	else
 	{
@@ -801,10 +859,10 @@ void System::whenPlayingToggled(bool playing)
 	}
 	else
 	{
-		if(bSystemLogFlag) {logger->info("[System::whenPlayingToggled] Stop playing toggled off");}
+		if(bSystemLogFlag) {logger->info("[System::whenPlayingToggled] Playing toggled off (probably by 'Pause')");}
 		//TODO: Need to delete frames in frameQueue? Or manage in recorder?
 		recorder->stopBuffering();
-		frameQueue.clear();
+		frameQueue.clear(); //This queue is the frames waiting to be rendered, NOT those in the recorder
 	}
 }
 
@@ -841,9 +899,11 @@ void System::whenRecordingToggled(bool recording)
 	if (recording)
 	{
 		recorder->clearFrames(); //When a new recording is started, clear the previous frames
+		//frameQueue.clear(); //When a new recording is started, clear the previous frames
 	}
 }
 
+//This runs when the recorder fills up
 void System::onRecorderOperationComplete(RecOpRes res)
 {
 	OPRESEXPAND(res, op, success);

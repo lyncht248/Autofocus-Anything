@@ -21,7 +21,7 @@
 #include "logfile.hpp"
 #include "autofocus.hpp"
 
-bool bMainWindowLogFlag = 0; // 1 = log, 0 = no log
+bool bMainWindowLogFlag = 1; // 1 = log, 0 = no log
 
 struct MainWindow::Private
 {
@@ -320,12 +320,12 @@ MainWindow::MainWindow() : Gtk::Window(),
     gainScale(0, 50, 1, 0, 7, 150),
     exposeScale(100, 16000, 1000, 15000, 7, 150),
     gammaScale(0.5, 2.5, 0.01, 1, 7, 150),
-	frameRateScale(20, 80, 5, 60, 7, 150),
+	frameRateScale(20, 80, 5, 30, 7, 150),
     frameSlider(0, 1799, 1, 0, 5, 200),
     thresScale(0, 1, 0.01, 0.4, 6, 100),
     scaleScale(0, 5, 0.01, 2.0, 6, 100),
     waitScale(0, HVIGTK_STAB_LIM, 100, 0, 6, 100),
-	recordingSizeScale(300, 3600, 10, 1800, 6, 100),
+	recordingSizeScale(300, 3600, 10, 300, 6, 100),
     //bestFocusScale(8, 632, 5, 200, 4, 100),
 	bestFocusScale(8, 312, 5, 200, 4, 100),
     recordButton(),
@@ -1298,14 +1298,14 @@ void MainWindow::onRecordClicked()
 	if (pausedRecording.getValue() )
 		pausedRecording.toggle();
 	else
-		recording.setValue();
+		recording.setValue(); // I think this means setValue(true)
 }
 
 void MainWindow::onPauseClicked()
 {
 	if (recording.getValue() )
 	{
-		pausedRecording.setValue();
+		pausedRecording.setValue(); // I think this means setValue(true)
 	}
 	else
 	{

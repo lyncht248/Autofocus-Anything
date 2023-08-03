@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
-
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include "glibmm/main.h"
 #include "sdlwindow.hpp"
 #include "version.hpp"
@@ -31,15 +31,16 @@ int gtkAppLocationY = 10;
 
 int main(int argc, char **argv) 
 {
-    // Creates the logger file output and sets the pattern
-    auto now = std::chrono::system_clock::now();
-    auto in_time_t = std::chrono::system_clock::to_time_t(now);
-    std::stringstream ss;
-    std::tm buf;
-    std::tm* tm = localtime_r(&in_time_t, &buf);
-    ss << std::put_time(tm, "%Y%m%d_%H:%M:%S") << "_hvikgtk.log";
-    std::string filename = "/home/hvi/Desktop/HVI-log-report/" + ss.str();
-    logger = spdlog::basic_logger_mt("basic_logger", filename);
+    // // Creates the logger file output and sets the pattern
+    // auto now = std::chrono::system_clock::now();
+    // auto in_time_t = std::chrono::system_clock::to_time_t(now);
+    // std::stringstream ss;
+    // std::tm buf;
+    // std::tm* tm = localtime_r(&in_time_t, &buf);
+    // ss << std::put_time(tm, "%Y%m%d_%H:%M:%S") << "_hvikgtk.log";
+    // std::string filename = "/home/hvi/Desktop/HVI-log-report/" + ss.str();
+    // logger = spdlog::basic_logger_mt("basic_logger", filename);
+    logger = spdlog::stdout_color_mt("console");
     logger->set_pattern("[%H:%M:%S] [thread %t] %v");    
 
     // Spawns the SDL window, which is done in a separate process

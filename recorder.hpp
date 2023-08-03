@@ -38,7 +38,7 @@ public:
 	int countFrames();
 
 	VidFrame* getFrame();
-	void releaseFrame();
+	// void releaseFrame();
 
 	void clearFrames();
 
