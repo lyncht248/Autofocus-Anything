@@ -19,9 +19,9 @@
 #include "autofocus.hpp"
 #include "notificationCenter.hpp"
 
-bool bSystemLogFlag = 1; // 1 = log, 0 = no log
+bool bSystemLogFlag = 0; // 1 = log, 0 = no log
 bool bSystemQueueLengthFlag = 0; // 1 = log, 0 = no log
-bool bSystemFramesFlag = 1; // Used to track how each frame passes through the system
+bool bSystemFramesFlag = 0; // Used to track how each frame passes through the system
 
 // I don't believe these three code blocks are used anywhere
 /*
@@ -103,6 +103,17 @@ FrameProcessor::~FrameProcessor()
 	running = false;
 	ThreadStopper::stop({processorThread, stabThread});
 
+	if(stabQueue.size()>0) {
+		for (VidFrame *vframe = stabQueue.pop(); !stabQueue.empty(); vframe = stabQueue.pop())
+			delete vframe;
+		stabQueue.clear();
+	}
+
+	if(released.size()>0) {
+		for (VidFrame *vframe = released.pop(); !released.empty(); vframe = released.pop())
+			delete vframe;
+		released.clear();
+	}
 	if(bSystemFramesFlag) {logger->info("[FrameProcessor::~FrameProcessor] destructor called, processorThread and stabThread stopped");}
 }
 
@@ -140,7 +151,8 @@ void FrameProcessor::stabilise()
 			stabMutex.unlock();
 		}
 
-		released.push(vframe);
+		// HERE testing releasing of all frames at the end of processFrames
+		//released.push(vframe);
 	}
 }
 
@@ -180,13 +192,14 @@ void FrameProcessor::processFrame() //What to do with each frame received from F
 		// If recording, sends the frame to the recorder for saving
 		if (recording)
 		{
-			system.getRecorder().putFrame(vidFrame);
+			system.getRecorder().putFrame(vidFrame); //putFrame is just frames.push_back(frame); until frames=recording size
 		}
 
 		
 		// Draw the frame at the size neccessary to fit the window
 		CVD::ImageRef vfDim = vidFrame->size();
 		if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] vidFrame size: {}x{}, about to draw", vfDim.x, vfDim.y);}
+		//Recreate frame if dimensions are different, but raster.w and raster.h should be correct
 		if (vfDim.x != childwin->raster.w || vfDim.y != childwin->raster.h)
 		{
 			//processed = Cairo::ImageSurface::create(Cairo::FORMAT_RGB24, vfDim.x, vfDim.y);
@@ -196,7 +209,7 @@ void FrameProcessor::processFrame() //What to do with each frame received from F
 		
 		//convertToCairo(stabilising);
 
-		// deprecated code (I believe) TODO remove
+		// Adds the Vessel map on-top if neccessary
 		for (auto pair : filters)
 		{
 			pair.second->draw(processed);
@@ -237,7 +250,10 @@ void FrameProcessor::processFrame() //What to do with each frame received from F
 		if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] About to release vidFrame, locking mutex");}
 		ThreadStopper::lock(mutex);
 		{
-			// Signal to release frame from thread and then wait for frame to be released
+			// When a frame is drawn, it is signalled for release (see code below)
+			// window.signalFrameDrawn().connect(sigc::mem_fun(*this, &System::releaseFrame) );
+
+			// Wait until signal that frame can be released (ie. it is drawn)
 			while (!_frameReleased)
 			{
 				ThreadStopper::stopPoint(&frameReleased);
@@ -246,11 +262,11 @@ void FrameProcessor::processFrame() //What to do with each frame received from F
 			if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] _frameReleased is True");}
 			
 			// If not stabilising, add frame to released queue. If you are stabilising, it should already have been added
-			if (!stabilising)
-			{
-				released.push(vidFrame);
-				if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] vidFrame pushed to released queue");}
-			}
+			// if (!stabilising)
+			// {
+			released.push(vidFrame);
+			if(bSystemFramesFlag) {logger->info("[FrameProcessor::processFrame] vidFrame pushed to released queue");}
+			// }
 
 			// //// PREVIOUS ////
 			// // If live view is ON and not recording, delete every frame in the released queue
@@ -270,11 +286,12 @@ void FrameProcessor::processFrame() //What to do with each frame received from F
 			// }
 
 			//// NEW ////
-			if (recording)
+			if (recording || !system.window.getLiveView().getValue())
 			{
-				// If recording, then don't delete the frame data, but clear the released queue of pointers. These frames can be deleted when the recording is saved.
-				released.clear();
-				if(bSystemLogFlag) {logger->info("[FrameProcessor::processFrame] released queue cleared, but NOT deleted!!!");}
+				// If recording or viewing a recording, then don't delete the frame data (which is pointed to by recorder::frames), but clear the released queue of pointers
+				released.clear(); 
+
+				if(bSystemLogFlag) {logger->info("[FrameProcessor::processFrame] released queue cleared, but data not deleted!!!");}
 			}
 			else 
 			{
@@ -293,12 +310,13 @@ void FrameProcessor::processFrame() //What to do with each frame received from F
 				// vidFrame = nullptr;
 				// released.clear();
 
-				//This code fixes a problem where the frame memory would leak (steadily increasing RAM use) when not stabilizing or recording
-				if (released.size() >= 15)
+				//This code fixes a problem where the frame memory would leak (steadily increasing RAM use) even when not recording
+				// using >=5 because often the frame data is still being used to draw the frame when this code is called
+				if (released.size() >= 5)
 				{
 					VidFrame* frame_to_delete = released.pop(); // remove the frame from the queue
 					delete frame_to_delete; // delete the frame
-					if(bSystemFramesFlag) {logger->info("[FrameProcessor::ProcessFrame] Popped a frame (should auto-delete) from the released queue.");}
+					if(bSystemFramesFlag) {logger->info("[FrameProcessor::ProcessFrame] Deleted a frame from the released queue.");}
 				}
   			}
 			
@@ -345,12 +363,14 @@ public :
 		if(bSystemFramesFlag) {logger->info("[FrameObserver::FrameObserver] constructor finished");}
 
 	}
-	// ~FrameObserver()
-	// {
-	// 	for (VidFrame *vframe = sysFrames.pop(); !sysFrames.empty(); vframe = sysFrames.pop())
-	// 		delete vframe;
-	// 	sysFrames.clear();
-	// }
+	~FrameObserver()
+	{
+		if(sysFrames.size()>0) {
+			for (VidFrame *vframe = sysFrames.pop(); !sysFrames.empty(); vframe = sysFrames.pop())
+				delete vframe;
+			sysFrames.clear();
+		}
+	}
 	
 	void FrameReceived ( const Vimba::FramePtr pFrame )
 	{
@@ -384,7 +404,7 @@ public :
 				if (sysFrames.size() >= 15)
 				{
 					VidFrame* frame_to_delete = sysFrames.pop(); // remove the frame from the queue
-					//delete frame_to_delete; // delete the frame
+					delete frame_to_delete; // delete the frame
 					if(bSystemFramesFlag) {logger->info("[FrameObserver::FrameReceived] Popped a frame (should auto-delete) from the sysFrames queue as it was too long.");}
 				}
 				
@@ -665,11 +685,12 @@ void System::whenLiveViewToggled(bool viewingLive)
 		//recorder->clearFrames(); //clears any frames in the recorder
 		
 
-		//Clear the recorder, any frames saved in RAM, make pause and play buttons deactive
-		std::cout << "frameQueue.size(): " << frameQueue.size() << std::endl;
-		frameQueue.clear(); //clears any frames in the recorder... too?
-		std::cout << "frameQueue.size(): " << frameQueue.size() << std::endl;
-		recorder->clearFrames(); //clears any frames in the recorder
+		//If there are frames in the recorder, delete them now
+		if(recorder->countFrames() > 0) {
+			std::cout << "recorder->countFrames() > 0" << std::endl;
+			recorder->clearFrames();
+			std::cout << "recorder->clearFrames() called" << std::endl;
+		}
 		window.setHasBuffer(false);
 		
 	}
@@ -677,6 +698,7 @@ void System::whenLiveViewToggled(bool viewingLive)
 	{
 		if(bSystemLogFlag) {logger->info("[System::whenLiveViewToggled] Live view toggled off");}
 		stopStreaming();
+		
 	}
 }
 
@@ -862,7 +884,7 @@ void System::whenPlayingToggled(bool playing)
 		if(bSystemLogFlag) {logger->info("[System::whenPlayingToggled] Playing toggled off (probably by 'Pause')");}
 		//TODO: Need to delete frames in frameQueue? Or manage in recorder?
 		recorder->stopBuffering();
-		frameQueue.clear(); //This queue is the frames waiting to be rendered, NOT those in the recorder
+		//frameQueue.clear(); //This queue is the frames waiting to be rendered, NOT those in the recorder
 	}
 }
 
@@ -913,11 +935,27 @@ void System::onRecorderOperationComplete(RecOpRes res)
 		case Recorder::Operation::RECOP_FILLED:
 			if(bSystemLogFlag) {logger->info("[System::onRecorderOperationComplete] Recorder stopped recording");}
 			if (success)
-				window.displayMessage("Recording complete");
+				window.displayMessage("Recording complete. Remember to save!");
 			else
 				window.displayMessage("Recording failed");
+			window.setLiveView(!success);
+			window.setHasBuffer(success);
 			window.setRecording(false);
-			//The rest is the same as if loaded
+			if(window.get3DStabActive().getValue()) {
+				window.set3DStab(false);
+			}
+			if(window.getHoldFocusActive().getValue()) {
+				window.setHoldFocus(false);
+			}
+			//make recorder toggle insensitive
+
+			// window.getShowMapActive().setValue(!success);
+			// window.getStabiliseActive().setValue(!success);
+			// window.getMakeMapActive().setValue(!success);
+			// window.getHoldFocusActive().setValue(!success);
+			// window.get2DStabActive().setValue(!success);
+			// window.get3DStabActive().setValue(!success);
+			break;
 		case Recorder::Operation::RECOP_LOAD:
 			if (window.getLoading().getValue() )
 			{
@@ -1044,6 +1082,13 @@ bool System::onCloseClicked(const GdkEventAny* event)
 System::~System()
 {
     //m_conn.disconnect();
+
+	if(frameQueue.size()>0) {
+		for (VidFrame *vframe = frameQueue.pop(); !frameQueue.empty(); vframe = frameQueue.pop())
+			delete vframe;
+		frameQueue.clear();
+	}
+
 	vsys.Shutdown();
     delete priv;
     priv = nullptr; // Set to nullptr after deleting to avoid dangling pointer

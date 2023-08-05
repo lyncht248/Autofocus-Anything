@@ -105,6 +105,8 @@ public:
 	void setRecording(bool val);
 	void setMakingMap(bool val);
 	void setShowingMap(bool val);
+	void set3DStab(bool val);
+	void setHoldFocus(bool val);
 
 	Condition& getMakeMapActive();
 	Condition& getStabiliseActive();

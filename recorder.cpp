@@ -32,11 +32,14 @@ Recorder::Recorder(System &sys) :
 
 Recorder::~Recorder()
 {
-	for (VidFrame *vf : frames)
-	{
-		delete vf;
+	//If there is frame data still accessed by frames, delete it
+	if(frames.size() > 0) {
+		for (VidFrame *vf : frames)
+		{
+			delete vf;
+		}
+		frames.clear(); 
 	}
-	frames.clear(); //Added this to try to fix a memory leak
 	if(bRecorderLogFlag) logger->info("[Recorder::~Recorder()] destructor called");
 }
 
@@ -148,21 +151,13 @@ VidFrame* Recorder::getFrame()
 void Recorder::clearFrames() //Called ONLY when a new recording is started... call more often?
 {
 	buffering = false;
-	std::cout << "buffering set to false" << std::endl;
 	mutex.lock();
 	for (VidFrame *frame : frames)
 	{
-		std::cout << "deleting frame in Recorder::clearFrames()" << std::endl;
-		std::cout << "frame address: " << frame << std::endl;
-		std::cout << "frame size: " << frame->size() << std::endl;
-		std::cout << "frames.size(): " << frames.size() << std::endl;
 		delete frame;
-		std::cout << "frame deleted in Recorder::clearFrames()" << std::endl;
 	}
-	std::cout << "about to clear frames in Recorder::clearFrames()" << std::endl;
 	frames.clear();
 	mutex.unlock();
-	std::cout << "frames cleared in Recorder::clearFrames()" << std::endl;
 	if(bRecorderLogFlag) logger->info("[Recorder::clearFrames()] frames cleared");
 	emitOperationComplete(Operation::RECOP_EMPTIED, true);
 }
@@ -174,14 +169,16 @@ void Recorder::emitOperationComplete(Operation op, bool success)
 }
 
 // Loads frames into FrameQueue (see FrameObserver) at data.second frames per second, starting at data.first frame
+// Started in System::whenPlayingToggled(bool playing = true)
+// Stopped when System::whenPlayingToggled(bool playing = false)
 void Recorder::bufferFrames(std::pair<int, int> data)
 {
 	int start = data.first;
 	int bufSleep = round(1000.0 / data.second);
 	if(bRecorderLogFlag) logger->info("[Recorder::bufferFrames()] buffering started from frame: {}", start);
 	buffering = true;
-	//Plays all frames from start to end
-	std::cout << "ENTERING BUFFERFRAMES LOOP" << std::endl;
+
+	//Loads frames into FrameQueue at frame rate until frames.size reached
 	for (unsigned long i = start; buffering && i < frames.size(); i++)
 	{
 		{
@@ -192,9 +189,10 @@ void Recorder::bufferFrames(std::pair<int, int> data)
 			std::this_thread::sleep_for(std::chrono::milliseconds(bufSleep) );
 		}
 	}
+	//Waits until last frame is processed 
 	system.getFrameQueue().waitForEmpty(); //Stops here until all frames have been played
 	buffering = false;
-	std::cout << "EXITING BUFFERFRAMES LOOP" << std::endl;
+
 	emitOperationComplete(Operation::RECOP_BUFFER, true);
 }
 

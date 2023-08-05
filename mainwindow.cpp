@@ -406,21 +406,45 @@ MainWindow::MainWindow() : Gtk::Window(),
 	holdFocusToggle.set_tooltip_text("Holds current focal plane in-focus (even if not ");
 	threedStabToggle.set_tooltip_text("Shortcut for live angiograms which uses 'Hold Focus' and 'XY-Stab'");
 
+
+
     recordButton.set_image_from_icon_name("media-record");
     recordButton.set_tooltip_text("Begin recording");
     recordButton.set_hexpand(false);
     recordButton.set_valign(Gtk::Align::ALIGN_FILL);
     recordButton.set_halign(Gtk::Align::ALIGN_START);
 	recordButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onRecordClicked) );
-    
+    auto cssProvider = Gtk::CssProvider::create();
+	Glib::ustring cssData =
+	R"(
+		#recordButton {
+			color: #d10000;  
+			-gtk-icon-style: symbolic;
+		}
+	)";
+	cssProvider->load_from_data(cssData);
+	recordButton.get_style_context()->add_provider(cssProvider, GTK_STYLE_PROVIDER_PRIORITY_USER);
+	recordButton.set_name("recordButton");
+	
     backToStartButton.set_image_from_icon_name("media-skip-backward");
     backToStartButton.set_tooltip_text("Go back to start of recording");
     backToStartButton.set_hexpand(false);
     backToStartButton.set_valign(Gtk::Align::ALIGN_FILL);
     backToStartButton.set_halign(Gtk::Align::ALIGN_START);
 	backToStartButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onBackButtonClicked) );
-
 	backToStartButton.set_sensitive(false);
+    auto cssProvider2 = Gtk::CssProvider::create();
+	Glib::ustring cssData2 =
+	R"(
+		#backToStartButton {
+			color: #cccccc;  
+			-gtk-icon-style: symbolic;
+		}
+	)";
+	cssProvider2->load_from_data(cssData2);
+	backToStartButton.get_style_context()->add_provider(cssProvider2, GTK_STYLE_PROVIDER_PRIORITY_USER);
+	backToStartButton.set_name("backToStartButton");
+
     
     pauseButton.set_image_from_icon_name("media-playback-pause");
     pauseButton.set_tooltip_text("Pause playback of recording");
@@ -429,6 +453,17 @@ MainWindow::MainWindow() : Gtk::Window(),
     pauseButton.set_halign(Gtk::Align::ALIGN_START);
 	pauseButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onPauseClicked) );
 	pauseButton.set_sensitive(false);
+	auto cssProvider3 = Gtk::CssProvider::create();
+	Glib::ustring cssData3 =
+	R"(
+		#pauseButton {
+			color: #cccccc;  
+			-gtk-icon-style: symbolic;
+		}
+	)";
+	cssProvider3->load_from_data(cssData3);
+	pauseButton.get_style_context()->add_provider(cssProvider3, GTK_STYLE_PROVIDER_PRIORITY_USER);
+	pauseButton.set_name("pauseButton");
     
     playButton.set_image_from_icon_name("media-playback-start");
     playButton.set_tooltip_text("Start/Resume playback of recording");
@@ -437,6 +472,17 @@ MainWindow::MainWindow() : Gtk::Window(),
     playButton.set_halign(Gtk::Align::ALIGN_START);
 	playButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onPlayButtonClicked) );
 	playButton.set_sensitive(false);
+	auto cssProvider4 = Gtk::CssProvider::create();
+	Glib::ustring cssData4 =
+	R"(
+		#playButton {
+			color: #cccccc;  
+			-gtk-icon-style: symbolic;
+		}
+	)";
+	cssProvider4->load_from_data(cssData4);
+	playButton.get_style_context()->add_provider(cssProvider4, GTK_STYLE_PROVIDER_PRIORITY_USER);
+	playButton.set_name("playButton");
     
     liveToggle.set_image_from_icon_name("camera-web");
     liveToggle.set_tooltip_text("Switch to/from live camera feed");
@@ -825,6 +871,16 @@ void MainWindow::setShowingMap(bool val)
 	showMapToggle.set_active(val);
 }
 
+void MainWindow::set3DStab(bool val)
+{
+	threedStabToggle.set_active(val);
+}
+
+void MainWindow::setHoldFocus(bool val)
+{
+	holdFocusToggle.set_active(val);
+}
+
 Condition& MainWindow::getMakeMapActive()
 {
 	return makeMapActive;
@@ -1142,7 +1198,7 @@ void MainWindow::bufferFilled()
     playButton.set_sensitive(true);
     fileSaveButton.set_sensitive(true);
 	liveToggle.set_sensitive(true);
-
+	recordButton.set_sensitive(false);
 	if(bMainWindowLogFlag) {logger->info("[MainWindow::bufferFilled] Recording buffer filled");}
 }
 
@@ -1156,6 +1212,7 @@ void MainWindow::bufferEmptied()
 		fileSaveButton.set_sensitive(false);
 		liveToggle.set_sensitive(false);
 		liveToggle.set_active(true);
+		recordButton.set_sensitive(true);
 
 		if(bMainWindowLogFlag) {logger->info("[MainWindow::bufferEmptied] Recording buffer emptied... although nothing is deleted??");}
 	}
@@ -1166,6 +1223,7 @@ void MainWindow::viewingLive()
 	playingBuffer.setValue(false);
 	recordButton.set_sensitive(true);
 	frameSlider.set_sensitive(false);
+	frameSlider.setValue(0);
 	trackingFPS.setValue();
 
 	if(bMainWindowLogFlag) {logger->info("[MainWindow::viewingLive] Set to viewing live");}
