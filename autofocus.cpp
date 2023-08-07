@@ -168,9 +168,9 @@ void autofocus::run () {
             //window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to the current location of best-focus
           }
           else if (bFindFocus) {
-            desiredLocBestFocus = 200;
-            previous = 200;
-            if(bAutofocusLogFlag) {logger->info("[autofocus::run] Set desiredLocBestFocus back to 200 in autofocus.cc");}
+            desiredLocBestFocus = 140;
+            previous = 140;
+            if(bAutofocusLogFlag) {logger->info("[autofocus::run] Set desiredLocBestFocus back to 140 in autofocus.cc");}
             //window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to 160, the center-point
           }
       }

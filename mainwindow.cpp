@@ -325,7 +325,7 @@ MainWindow::MainWindow() : Gtk::Window(),
     thresScale(0, 1, 0.01, 0.4, 6, 100),
     scaleScale(0, 5, 0.01, 2.0, 6, 100),
     waitScale(0, HVIGTK_STAB_LIM, 100, 0, 6, 100),
-	recordingSizeScale(300, 3600, 10, 300, 6, 100),
+	recordingSizeScale(100, 1800, 10, 300, 6, 100),
     //bestFocusScale(8, 632, 5, 200, 4, 100),
 	bestFocusScale(8, 312, 5, 200, 4, 100),
     recordButton(),
@@ -353,7 +353,6 @@ MainWindow::MainWindow() : Gtk::Window(),
 	makeMapActive(),
 	stabiliseActive(),
     showMapActive(),
-    findFocusActive(),
 	holdFocusActive(),
 	threedStabActive(),
 	twodStabActive(),
@@ -405,8 +404,6 @@ MainWindow::MainWindow() : Gtk::Window(),
     findFocusButton.set_tooltip_text("Finds focal plane with highest sharpness");
 	holdFocusToggle.set_tooltip_text("Holds current focal plane in-focus (even if not ");
 	threedStabToggle.set_tooltip_text("Shortcut for live angiograms which uses 'Hold Focus' and 'XY-Stab'");
-
-
 
     recordButton.set_image_from_icon_name("media-record");
     recordButton.set_tooltip_text("Begin recording");
@@ -563,7 +560,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 	showMapActive.toggleOnSignal(showMapToggle.signal_toggled() );
 	showMapActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenShowMapToggled) );
 
-	//findFocusButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onFindFocusClicked));
+	findFocusButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onFindFocusClicked));
 
 	resetButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onResetClicked));
     resetButton.set_tooltip_text("Resets the lens to home position");
@@ -580,7 +577,8 @@ MainWindow::MainWindow() : Gtk::Window(),
 	hasBuffer.signalTrue().connect(sigc::mem_fun(*this, &MainWindow::bufferFilled) );
 	hasBuffer.signalFalse().connect(sigc::mem_fun(*this, &MainWindow::bufferEmptied) );
 
-	Condition &viewing = !liveView && hasBuffer;
+	//Viewing means we're not in liveView, and we either have a buffer or we're loading another buffer
+	Condition &viewing = !liveView && (hasBuffer || loading);
 
 	viewing.signalFalse().connect(sigc::mem_fun(*this, &MainWindow::viewingLive) );
 	viewing.signalTrue().connect(sigc::mem_fun(*this, &MainWindow::viewingBuffer) );
@@ -896,11 +894,6 @@ Condition& MainWindow::getShowMapActive()
 	return showMapActive;
 }
 
-Condition& MainWindow::getFindFocusActive()
-{
-	return findFocusActive;
-}
-
 Condition& MainWindow::getHoldFocusActive()
 {
 	return holdFocusActive;
@@ -1107,18 +1100,16 @@ void MainWindow::whenShowMapToggled(bool showingMap)
 
 void MainWindow::onFindFocusClicked()
 {
-	//GUI CHANGES WHEN "FINDING FOCUS" IS CLICKED
 	imgcount = 0;
 	bFindFocus = 1;
-
-	usleep(1000000);
+	if(bMainWindowLogFlag) {logger->info("[MainWindow::onFindFocusClicked] FindFocus clicked, so bFindFocus set to 1");}
+	usleep(800000);
 	bFindFocus = 0;
-	if(bMainWindowLogFlag) {logger->info("[MainWindow::onFindFocusClicked] FindFocus clicked, so bFindFocus set to 1 and then 0");}
+	if(bMainWindowLogFlag) {logger->info("[MainWindow::onFindFocusClicked] bFindFocus set to 0");}
 }
 
 void MainWindow::onResetClicked()
 {
-	//findFocusButton.set_active(false);
 	holdFocusToggle.set_active(false);
 	threedStabToggle.set_active(false);
 	twodStabToggle.set_active(false);
@@ -1213,7 +1204,7 @@ void MainWindow::bufferEmptied()
 		liveToggle.set_sensitive(false);
 		liveToggle.set_active(true);
 		recordButton.set_sensitive(true);
-
+		frameSlider.setValue(0);
 		if(bMainWindowLogFlag) {logger->info("[MainWindow::bufferEmptied] Recording buffer emptied... although nothing is deleted??");}
 	}
 }
@@ -1223,6 +1214,7 @@ void MainWindow::viewingLive()
 	playingBuffer.setValue(false);
 	recordButton.set_sensitive(true);
 	frameSlider.set_sensitive(false);
+	std::cout << "setting frameSlider to 0 because viewing live" << std::endl;
 	frameSlider.setValue(0);
 	trackingFPS.setValue();
 
@@ -1398,8 +1390,9 @@ void MainWindow::whenPlayingBufferToggled(bool playing)
 	}
 }
 
-void MainWindow::onFrameSliderChange(double)
+void MainWindow::onFrameSliderChange(double val)
 {
+	std::cout << "Frame slider changed to:" << val << std::endl;
 	seeking.setValue(true);
 }
 

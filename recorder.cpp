@@ -93,12 +93,19 @@ void Recorder::saveFrames(const std::string &location)
 
 void Recorder::loadFrames(const std::string &location)
 {
-	//Clears existing frames in recorder
-	clearFrames();
+	//If there are frames in the recorder, delete them now
+	std::cout << "Load Frames entered" << std::endl;
+
+	if(countFrames() > 0) {
+
+		clearFrames();
+	}
 
 	//Loads new frames from location
 	int i = 0;
 	char fnum[FNUM_SIZE];
+	//Sometimes crashes here, sometimes crashes at img_load, therefore error must be happening elsewhere. 
+	std::cout << "about to start loading frames" << std::endl;
 	while (true)
 	{
 		std::snprintf(fnum, FNUM_SIZE, "/hvi-video-%.5d.pgm", i);
@@ -106,10 +113,15 @@ void Recorder::loadFrames(const std::string &location)
 		if (ifs.is_open() )
 		{
 			IVidFrame *frame = new IVidFrame();
+			std::cout << "img_load about to be called" << std::endl;
+			std::cout << "frame->size(): " << frame->size() << std::endl;
+			std::cout << "frame:" << frame << std::endl;
 			CVD::img_load(*frame, ifs);
-			auto sz = frame->size();
+			//auto sz = frame->size();
+			std::cout << "frames.push_back about to be called" << std::endl;
 			frames.push_back(frame);
 			i++;
+			std::cout << "emitOperationComplete about to be called" << std::endl;
 			emitOperationComplete(Operation::RECOP_ADDFRAME, true);
 
 			// IVidFrame *tempFrame = new IVidFrame();

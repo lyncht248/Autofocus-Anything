@@ -43,7 +43,7 @@ void Stabiliser::make_map(const CVD::BasicImage<unsigned char>& im, int num_trac
   tracker_edgels.resize(num_trackers);
   vessel_edgels.resize(num_trackers);
 
-  std::cout << "vessel_edgels.size: "<< vessel_edgels.size() << std::endl;
+  //std::cout << "vessel_edgels.size: "<< vessel_edgels.size() << std::endl;
 
   dim.resize(size);
   ImageRef scan;

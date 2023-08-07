@@ -19,7 +19,7 @@
 #include "autofocus.hpp"
 #include "notificationCenter.hpp"
 
-bool bSystemLogFlag = 0; // 1 = log, 0 = no log
+bool bSystemLogFlag = 1; // 1 = log, 0 = no log
 bool bSystemQueueLengthFlag = 0; // 1 = log, 0 = no log
 bool bSystemFramesFlag = 0; // Used to track how each frame passes through the system
 
@@ -492,7 +492,6 @@ System::System(int argc, char **argv) :
 	window.getStabiliseActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenStabiliseToggled) );
 	window.getShowMapActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenShowMapToggled) );
 
-	window.signalFindFocusClicked().connect(sigc::mem_fun(*this, &System::onFindFocusClicked));
 	window.signalResetClicked().connect(sigc::mem_fun(*this, &System::onResetClicked));
 
 	window.getHoldFocusActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenHoldFocusToggled) );
@@ -673,26 +672,18 @@ void System::releaseFrame()
 
 void System::whenLiveViewToggled(bool viewingLive)
 {
-	std::cout << "whenLiveViewToggled called" << std::endl;
 	window.setMakingMap(false);
-	std::cout << "setMakingMap called" << std::endl;
 	if (viewingLive)
 	{
-		std::cout << "viewingLive is true" << std::endl;
 		if(bSystemLogFlag) {logger->info("[System::whenLiveViewToggled] Live view toggled on");}
 		startStreaming();
-		std::cout << "startStreaming called" << std::endl;
-		//recorder->clearFrames(); //clears any frames in the recorder
 		
-
 		//If there are frames in the recorder, delete them now
 		if(recorder->countFrames() > 0) {
-			std::cout << "recorder->countFrames() > 0" << std::endl;
+
 			recorder->clearFrames();
-			std::cout << "recorder->clearFrames() called" << std::endl;
 		}
 		window.setHasBuffer(false);
-		
 	}
 	else
 	{
@@ -785,17 +776,6 @@ void System::whenShowMapToggled(bool showingMap)
 	}
 	*/
 }
-
-void System::onFindFocusClicked() {
-	//TODO: see if this fires or not
-	if(bSystemLogFlag) {logger->info("[System::onFindFocusClicked] Find focus button clicked!");}
-	imgcount = 0;
-	bFindFocus = 1;
-
-	usleep(1000000);
-	bFindFocus = 0;
-}
-
 
 void System::onResetClicked() {
 	if(bSystemLogFlag) {logger->info("[System::onResetClicked] Lens reset button clicked");}
