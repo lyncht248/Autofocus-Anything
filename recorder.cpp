@@ -9,7 +9,7 @@
 
 #define FNUM_SIZE 26
 
-bool bRecorderLogFlag = 1; // 1 = log, 0 = don't log
+bool bRecorderLogFlag = 0; // 1 = log, 0 = don't log
 
 Recorder::Recorder(System &sys) :
 	system(sys),

@@ -118,6 +118,7 @@ public:
 	Glib::Dispatcher& signalNewFrame();
 
 	VidFrame* getFrame();
+	double getFPS(); //see TODO below
 
 
 private:
@@ -181,6 +182,8 @@ private:
 
 	Stabiliser stabiliser; //For running x-y stabilization
 	bool madeMap;
+
+	//double actualFPS; //TODO: Implement actualFPS instead of using value in box
 
 };
 

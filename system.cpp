@@ -1070,12 +1070,17 @@ void System::onWindowEnterClicked()
 			window.setPlayingBuffer(true);
 		}
 		//If neither buffering nor viewing live (i.e. paused recording), do nothing as new frame rate  will be picked up when 'play' clicked
+		//TODO: Deal with frameRate FAILED to set
 	}
 	else {
 		window.displayMessage("FPS Out-of-range");
 	}
 
 	if(bSystemLogFlag) {logger->info("[System::onEnterClicked] Enter key pressed");}
+}
+
+double System::getFPS() {
+	return window.getFrameRateEntryBox();
 }
 
 bool System::onCloseClicked(const GdkEventAny* event)

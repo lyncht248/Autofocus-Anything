@@ -23,7 +23,7 @@
 #include "opencv2/highgui/highgui.hpp"
 
 //Global variables 
-bool bAutofocusLogFlag = 1; //Flag that is 1 for when the autofocus log is being written to, 0 when it is not
+bool bAutofocusLogFlag = 0; //Flag that is 1 for when the autofocus log is being written to, 0 when it is not
 
 std::atomic<bool> bNewImage = 0; //Flag that is 1 for when the buffer image is new, 0 when buffer image is old
 
@@ -73,6 +73,9 @@ void autofocus::run () {
   usleep(10000);
   auto t2 = std::chrono::steady_clock::now();
   auto s_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+  
+  //Scale the 1280*960 image to 640*480, or 320*240, etc.
+  double scale = 0.5; 
 
   //Starting the capture video thread
   std::thread tCaptureVideo(&autofocus::capturevideo, this);
@@ -80,7 +83,7 @@ void autofocus::run () {
   //The following variables assume imgWidth = 320; must be changed if this isn't the case.
   int moved = 1;
   int previous = desiredLocBestFocus; //TODO: should be in a mutex
-  int tol = 2; //Tolerance zone of pixels about the desiredLocBestFocus where no lense movement is triggered. Lower than 4 causes constant signals to lens
+  int tol = 12 * scale; //Tolerance zone of pixels about the desiredLocBestFocus where no lense movement is triggered. Lower than 4 causes constant signals to lens
   //Should be 4 for scale=0.5
   int blink = 0; //Becomes 1 when a blink is detected
   int blinkframes = 15; //number of frames to ignore when blink is detected
@@ -93,11 +96,11 @@ void autofocus::run () {
   int imHeight = tiltedcam1.getImageHeight();
 
   //// PID CONTROLLER
-  double dt = 1.0 / 60.0; //time per frame. Assumes 60Hz 
+  double dt = 1.0 / 60.0; //time per frame on the TILTED CAMERA! Assumes 60Hz. TODO
   double max = 3;  //maximum relative move the lens can be ordered to make. Set to +-3mm
   double min = -3; 
   //double Kp = 0.0018 * 3.0; //*4-5.0 is on the edge of instability; *3.0 seems stable
-  double Kp = 0.0025;
+  double Kp = 0.0020;
   double Ki = 0;
   double Kd = 0; //Should try to add a small Kd; further testing required
   PID pid = PID(dt, max, min, Kp, Kd, Ki);  
@@ -131,7 +134,6 @@ void autofocus::run () {
       cv::Mat image = cv::Mat(imHeight, imWidth, CV_8U, img_calc_buf);
       //cv::UMat image = temp_image.getUMat(cv::ACCESS_READ);
       cv::Mat resized;
-      double scale = 0.25; 
       cv::resize(image, resized, cv::Size(), scale, scale); //function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
 
       //int locBestFocus = computebestfocus(resized, resized.rows, resized.cols); //drops to 0.5 fps if placed in while loop
@@ -168,8 +170,8 @@ void autofocus::run () {
             //window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to the current location of best-focus
           }
           else if (bFindFocus) {
-            desiredLocBestFocus = 140;
-            previous = 140;
+            desiredLocBestFocus = 140 * (scale/0.25); //This was set when scale=0.25, so adjusting
+            previous = 140 * (scale/0.25);
             if(bAutofocusLogFlag) {logger->info("[autofocus::run] Set desiredLocBestFocus back to 140 in autofocus.cc");}
             //window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to 160, the center-point
           }
@@ -307,6 +309,21 @@ int autofocus::computebestfocusReversed (cv::Mat image, int imgHeight, int imgWi
   //Fitting a normal curve to the sharpness curve, to avoid local peaks in the data around vessel edges
   std::vector<double> sharpnesscurvenormalized = fitnormalcurve(sharpnesscurve, kernel);
 
+  // //printing to text files for testing
+  //  std::string FileName = "TEST";
+  //  std::string TextFile = "/home/hvi/Desktop/HVI-data/" + FileName + "_SharpnessCurve.txt";
+  //  std::string TextFile2 = "/home/hvi/Desktop/HVI-data/" + FileName + "_FittedNorm.txt";
+  //  std::ofstream outputFile(TextFile);
+  //  std::ofstream outputFile2(TextFile2);
+  //  std::ostream_iterator<double> output_iterator(outputFile, ", ");
+  //  std::copy(sharpnesscurve.begin(), sharpnesscurve.end(), output_iterator);
+  //  outputFile << "\n";
+  //  std::ostream_iterator<double> output_iterator2(outputFile2, ", ");
+  //  std::copy(sharpnesscurvenormalized.begin(), sharpnesscurvenormalized.end(), output_iterator2);
+  //  outputFile2 << "\n";
+  //  outputFile.close();
+  //  outputFile2.close();
+
   int locBestFocus = distance( begin(sharpnesscurvenormalized), max_element(begin(sharpnesscurvenormalized), end(sharpnesscurvenormalized)));
   return locBestFocus + kernel/2; 
 }
@@ -327,22 +344,6 @@ int autofocus::computebestfocus (cv::Mat image, int imgHeight, int imgWidth) {
   //Fitting a normal curve to the sharpness curve, to avoid local peaks in the data around vessel edges
   std::vector<double> sharpnesscurvenormalized = fitnormalcurve(sharpnesscurve, kernel);
 
-//   //printing to text files for testing
-//    std::string FileName = "null";
-//    std::cout << "File name:\n";
-//    std::cin >> FileName;
-//    std::string TextFile = "/home/tom/projects/autofocus_v9/test/" + FileName + "_SharpnessCurve.txt";
-//    std::string TextFile2 = "/home/tom/projects/autofocus_v9/test/" + FileName + "_FittedNorm.txt";
-//    std::ofstream outputFile(TextFile);
-//    std::ofstream outputFile2(TextFile2);
-//    std::ostream_iterator<double> output_iterator(outputFile, ", ");
-//    std::copy(sharpnesscurve.begin(), sharpnesscurve.end(), output_iterator);
-//    outputFile << "\n";
-//    std::ostream_iterator<double> output_iterator2(outputFile2, ", ");
-//    std::copy(sharpnesscurvenormalized.begin(), sharpnesscurvenormalized.end(), output_iterator2);
-//    outputFile2 << "\n";
-//    outputFile.close();
-//    outputFile2.close();
 
   int locBestFocus = distance( begin(sharpnesscurvenormalized), max_element(begin(sharpnesscurvenormalized), end(sharpnesscurvenormalized)));
   return locBestFocus + kernel/2; 
@@ -452,7 +453,7 @@ std::vector<double> autofocus::fitnormalcurve(std::vector<double> sharpnesscurve
     // Fits a normal curve to the data. Should try to find a proper curve-fitting library... 
     std::vector<double> norm_curve;
     std::vector<double> sum_of_diffs;
-    double std_dev = 56.0 * (sharpnesscurve.size() / 304.0); //determined experimentally using 304-length data, and approximately scaled for larger images. Needs to be replaced! (was 58)
+    double std_dev = 56.0 * (sharpnesscurve.size() / 400.0); //determined experimentally using 304-length data, and approximately scaled for larger images. TODO: Tune properly!
     //double std_dev = 56.0 * (sharpnesscurve.size() / 304.0); //determined experimentally using 304-length data, and approximately scaled for larger images. Needs to be replaced! (was 58)
     double amplitude = (*max_element(begin(sharpnesscurve), end(sharpnesscurve)) - *min_element(begin(sharpnesscurve), end(sharpnesscurve))); 
     double offset = *min_element(begin(sharpnesscurve), end(sharpnesscurve));
