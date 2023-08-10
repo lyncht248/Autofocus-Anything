@@ -149,6 +149,7 @@ private:
 	void onWindowPauseClicked();
 	void onFindFocusClicked();
 	void onResetClicked();
+	void onWindowEnterClicked();
 
 	bool onCloseClicked(const GdkEventAny* event);
 

@@ -484,6 +484,8 @@ System::System(int argc, char **argv) :
 	window.signalPauseClicked().connect(sigc::mem_fun(*this, &System::onWindowPauseClicked) );
 	sigNewFrame.connect(sigc::mem_fun(*this, &System::renderFrame) );
 
+	window.signalEnterClicked().connect(sigc::mem_fun(*this, &System::onWindowEnterClicked) );
+
 	//CONDITIONS
 	
 	window.getLiveView().signalToggled().connect(sigc::mem_fun(*this, &System::whenLiveViewToggled) );
@@ -550,10 +552,10 @@ void System::startStreaming()
 		{
 			if(bSystemLogFlag) {logger->info("[System::startStreaming] Successfully opened camera");}
 			
-			setFeature("PixelFormat", VmbPixelFormatMono8);
 			window.updateCameraValues(getFeature<double>("Gain"), getFeature<double>("ExposureTime"), getFeature<double>("Gamma") );
+			setFeature("PixelFormat", VmbPixelFormatMono8);
 			setFeature("AcquisitionFrameRateEnable", true);
-			setFeature<double>("AcquisitionFrameRate", window.getFrameRateScaleValue() );
+			setFeature<double>("AcquisitionFrameRate", window.getFrameRateEntryBox() );
 
 			Vimba::FeaturePtr pFeature;
 			cam->GetFeatureByName("PayloadSize", pFeature);
@@ -851,7 +853,7 @@ void System::whenPlayingToggled(bool playing)
 	if (playing)
 	{
 		int start = window.getFrameSliderValue();
-		int frameRate = window.getFrameRateScaleValue();
+		int frameRate = window.getFrameRateEntryBox();
 		if (!recorder->isBuffering() )
 		{
 			if(bSystemLogFlag) {logger->info("[System::whenPlayingToggled] Start playing from frame: {} at rate: {}", start, frameRate);}
@@ -921,6 +923,7 @@ void System::onRecorderOperationComplete(RecOpRes res)
 			window.setLiveView(!success);
 			window.setHasBuffer(success);
 			window.setRecording(false);
+			window.setTrackingFPS(false);
 			if(window.get3DStabActive().getValue()) {
 				window.set3DStab(false);
 			}
@@ -1046,6 +1049,33 @@ void System::onWindowBestFocusChanged(double val)
 
 void System::onWindowPauseClicked()
 {
+}
+
+void System::onWindowEnterClicked()
+{
+	double newFrameRate = window.getFrameRateEntryBox();
+	if(0.0 < newFrameRate && newFrameRate < 144.0) 
+	{
+		if(window.getLiveView().getValue()) //if Live, must restart camera
+		{
+			stopStreaming();
+			usleep(1000000); //sleep for 1s
+			startStreaming();
+		}
+		if(recorder->isBuffering()) //if Buffering, must restart buffering at new frame rate
+		{
+			recorder->stopBuffering();
+			usleep(100000); //sleep for 0.1s
+			recorder->signalBuffer().emit(std::make_pair(window.getFrameSliderValue(), newFrameRate) );
+			window.setPlayingBuffer(true);
+		}
+		//If neither buffering nor viewing live (i.e. paused recording), do nothing as new frame rate  will be picked up when 'play' clicked
+	}
+	else {
+		window.displayMessage("FPS Out-of-range");
+	}
+
+	if(bSystemLogFlag) {logger->info("[System::onEnterClicked] Enter key pressed");}
 }
 
 bool System::onCloseClicked(const GdkEventAny* event)

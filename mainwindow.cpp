@@ -320,7 +320,7 @@ MainWindow::MainWindow() : Gtk::Window(),
     gainScale(0, 50, 1, 0, 7, 150),
     exposeScale(100, 16000, 1000, 15000, 7, 150),
     gammaScale(0.5, 2.5, 0.01, 1, 7, 150),
-	frameRateScale(20, 80, 5, 30, 7, 150),
+	//frameRateScale(20, 80, 5, 30, 7, 150),
     frameSlider(0, 1799, 1, 0, 5, 200),
     thresScale(0, 1, 0.01, 0.4, 6, 100),
     scaleScale(0, 5, 0.01, 2.0, 6, 100),
@@ -336,7 +336,9 @@ MainWindow::MainWindow() : Gtk::Window(),
     fileLoadButton("Load"),
     fileSaveButton("Save"),
     fileNameEntry(),
+	frameRateEntry(),
     fileChooseButton(),
+	enterButton("Enter"),
     liveToggle(),
     makeMapToggle("Make Map"),
     stabiliseToggle("XY Stab."),
@@ -373,7 +375,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 	gainScaleConnection(),
 	exposeScaleConnection(),
 	gammaScaleConnection(),
-	frameRateScaleConnection(),
+	//frameRateScaleConnection(),
 	frameSliderConnection(),
 	stateChangeConnection()
 {
@@ -389,13 +391,13 @@ MainWindow::MainWindow() : Gtk::Window(),
     //exposeScale.setScaleSizeRequest(150, 0);
     //exposeScale.setSpinButtonWidth(7);
 	exposeScaleConnection = exposeScale.signalChanged().connect(sigc::mem_fun(*this, &MainWindow::onExposeScaleChange) );
-    
+
     //gammaScale.setScaleSizeRequest(150, 0);
     //gammaScale.setSpinButtonWidth(7);
     gammaScale.setSpinButtonPrec(2);
 	gammaScaleConnection = gammaScale.signalChanged().connect(sigc::mem_fun(*this, &MainWindow::onGammaScaleChange) );
 
-	frameRateScaleConnection = frameRateScale.signalChanged().connect(sigc::mem_fun(*this, &MainWindow::onFrameRateChange) );
+	//frameRateScaleConnection = frameRateScale.signalChanged().connect(sigc::mem_fun(*this, &MainWindow::onFrameRateChange) );
     
 	//Tooltip text for the buttons
 	makeMapToggle.set_tooltip_text("Make a vessel map of the current recording using given threshold and scale values");
@@ -488,7 +490,7 @@ MainWindow::MainWindow() : Gtk::Window(),
     liveToggle.set_halign(Gtk::Align::ALIGN_START);
 	liveToggle.signal_toggled().connect(sigc::mem_fun(*this, &MainWindow::onLiveToggled) );
 	liveToggle.set_sensitive(false);
-    
+
     priv->mediaBox.add(recordButton);
     priv->mediaBox.add(backToStartButton);
     priv->mediaBox.add(pauseButton);
@@ -507,7 +509,7 @@ MainWindow::MainWindow() : Gtk::Window(),
     fileChooseButton.set_halign(Gtk::Align::ALIGN_START);
     fileChooseButton.set_action(Gtk::FileChooserAction::FILE_CHOOSER_ACTION_SELECT_FOLDER);
     fileChooseButton.set_filename("/home/hvi/Desktop/HVI-data");
-    
+
     fileLoadButton.set_tooltip_text("Load frames from this location");
 	fileLoadButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onLoadButtonClicked) );
 
@@ -596,6 +598,46 @@ MainWindow::MainWindow() : Gtk::Window(),
 
 	sigFrameDrawn.connect(sigc::mem_fun(*this, &MainWindow::onFrameDrawn) );
 
+	frameRateEntry.set_width_chars(3);
+	frameRateEntry.set_text("30");
+
+	enterButton.signal_clicked().connect(sigEnterClicked.make_slot());
+	Gtk::Box *entryButtonBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 0));
+	entryButtonBox->pack_start(frameRateEntry, Gtk::PackOptions::PACK_EXPAND_WIDGET);
+	entryButtonBox->pack_start(enterButton, Gtk::PackOptions::PACK_SHRINK);
+	enterButton.set_size_request(74, -1);  // 100 pixels in width, -1 means natural height
+	// Create an Alignment widget for space.
+	Gtk::Alignment *spacer = Gtk::manage(new Gtk::Alignment());
+	spacer->set_size_request(150, -1); // for example, 50 pixels wide
+	entryButtonBox->pack_end(*spacer, Gtk::PackOptions::PACK_SHRINK);
+
+	// Modify the Entry
+	auto contextEntry = frameRateEntry.get_style_context();
+	contextEntry->add_class("straight-edge-entry");
+	contextEntry->add_class("no-right-border");
+	// Modify the Button
+	auto contextButton = enterButton.get_style_context();
+	contextButton->add_class("straight-edge-button");
+
+	auto css_provider = Gtk::CssProvider::create();
+	css_provider->load_from_data(R"CSS(
+		.straight-edge-entry {
+			border-top-right-radius: 0px;
+			border-bottom-right-radius: 0px;
+		}
+		
+		.straight-edge-button {
+			border-top-left-radius: 0px;
+			border-bottom-left-radius: 0px;
+		}
+			.no-right-border {
+			border-right-width: 0px;
+		}
+	)CSS");
+
+	auto screen = Gdk::Screen::get_default();
+	Gtk::StyleContext::add_provider_for_screen(screen, css_provider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+	
 	//ATTACHING
 
     priv->controlGrid.attach(priv->space4[0], 0, 0);
@@ -652,8 +694,8 @@ MainWindow::MainWindow() : Gtk::Window(),
  
     priv->controlGrid.attach(gainScale, 19, 0);
     priv->controlGrid.attach(exposeScale, 19, 1);
-	priv->controlGrid.attach(frameRateScale, 19, 3);
     priv->controlGrid.attach(gammaScale, 19, 2);
+	priv->controlGrid.attach(*entryButtonBox, 19, 3);
 
 	priv->controlGrid.attach(priv->space4[9], 20, 0);
 	priv->controlGrid.attach(priv->verticalSeparator4, 21, 0, 1, 4);
@@ -696,10 +738,10 @@ MainWindow::MainWindow() : Gtk::Window(),
 	if(bMainWindowLogFlag) logger->info("[MainWindow::MainWindow] constructor completed");
 }
 
-double MainWindow::getFrameRateScaleValue() const
-{
-	return frameRateScale.getValue();
-}
+// double MainWindow::getFrameRateScaleValue() const
+// {
+// 	return frameRateScale.getValue();
+// }
 
 double MainWindow::getBestFocusScaleValue() const
 {
@@ -798,6 +840,11 @@ MainWindow::SignalPauseClicked MainWindow::signalPauseClicked()
 	return sigPauseClicked;
 }
 
+MainWindow::SignalEnterClicked MainWindow::signalEnterClicked()
+{
+	return sigEnterClicked;
+}
+
 MainWindow::SignalFindFocusClicked MainWindow::signalFindFocusClicked()
 {
 	return sigFindFocusClicked;
@@ -879,6 +926,11 @@ void MainWindow::setHoldFocus(bool val)
 	holdFocusToggle.set_active(val);
 }
 
+void MainWindow::setTrackingFPS(bool val)
+{
+	trackingFPS.setValue(val);
+}
+
 Condition& MainWindow::getMakeMapActive()
 {
 	return makeMapActive;
@@ -951,6 +1003,24 @@ std::string MainWindow::getFileLocation() const
 		return out + fileNameEntry.get_text();
 	else
 		return out + '/' + fileNameEntry.get_text();
+}
+
+double MainWindow::getFrameRateEntryBox() const
+{
+	//convert string to double
+	std::string tempText = frameRateEntry.get_text();
+	double frameRate;
+	try {
+		frameRate = std::stod(tempText);
+		std::cout << "Frame Rate: " << frameRate << std::endl;
+	}
+	catch (std::invalid_argument& e) {
+		std::cerr << "Invalid input: std::invalid_argument thrown" << '\n';
+	}
+	catch (std::out_of_range& e) {
+		std::cerr << "Invalid input: std::out_of_range thrown" << '\n';
+	}	std::cout << "Frame Rate: " << frameRate << std::endl;
+	return frameRate;
 }
 
 void MainWindow::addRenderFilter(const std::string &key, RenderFilter *filter)
@@ -1117,6 +1187,7 @@ void MainWindow::onResetClicked()
 	//GUI CHANGES WHEN "RESET" IS CLICKED
 	if(bMainWindowLogFlag) {logger->info("[MainWindow::onResetClicked] Reset clicked, so bResetLens set to 1");}
 }
+
 
 void MainWindow::whenHoldFocusToggled(bool holdingFocus)
 {
@@ -1335,6 +1406,7 @@ void MainWindow::onSaveButtonClicked()
 void MainWindow::onPlayButtonClicked()
 {
 	setLiveView(false);
+	setTrackingFPS(true);
 	playingBuffer.setValue();
 }
 
@@ -1405,9 +1477,9 @@ void MainWindow::onExposeScaleChange(double val)
 {
 	sigFeatureUpdated.emit("ExposureTime", val);
 	//According to Vimba changing ExposureTime may also change camera frame rate
-	sigFeatureUpdated.emit("AcquisitionFrameRate", frameRateScale.getValue() );
+	//sigFeatureUpdated.emit("AcquisitionFrameRate", frameRateScale.getValue() );
 
-	if(bMainWindowLogFlag) {logger->info("[MainWindow::onExposeScaleChange] ExposureTime changed, AcquisitionFrameRate updated to " + std::to_string(frameRateScale.getValue() ) + "in case they are linked");}
+	if(bMainWindowLogFlag) {logger->info("[MainWindow::onExposeScaleChange] ExposureTime changed");}
 }
 
 void MainWindow::onFrameRateChange(double val)

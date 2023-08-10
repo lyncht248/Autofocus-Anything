@@ -57,7 +57,7 @@ public:
     MainWindow();
     virtual ~MainWindow();
 
-	double getFrameRateScaleValue() const;
+	// double getFrameRateScaleValue() const;
 	double getStabWaitScaleValue() const;
 	double getRecordingSizeScaleValue() const;
 	double getBestFocusScaleValue() const;
@@ -89,6 +89,9 @@ public:
 
     using SignalPauseClicked = sigc::signal<void()>;
     SignalPauseClicked signalPauseClicked();
+
+	using SignalEnterClicked = sigc::signal<void()>;
+	SignalEnterClicked signalEnterClicked();
 
 	using SignalFindFocusClicked = sigc::signal<void()>;
     SignalFindFocusClicked signalFindFocusClicked();
@@ -124,11 +127,13 @@ public:
 	Condition& getPausedRecording();
 
 	int getFrameSliderValue() const;
+	double getFrameRateEntryBox() const;
 	std::string getFileLocation() const;
 
 	void addRenderFilter(const std::string &key, RenderFilter *filter);
 	RenderFilter* removeRenderFilter(const std::string &key);
 	
+	void setTrackingFPS(bool val);
 protected:
 	virtual void on_realize() override;
 	virtual void on_show() override;
@@ -194,12 +199,11 @@ private:
     
     struct Private *priv;
     
-    ScaleWidget gainScale, exposeScale, gammaScale, frameRateScale, frameSlider, thresScale, scaleScale, waitScale, recordingSizeScale, bestFocusScale;
-    Gtk::Button recordButton, backToStartButton, pauseButton, playButton, fileLoadButton, fileSaveButton, findFocusButton, resetButton;
-    Gtk::Entry fileNameEntry;
+    ScaleWidget gainScale, exposeScale, gammaScale, frameSlider, thresScale, scaleScale, waitScale, recordingSizeScale, bestFocusScale;
+    Gtk::Button recordButton, backToStartButton, pauseButton, playButton, fileLoadButton, fileSaveButton, findFocusButton, resetButton, enterButton;
+    Gtk::Entry fileNameEntry, frameRateEntry;
     Gtk::FileChooserButton fileChooseButton;
     Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, holdFocusToggle, threedStabToggle, twodStabToggle;
-
     Gtk::Label fpsLabel;
 
 
@@ -216,6 +220,7 @@ private:
 	SignalScaleChanged sigScaleChanged;
 	SignalBestFocusChanged sigBestFocusChanged;
 	SignalPauseClicked sigPauseClicked;
+	SignalEnterClicked sigEnterClicked;
 	SignalFindFocusClicked sigFindFocusClicked;
 	SignalResetClicked sigResetClicked;
 
