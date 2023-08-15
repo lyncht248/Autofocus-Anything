@@ -15,6 +15,7 @@ class lens { //This object handles autofocusing
   public:
   lens();
   ~lens();   //Closes the motor serial port and ends thread
+  bool initialize(); //true if lens connects, false if not
 
   int serial_port = open("/dev/ttyUSB0", O_RDWR);
 

@@ -26,6 +26,7 @@ class autofocus { //This class handles autofocusing
   //Called by int main()
   autofocus();
   ~autofocus();
+  bool initialize(); //This was the constructor, but it needs to be called after the GUI is initialized
 
   void run(); 
 

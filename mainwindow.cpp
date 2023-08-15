@@ -21,7 +21,7 @@
 #include "logfile.hpp"
 #include "autofocus.hpp"
 
-bool bMainWindowLogFlag = 1; // 1 = log, 0 = no log
+bool bMainWindowLogFlag = 0; // 1 = log, 0 = no log
 
 struct MainWindow::Private
 {
@@ -348,6 +348,8 @@ MainWindow::MainWindow() : Gtk::Window(),
     threedStabToggle("3D Stab."),
 	twodStabToggle("2D Stab."),
     fpsLabel(""),
+	loadSaveLabel(""),
+	errorLabel(""),
 	//display(*this),
 	drawFrame(nullptr),
 	newDrawFrame(false),
@@ -501,7 +503,7 @@ MainWindow::MainWindow() : Gtk::Window(),
     //frameSlider.setSpinButtonWidth(5);
 	frameSliderConnection = frameSlider.signalChanged().connect(sigc::mem_fun(*this, &MainWindow::onFrameSliderChange) );
     
-    fileNameEntry.set_width_chars(16);
+    fileNameEntry.set_width_chars(14);
     
     fileChooseButton.set_tooltip_text("Choose another location");
     fileChooseButton.set_hexpand(false);
@@ -595,8 +597,10 @@ MainWindow::MainWindow() : Gtk::Window(),
 	trackingFPS.setValue(true);
 
 	playingBuffer.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenPlayingBufferToggled) );
-
+	loadSaveLabel.set_halign(Gtk::ALIGN_CENTER);
 	sigFrameDrawn.connect(sigc::mem_fun(*this, &MainWindow::onFrameDrawn) );
+
+	errorLabel.set_halign(Gtk::ALIGN_CENTER);
 
 	frameRateEntry.set_width_chars(3);
 	frameRateEntry.set_text("30");
@@ -681,6 +685,7 @@ MainWindow::MainWindow() : Gtk::Window(),
     priv->controlGrid.attach(priv->mediaBox, 14, 0);
     priv->controlGrid.attach(frameSlider, 14, 1);
     priv->controlGrid.attach(fpsLabel, 14, 2);
+	priv->controlGrid.attach(errorLabel, 14, 3);
 
 	priv->controlGrid.attach(priv->space4[7], 15, 0);
 	priv->controlGrid.attach(priv->verticalSeparator3, 16, 0, 1, 4);
@@ -700,10 +705,11 @@ MainWindow::MainWindow() : Gtk::Window(),
 	priv->controlGrid.attach(priv->space4[9], 20, 0);
 	priv->controlGrid.attach(priv->verticalSeparator4, 21, 0, 1, 4);
 	priv->controlGrid.attach(priv->space4[10], 22, 0);
+	priv->controlGrid.attach(loadSaveLabel, 23, 2, 2, 1);
 
 	priv->controlGrid.attach(priv->fileTitle, 23, 4, 2);
-    priv->fileChooserBox.add(fileNameEntry);
     priv->fileChooserBox.add(fileChooseButton);
+    priv->fileChooserBox.add(fileNameEntry);
     priv->controlGrid.attach(priv->fileChooserBox, 23, 0, 2, 1);
     priv->controlGrid.attach(fileLoadButton, 23, 1);
 
@@ -791,9 +797,19 @@ void MainWindow::getDisplayDimensions(double &w, double &h) const
 
 }
 
-void MainWindow::displayMessage(const std::string &msg)
+void MainWindow::displayMessageFPS(const std::string &msg)
 {
 	fpsLabel.set_text(msg);
+}
+
+void MainWindow::displayMessageLoadSave(const std::string &msg)
+{
+	loadSaveLabel.set_text(msg);
+}
+
+void MainWindow::displayMessageError(const std::string &msg)
+{
+	errorLabel.set_text(msg);
 }
 
 void MainWindow::renderFrame(VidFrame *frame)

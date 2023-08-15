@@ -7,7 +7,7 @@
 class tiltedcam { //This object handles the tilted camera
   public:
 
-  tiltedcam(); //Connects to, initializes, and opens a ZWO ASI camera. Then it sets relevant properties and starts a video stream. Returns 1 if successful, 0 if not.
+  bool initialize(); //Connects to, initializes, and opens a ZWO ASI camera. Then it sets relevant properties and starts a video stream. Returns 1 if successful, 0 if not.
   ~tiltedcam(); // Stops video stream and closes the camera
 
   // Getters

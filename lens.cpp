@@ -17,15 +17,21 @@
 #include <string>
 #include <iomanip>
 
-bool bLensLogFlag = 0; //Flag that is 1 for when the autofocus log is being written to, 0 when it is not
+bool bLensLogFlag = 1; //Flag that is 1 for when the autofocus log is being written to, 0 when it is not
 
 lens::lens() :
     stop_thread(false)
+{}
+
+
+bool lens::initialize()
 {
+    bool noErrors = true;
 
     // Check for errors
     if (serial_port < 0) {
         logger->error("[lens::lens] Error opening serial port");
+        noErrors = false;
     }
 
       // Create new termios struct, we call it 'tty' for convention
@@ -34,6 +40,7 @@ lens::lens() :
     // Read in existing settings, and handle any error
     if(tcgetattr(serial_port, &tty) != 0) {
         logger->error("[lens::lens] Error opening serial port");
+        noErrors = false;
     }
     
 
@@ -64,15 +71,25 @@ lens::lens() :
     if (tcsetattr(serial_port, TCSANOW, &tty) != 0) {
         //printf("Error %i from tcsetattr: %s\n", errno, strerror(errno));
         logger->error("[lens::lens] Error saving serial port settings");
+        noErrors = false;
     }
 
 
-    if(bLensLogFlag) logger->info("Serial Port initialized!");
 
-    // Start a thread to send and recieve signals from the lens motor asynchronously
-    if(bLensLogFlag) logger->info("[lens::lens] Starting and detaching lens thread");
-    std::thread tLens(&lens::lens_thread, this);
-    tLens.detach();
+    if(noErrors) {
+        if(bLensLogFlag) logger->info("Serial Port initialized!");
+
+        // Start a thread to send and recieve signals from the lens motor asynchronously
+        if(bLensLogFlag) logger->info("[lens::lens] Starting and detaching lens thread");
+        std::thread tLens(&lens::lens_thread, this);
+        tLens.detach();
+        return true;
+    }
+    else {
+        NotificationCenter::instance().postNotification("LensDisconnected");
+        logger->error("[lens::lens] Error opening serial port");
+        return false;
+    }
 }
 
 void lens::lens_thread() {
@@ -133,6 +150,11 @@ void lens::lens_thread() {
     return_to_start(); // Moves lens to callibrated start position
 
     while(!stop_thread.load()) {
+        if(bResetLens) {
+            return_to_start();
+            bResetLens = 0;
+        }
+
         if(bNewMoveRel) {
             mov_rel(mmToMove);
             bNewMoveRel = 0;

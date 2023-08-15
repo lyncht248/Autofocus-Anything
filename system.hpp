@@ -72,11 +72,11 @@ public:
 	MainWindow& getWindow();
 	Recorder& getRecorder();
 
-	void startStreaming();
+	bool startStreaming();
 	void stopStreaming();
 	
 	template<typename T>
-	void setFeature(const std::string &fname, T val)
+	bool setFeature(const std::string &fname, T val)
 	{
 		if (cam != nullptr)
 		{
@@ -84,12 +84,15 @@ public:
 			if (cam->GetFeatureByName(fname.c_str(), pFeature ) == VmbErrorSuccess && pFeature->SetValue(val) == VmbErrorSuccess)
 			{
 				logger->info("[System.hpp] Set {} to: {}", fname, val);
+				return true;
 			}
 			else
 			{
 				logger->error("[System.hpp] FAILED to set {} to: {}", fname, val);
+				return false;
 			}
 		}
+		return false;
 	}
 
 	template<typename T>
@@ -155,6 +158,7 @@ private:
 	bool onCloseClicked(const GdkEventAny* event);
 
 	void on_error();
+	void handleDisconnection();
 
 	struct Private;
 	MainWindow window; //object from mainwindow.cpp class
@@ -182,9 +186,13 @@ private:
 
 	Stabiliser stabiliser; //For running x-y stabilization
 	bool madeMap;
-
+	bool errorDialogShown = false;
 	//double actualFPS; //TODO: Implement actualFPS instead of using value in box
 
+	// Flags for disconnection states
+	bool tiltedCamDisconnected = false;
+	bool imagingCamDisconnected = false;
+	bool lensDisconnected = false;
 };
 
 #endif

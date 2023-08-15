@@ -49,14 +49,23 @@ int desiredLocBestFocus;
 std::atomic<double> mmToMove = 0.0;
 
 autofocus::autofocus() :
-  lens1(), //calls lens constructor, which homes lens, and passes the stop_thread controller
-  tiltedcam1(), //calls tiltedcam constructor, which opens tilted camera 
+  lens1(), 
+  tiltedcam1(),  
   stop_thread(false)
-{
-  // tiltedcam::settings camsettings = tiltedcam.getsettings();
-  tAutofocus = std::thread(&autofocus::run, this); // starts a thread that executes autofocus::run()
-	
-  if(bAutofocusLogFlag) {logger->info("[autofocus::autofocus] constructor completed and autofocus::run thread started");}
+{}
+
+bool autofocus::initialize() {
+  bool bLensInit = lens1.initialize();
+  bool bTiltedCamInit = tiltedcam1.initialize();
+  std::cout << "bLensInit: " << bLensInit << " bTiltedCamInit: " << bTiltedCamInit << "\n";
+  if(bLensInit && bTiltedCamInit) {
+      tAutofocus = std::thread(&autofocus::run, this); // starts a thread that executes autofocus::run()
+      if(bAutofocusLogFlag) {logger->info("[autofocus::autofocus] autofocus::run thread started");}
+      return true;
+  }
+  else {
+      return false;
+  }
 }
 
 autofocus::~autofocus() { 
@@ -108,10 +117,6 @@ void autofocus::run () {
   if(bAutofocusLogFlag) {logger->info("[autofocus::run] while thread loop about to start");}
   while(!stop_thread.load()) {
     
-    if(bResetLens) {
-      lens1.return_to_start();
-      bResetLens = 0;
-    }
 
     if (bNewImage && (bHoldFocus || bFindFocus)) {
 

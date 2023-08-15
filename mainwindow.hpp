@@ -68,7 +68,9 @@ public:
 
 	void updateCameraValues(double gain, double expose, double gamma);
 
-	void displayMessage(const std::string &msg);
+	void displayMessageFPS(const std::string &msg);
+	void displayMessageLoadSave(const std::string &msg);
+	void displayMessageError(const std::string &msg);
 
 	void renderFrame(VidFrame *frame);
 
@@ -204,7 +206,7 @@ private:
     Gtk::Entry fileNameEntry, frameRateEntry;
     Gtk::FileChooserButton fileChooseButton;
     Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, holdFocusToggle, threedStabToggle, twodStabToggle;
-    Gtk::Label fpsLabel;
+    Gtk::Label fpsLabel, loadSaveLabel, errorLabel;
 
 
 	VidFrame *drawFrame;

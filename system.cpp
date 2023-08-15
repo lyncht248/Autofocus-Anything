@@ -464,9 +464,26 @@ System::System(int argc, char **argv) :
 	if(bSystemLogFlag) {logger->info("[System::System] constructor beginning");}
 
 	//Error message handling!
-	NotificationCenter::instance().registerListener("error", [this]() {
+	NotificationCenter::instance().registerListener("outOfBoundsError", [this]() {
 		on_error();
 	});
+	// Registering listeners for device disconnections
+	NotificationCenter::instance().registerListener("TiltedCamDisconnected", [&]() {
+		tiltedCamDisconnected = true;
+		handleDisconnection();
+	});
+
+	NotificationCenter::instance().registerListener("ImagingCamDisconnected", [&]() {
+		imagingCamDisconnected = true;
+		handleDisconnection();
+	});
+
+	NotificationCenter::instance().registerListener("LensDisconnected", [&]() {
+		lensDisconnected = true;
+		handleDisconnection();
+	});
+
+	AF.initialize(); //Initialises the autofocus object. This was the constructor, but need to be able to catch errors
 
 	recorder->connectTo(&sRecorderOperationComplete);
 	sRecorderOperationComplete.connect(sigc::mem_fun(*this, &System::onRecorderOperationComplete) );
@@ -531,6 +548,11 @@ System::System(int argc, char **argv) :
 				pFeature->SetValue(VmbPixelFormatMono12);
 				*/
 			}
+			else
+			{
+				if(bSystemLogFlag) {logger->info("[System::System] Failed to find cameras");}
+			    NotificationCenter::instance().postNotification("ImagingCamDisconnected");
+			}
 		}
 		else
 		{
@@ -544,18 +566,23 @@ System::System(int argc, char **argv) :
 	whenLiveViewToggled(true); // calls startStreaming
 }
 
-void System::startStreaming()
+bool System::startStreaming()
 {
+	bool FPSsuccess = false;
+
+	std::cout << "Starting streaming" << std::endl;
 	if (cam != nullptr)
 	{
+		std::cout << "Camera not null" << std::endl;
 		if (cam->Open(VmbAccessModeFull) == VmbErrorSuccess)
 		{
+			std::cout << "Camera opened" << std::endl;
 			if(bSystemLogFlag) {logger->info("[System::startStreaming] Successfully opened camera");}
 			
 			window.updateCameraValues(getFeature<double>("Gain"), getFeature<double>("ExposureTime"), getFeature<double>("Gamma") );
 			setFeature("PixelFormat", VmbPixelFormatMono8);
 			setFeature("AcquisitionFrameRateEnable", true);
-			setFeature<double>("AcquisitionFrameRate", window.getFrameRateEntryBox() );
+			FPSsuccess = setFeature<double>("AcquisitionFrameRate", window.getFrameRateEntryBox() );
 
 			Vimba::FeaturePtr pFeature;
 			cam->GetFeatureByName("PayloadSize", pFeature);
@@ -576,6 +603,7 @@ void System::startStreaming()
 
 			if (cam->StartCapture() == VmbErrorSuccess)
 			{
+				std::cout << "Started capture" << std::endl;
 				for (Vimba::FramePtrVector::iterator iter = priv->frames.begin(); iter != priv->frames.end(); ++iter)
 				{
 					cam->QueueFrame(*iter);
@@ -589,16 +617,20 @@ void System::startStreaming()
 				}
 				else
 				{
+					std::cout << "goto fail" << std::endl;
 					goto fail;
 				}
 			}
 			else
 			{
-			fail:;
+				fail:;
+				std::cout << "At fail" << std::endl;
+			    NotificationCenter::instance().postNotification("ImagingCamDisconnected");
 				if(bSystemLogFlag) {logger->info("[System::startStreaming] Failed to start frame capture");} //TODO might need to mem manage below here
 			}
 		}
 	}
+	return FPSsuccess;
 }
 
 void System::stopStreaming()
@@ -843,7 +875,7 @@ void System::whenSavingToggled(bool saving)
 {
 	if (saving)
 	{
-		window.displayMessage("Saving...");
+		window.displayMessageLoadSave("Saving...");
 		recorder->signalOperationSave().emit(window.getFileLocation() );
 	}
 }
@@ -917,9 +949,9 @@ void System::onRecorderOperationComplete(RecOpRes res)
 		case Recorder::Operation::RECOP_FILLED:
 			if(bSystemLogFlag) {logger->info("[System::onRecorderOperationComplete] Recorder stopped recording");}
 			if (success)
-				window.displayMessage("Recording complete. Remember to save!");
+				window.displayMessageFPS("Recording complete. Remember to save!");
 			else
-				window.displayMessage("Recording failed");
+				window.displayMessageFPS("Recording failed");
 			window.setLiveView(!success);
 			window.setHasBuffer(success);
 			window.setRecording(false);
@@ -942,10 +974,12 @@ void System::onRecorderOperationComplete(RecOpRes res)
 		case Recorder::Operation::RECOP_LOAD:
 			if (window.getLoading().getValue() )
 			{
-				if (success)
-					window.displayMessage("Loading complete");
+				if (success) {
+					window.displayMessageLoadSave("Loading complete");
+					window.displayMessageFPS("");
+				}
 				else
-					window.displayMessage("Loading failed");
+					window.displayMessageLoadSave("Loading failed");
 				window.setLoading(false);
 			}
 			window.setHasBuffer(success);
@@ -955,9 +989,9 @@ void System::onRecorderOperationComplete(RecOpRes res)
 		case Recorder::Operation::RECOP_SAVE:
 			window.setSaving(false);
 			if (success)
-				window.displayMessage("Saving complete");
+				window.displayMessageLoadSave("Saving complete");
 			else
-				window.displayMessage("Saving failed");
+				window.displayMessageLoadSave("Saving failed");
 			break;
 
 		case Recorder::Operation::RECOP_BUFFER:
@@ -967,9 +1001,9 @@ void System::onRecorderOperationComplete(RecOpRes res)
 
 		case Recorder::Operation::RECOP_ADDFRAME:
 			if (window.getLoading().getValue() )
-				window.displayMessage(std::string("Loaded frame: ") + std::to_string(recorder->countFrames() ) );
+				window.displayMessageLoadSave(std::string("Loaded frame: ") + std::to_string(recorder->countFrames() ) );
 			else if (window.getRecording().getValue() )
-				window.displayMessage(std::string("Recorded frame: ") + std::to_string(recorder->countFrames() ) );
+				window.displayMessageFPS(std::string("Recorded frame: ") + std::to_string(recorder->countFrames() ) + std::string(" of ") + std::to_string(static_cast<int>(window.getRecordingSizeScaleValue())) );
 			break;
 		case Recorder::Operation::RECOP_EMPTIED:
 			window.setHasBuffer(false);
@@ -1059,8 +1093,14 @@ void System::onWindowEnterClicked()
 		if(window.getLiveView().getValue()) //if Live, must restart camera
 		{
 			stopStreaming();
-			usleep(1000000); //sleep for 1s
-			startStreaming();
+			usleep(500000); //sleep for 0.5s
+			std::cout << "about to start streaming" << std::endl;
+			if(!startStreaming()) 
+			{
+				std::cout << "failed to set FPS" << std::endl;
+				window.displayMessageError("Failed to Set FPS");
+			}
+			else {window.displayMessageError("");}
 		}
 		if(recorder->isBuffering()) //if Buffering, must restart buffering at new frame rate
 		{
@@ -1073,7 +1113,7 @@ void System::onWindowEnterClicked()
 		//TODO: Deal with frameRate FAILED to set
 	}
 	else {
-		window.displayMessage("FPS Out-of-range");
+		window.displayMessageFPS("FPS Out-of-range");
 	}
 
 	if(bSystemLogFlag) {logger->info("[System::onEnterClicked] Enter key pressed");}
@@ -1122,10 +1162,48 @@ Recorder& System::getRecorder()
 
 void System::on_error()
 {
-	Gtk::MessageDialog dialog("Error: Air-Lens has hit the edge of the slide", false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
-	dialog.set_secondary_text("Please 'Reset' the lens and restart");
-	dialog.set_position(Gtk::WIN_POS_CENTER);
-	dialog.set_keep_above(true);
-	dialog.run();
+	if (!errorDialogShown) { // Check if error dialog is not currently displayed
+		errorDialogShown = true; // Set the flag to true as we are going to display the dialog
 
+		Gtk::MessageDialog dialog("Error: Air-Lens has hit the edge of the slide", false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
+		dialog.set_secondary_text("Please 'Reset' the lens and restart");
+		dialog.set_position(Gtk::WIN_POS_CENTER);
+		dialog.set_keep_above(true);
+		dialog.run();
+
+		errorDialogShown = false; // Reset the flag after dialog is closed
+	}
+}
+
+void System::handleDisconnection()
+{
+	std::cout << "Handling disconnection, tiltedCamDisconnected: " << tiltedCamDisconnected << ", imagingCamDisconnected: " << imagingCamDisconnected << ", lensDisconnected: " << lensDisconnected << std::endl;
+	if (tiltedCamDisconnected && imagingCamDisconnected && lensDisconnected) {
+		std::cout << "All devices are disconnected!" << std::endl;
+		window.displayMessageError("Imaging Camera, Tilted Camera, and Lens are Disconnected");
+	} 
+	else if (tiltedCamDisconnected && imagingCamDisconnected) {
+		std::cout << "Tilted Camera and Imaging Camera are Disconnected!" << std::endl;
+		window.displayMessageError("Imaging Camera and Tilted Camera are Disconnected");
+	}
+	else if (tiltedCamDisconnected && lensDisconnected) {
+		std::cout << "TiltedCam and Lens are disconnected!" << std::endl;
+		window.displayMessageError("Tilted Camera and Lens are Disconnected");
+	}
+	else if (imagingCamDisconnected && lensDisconnected) {
+		std::cout << "ImagingCam and Lens are disconnected!" << std::endl;
+		window.displayMessageError("Imaging Camera and Lens are Disconnected");
+	}
+	else if (imagingCamDisconnected) {
+		std::cout << "ImagingCam is disconnected!" << std::endl;
+		window.displayMessageError("Imaging Camera is Disconnected");
+	}
+	else if (lensDisconnected) {
+		std::cout << "Lens is disconnected!" << std::endl;
+		window.displayMessageError("Lens is Disconnected");
+	}
+	else if (tiltedCamDisconnected) {
+		std::cout << "TiltedCam is disconnected!" << std::endl;
+		window.displayMessageError("Tilted Camera is Disconnected");
+	} 
 }

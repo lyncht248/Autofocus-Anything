@@ -1,7 +1,7 @@
 #include "tiltedcam.hpp"
 #include "autofocus.hpp"
 #include "logfile.hpp"
-
+#include "notificationCenter.hpp"
 #include <iostream>
 #include <unistd.h>
 
@@ -10,15 +10,18 @@
 
 bool bTiltedCamLogFlag = 1; // 1 = log, 0 = don't log
 
-tiltedcam::tiltedcam() {
+bool tiltedcam::initialize() {
+    bool noError = true;
 
     int iNumofConnectCameras = ASIGetNumOfConnectedCameras();
+    std::cout << "Number of connected cameras: " << iNumofConnectCameras << "\n";
 
     if (iNumofConnectCameras > 0) {
         if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] connected to the tilted camera");
      }
     else {
         logger->error("[tiltedcam::tiltedcam()] failed to connect to the tilted camera");
+        noError = false;
     }
 
 
@@ -27,6 +30,7 @@ tiltedcam::tiltedcam() {
     }
     else {
         logger->error("[tiltedcam::tiltedcam()] failed to open the tilted camera");
+        noError = false;
     }
 
     if (ASIInitCamera(0) == ASI_SUCCESS) {
@@ -34,6 +38,7 @@ tiltedcam::tiltedcam() {
     }
     else {
         logger->error("[tiltedcam::tiltedcam()] failed to initialize the tilted camera");
+        noError = false;
     }    
 
     if (ASISetControlValue(0, ASI_EXPOSURE, 16000, ASI_FALSE) == ASI_SUCCESS) {
@@ -41,6 +46,7 @@ tiltedcam::tiltedcam() {
     }
     else {
         logger->error("[tiltedcam::tiltedcam()] failed to set tilted camera exposure");
+        noError = false;
     }    
 
 
@@ -49,6 +55,7 @@ tiltedcam::tiltedcam() {
     }
     else {
         logger->error("[tiltedcam::tiltedcam()] failed to set tilted camera gain");
+        noError = false;
     }   
 
     if (ASISetControlValue(0, ASI_HIGH_SPEED_MODE, 1, ASI_FALSE) == ASI_SUCCESS) {
@@ -56,6 +63,7 @@ tiltedcam::tiltedcam() {
     }
     else {
         logger->error("[tiltedcam::tiltedcam()] failed to set tilted camera to highspeed mode");
+        noError = false;
     }
 
     //ASISetControlValue(0, ASI_AUTO_MAX_EXP, 15, ASI_TRUE);
@@ -68,6 +76,7 @@ tiltedcam::tiltedcam() {
     }
     else {
         logger->error("[tiltedcam::tiltedcam()] failed to set ROI format for tilted camera");
+        noError = false;
     }; 
 
     usleep(100000);
@@ -77,7 +86,19 @@ tiltedcam::tiltedcam() {
     }
     else {
         logger->error("[tiltedcam::tiltedcam()] failed to start video capture");
+        noError = false;
     }; 
+
+    std::cout << "final result of TiltedCam::noError: " << noError << "\n";
+    if (noError) {
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] tilted camera initialized successfully");
+        return noError;
+    }
+    else {
+        logger->error("[tiltedcam::tiltedcam()] tilted camera failed to initialize");
+        NotificationCenter::instance().postNotification("TiltedCamDisconnected");
+        return noError;
+    }
 
     if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] constructor finished");
 }
