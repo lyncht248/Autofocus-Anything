@@ -17,7 +17,7 @@
 #include <string>
 #include <iomanip>
 
-bool bLensLogFlag = 1; //Flag that is 1 for when the autofocus log is being written to, 0 when it is not
+bool bLensLogFlag = 0; //Flag that is 1 for when the autofocus log is being written to, 0 when it is not
 
 lens::lens() :
     stop_thread(false)
@@ -295,7 +295,7 @@ void lens::mov_rel(double mmToMove) {
     else {
         logger->error("[lens::mov_rel] Lens is out of bounds!");
         if (outOfBoundsOnceOnly == 0) {
-            NotificationCenter::instance().postNotification("error");
+            NotificationCenter::instance().postNotification("outOfBoundsError");
             outOfBoundsOnceOnly = 10; //Ten successful moves means lens has returned from being out-of-bounds
         }
     }

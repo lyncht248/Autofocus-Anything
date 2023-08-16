@@ -8,7 +8,7 @@
 #include <atomic>
 #include <thread>
 
-bool bTiltedCamLogFlag = 1; // 1 = log, 0 = don't log
+bool bTiltedCamLogFlag = 0; // 1 = log, 0 = don't log
 
 bool tiltedcam::initialize() {
     bool noError = true;

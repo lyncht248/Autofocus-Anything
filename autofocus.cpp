@@ -47,6 +47,7 @@ bool bNewMoveRel = 0;
 int desiredLocBestFocus;
 
 std::atomic<double> mmToMove = 0.0;
+int increment = 0;
 
 autofocus::autofocus() :
   lens1(), 
@@ -78,11 +79,19 @@ autofocus::~autofocus() {
 }
 
 void autofocus::run () {
+
+  // std::ofstream out_file("/home/hvi/Desktop/HVI-data/output.txt");
+  // std::streambuf* original_cout = std::cout.rdbuf();  // Save the buffer of std::cout
+  // std::cout.rdbuf(out_file.rdbuf());                  // Redirect std::cout to the file
+
   auto t1 = std::chrono::steady_clock::now();
   usleep(10000);
   auto t2 = std::chrono::steady_clock::now();
   auto s_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
   
+  //For detecting oscillations
+  std::deque<int> locBestFocusHistory; // use deque for easy push/pop at front and back
+
   //Scale the 1280*960 image to 640*480, or 320*240, etc.
   double scale = 0.5; 
 
@@ -92,7 +101,7 @@ void autofocus::run () {
   //The following variables assume imgWidth = 320; must be changed if this isn't the case.
   int moved = 1;
   int previous = desiredLocBestFocus; //TODO: should be in a mutex
-  int tol = 12 * scale; //Tolerance zone of pixels about the desiredLocBestFocus where no lense movement is triggered. Lower than 4 causes constant signals to lens
+  int tol = 16 * scale; //Tolerance zone of pixels about the desiredLocBestFocus where no lense movement is triggered. Lower than 4 causes constant signals to lens
   //Should be 4 for scale=0.5
   int blink = 0; //Becomes 1 when a blink is detected
   int blinkframes = 15; //number of frames to ignore when blink is detected
@@ -105,13 +114,14 @@ void autofocus::run () {
   int imHeight = tiltedcam1.getImageHeight();
 
   //// PID CONTROLLER
+  // Tuning: found K_cr = 0.004, T_cr = 0.0524s, so using Kp = 0.0024, Ki = 0.0916, Kd = 0.00001572
   double dt = 1.0 / 60.0; //time per frame on the TILTED CAMERA! Assumes 60Hz. TODO
   double max = 3;  //maximum relative move the lens can be ordered to make. Set to +-3mm
   double min = -3; 
   //double Kp = 0.0018 * 3.0; //*4-5.0 is on the edge of instability; *3.0 seems stable
-  double Kp = 0.0020;
-  double Ki = 0;
-  double Kd = 0; //Should try to add a small Kd; further testing required
+  double Kp = 0.004;
+  double Ki = 0.0;
+  double Kd = 0.0; //Should try to add a small Kd; further testing required
   PID pid = PID(dt, max, min, Kp, Kd, Ki);  
 
   if(bAutofocusLogFlag) {logger->info("[autofocus::run] while thread loop about to start");}
@@ -158,16 +168,10 @@ void autofocus::run () {
         if (bSaveImages) {cv::imwrite(FilePath, resized);};
         //cv::waitKey(0);
 
-      // Past here could become a separate thread which takes the most updated locBestFocus and moves the motor
-      // if (imgcount < 3) {
-      //   //Ignore first three frames, just in case...
-      // }
-      // If holding focus, desiredLocBestFocus becomes the current location of best-focus, otherwise we use 160
+      std::cout << s_int.count() << ", " << desiredLocBestFocus << ", " << locBestFocus << ", ";
 
-      // if (imgcount > 1) {
-      //   desiredLocBestFocus = int(window.getBestFocusScaleValue());
-      // }
 
+      //If imgcount==1, then the user has just turned on FindFocus or HoldFocus
       if (imgcount == 1) {
           if (bHoldFocus) {
             desiredLocBestFocus = locBestFocus;
@@ -182,40 +186,65 @@ void autofocus::run () {
           }
       }
 
-      //// BLINK DETECTION. TODO: try removing 'moved' variable
-      else if (moved == 0 && blink == 0 && abs(locBestFocus - previous) > (50) && bBlinking) { // if the location of best focus changes by more than 50 pixels with no move, it is a blink
-          //Blink starts
-          if(bAutofocusLogFlag) logger->info("[autofocus::run] Frame ignored; blink detected");
-          blink = 1;
-      }
-      else if (blink == 1) {
-          if(bAutofocusLogFlag) logger->info("[autofocus::run] Frame ignored; blink detected");
-          blinkframes--;
-          if (blinkframes == 0) {
-              blinkframes = 15; //resets blinkframes
-              blink = 0;
-          }
-      }
-
+      // //// BLINK DETECTION. TODO: try removing 'moved' variable
+      // else if (moved == 0 && blink == 0 && abs(locBestFocus - previous) > (50) && bBlinking) { // if the location of best focus changes by more than 50 pixels with no move, it is a blink
+      //     //Blink starts
+      //     if(bAutofocusLogFlag) logger->info("[autofocus::run] Frame ignored; blink detected");
+      //     blink = 1;
+      // }
+      // else if (blink == 1) {
+      //     if(bAutofocusLogFlag) logger->info("[autofocus::run] Frame ignored; blink detected");
+      //     blinkframes--;
+      //     if (blinkframes == 0) {
+      //         blinkframes = 15; //resets blinkframes
+      //         blink = 0;
+      //     }
+      // }
+      
 
       else {
           //do nothing inside tol band
           if (abs(locBestFocus - desiredLocBestFocus) <= tol) { // tol
-              // std::cout << s_int.count() << ", ";
-              // std::cout << "\n";
-              moved = 0;
-          }
+            std::cout << ", in TOL band\n";
+            moved = 0;
 
-          else {
-              // PID CONTROLLER
-              mmToMove = pid.calculate(desiredLocBestFocus, locBestFocus) * -1.0;
-              bNewMoveRel = 1;
-
-              // std::cout << s_int.count() << ", ";
-              // std::cout << mmToMove << "\n";
-              moved = 1;
+            locBestFocusHistory.clear(); //When a value is inside the tolerance band, focus has been found, so clear the history
           }
-      }
+          else { //outside tol band
+            // PID CONTROLLER with TOL band removed
+            if(locBestFocus - desiredLocBestFocus > 0) {
+              mmToMove = pid.calculate(desiredLocBestFocus + tol, locBestFocus) * -1.0;
+              std::cout << mmToMove << "\n";
+            }
+            else if(locBestFocus - desiredLocBestFocus < 0) {
+              mmToMove = pid.calculate(desiredLocBestFocus - tol, locBestFocus) * -1.0;
+              std::cout << mmToMove << "\n";
+            }              
+            bNewMoveRel = 1;
+            moved = 1;
+            
+            //// OSCILLATION DETECTION
+            //Adding to locBestFocusHistory when outside TOL band
+            locBestFocusHistory.push_back(locBestFocus);
+            // If we have more than 20 values, remove the oldest
+            if (locBestFocusHistory.size() > 20) {
+              locBestFocusHistory.pop_front();
+            }
+            // Check if history contains values both above and below desiredLocBestFocus
+            if(locBestFocusHistory.size() == 20) {
+              bool hasAbove = std::any_of(locBestFocusHistory.begin(), locBestFocusHistory.end(), [](int x) { return x > desiredLocBestFocus; });
+              bool hasBelow = std::any_of(locBestFocusHistory.begin(), locBestFocusHistory.end(), [](int x) { return x < desiredLocBestFocus; });              if (hasAbove && hasBelow) {
+                // Find the value closest to desiredLocBestFocus
+                auto closestIt = std::min_element(locBestFocusHistory.begin(), locBestFocusHistory.end(), [](int a, int b) {
+                    return std::abs(a - desiredLocBestFocus) < std::abs(b - desiredLocBestFocus);
+                });
+                desiredLocBestFocus = *closestIt;
+                std::cout << "DETECTED OSCILLATION!! Adjusting desiredLocBestFocus to " << desiredLocBestFocus << "\n";
+                locBestFocusHistory.clear(); // Clear history after adjusting desiredLocBestFocus
+              }
+            }
+          }
+        } 
       previous = locBestFocus;
       t2 = std::chrono::steady_clock::now();
       s_int = s_int + std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
@@ -231,6 +260,8 @@ void autofocus::run () {
   // std::cout << " Analyzed " << imgcountfile << " images in " << s_int.count() << " milliseconds" << "\n";
   tCaptureVideo.join(); // Stops the CaptureVideo thread too
 
+  // std::cout.rdbuf(original_cout);  // Redirect std::cout back to the console
+  // out_file.close();
 } 
 
 //TODO: This should be in tiltedcam.cc, but I need to use the global variables... Poor code!
@@ -315,9 +346,9 @@ int autofocus::computebestfocusReversed (cv::Mat image, int imgHeight, int imgWi
   std::vector<double> sharpnesscurvenormalized = fitnormalcurve(sharpnesscurve, kernel);
 
   // //printing to text files for testing
-  //  std::string FileName = "TEST";
-  //  std::string TextFile = "/home/hvi/Desktop/HVI-data/" + FileName + "_SharpnessCurve.txt";
-  //  std::string TextFile2 = "/home/hvi/Desktop/HVI-data/" + FileName + "_FittedNorm.txt";
+  //  std::string FileName = "TESTING" + std::to_string(increment);
+  //  std::string TextFile = "/home/hvi/Desktop/HVI-data/OscillationTesting/" + FileName + "_SharpnessCurve.txt";
+  //  std::string TextFile2 = "/home/hvi/Desktop/HVI-data/OscillationTesting/" + FileName + "_FittedNorm.txt";
   //  std::ofstream outputFile(TextFile);
   //  std::ofstream outputFile2(TextFile2);
   //  std::ostream_iterator<double> output_iterator(outputFile, ", ");
@@ -328,6 +359,7 @@ int autofocus::computebestfocusReversed (cv::Mat image, int imgHeight, int imgWi
   //  outputFile2 << "\n";
   //  outputFile.close();
   //  outputFile2.close();
+  //   increment++;
 
   int locBestFocus = distance( begin(sharpnesscurvenormalized), max_element(begin(sharpnesscurvenormalized), end(sharpnesscurvenormalized)));
   return locBestFocus + kernel/2; 
@@ -458,7 +490,7 @@ std::vector<double> autofocus::fitnormalcurve(std::vector<double> sharpnesscurve
     // Fits a normal curve to the data. Should try to find a proper curve-fitting library... 
     std::vector<double> norm_curve;
     std::vector<double> sum_of_diffs;
-    double std_dev = 56.0 * (sharpnesscurve.size() / 400.0); //determined experimentally using 304-length data, and approximately scaled for larger images. TODO: Tune properly!
+    double std_dev = 70.0 * (sharpnesscurve.size() / 400.0); //determined experimentally using 304-length data, and approximately scaled for larger images. TODO: Tune properly!
     //double std_dev = 56.0 * (sharpnesscurve.size() / 304.0); //determined experimentally using 304-length data, and approximately scaled for larger images. Needs to be replaced! (was 58)
     double amplitude = (*max_element(begin(sharpnesscurve), end(sharpnesscurve)) - *min_element(begin(sharpnesscurve), end(sharpnesscurve))); 
     double offset = *min_element(begin(sharpnesscurve), end(sharpnesscurve));

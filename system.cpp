@@ -19,7 +19,7 @@
 #include "autofocus.hpp"
 #include "notificationCenter.hpp"
 
-bool bSystemLogFlag = 1; // 1 = log, 0 = no log
+bool bSystemLogFlag = 0; // 1 = log, 0 = no log
 bool bSystemQueueLengthFlag = 0; // 1 = log, 0 = no log
 bool bSystemFramesFlag = 0; // Used to track how each frame passes through the system
 
