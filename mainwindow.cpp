@@ -49,8 +49,8 @@ MainWindow::Private::Private() :
     exposeLabel("Expose (us): "),
     gammaLabel("Gamma: "),
     frameRateLabel("Frame rate: "),
-    thresLabel("Threshold: "),
-    scaleLabel("Scale: "),
+    // thresLabel("Threshold: "),
+    // scaleLabel("Scale: "),
 	//waitLabel("Optimize: "),
 	recordingSizeLabel("Rec. Size: "),
     bestFocusLabel("Best-Focal Plane"),
@@ -80,10 +80,10 @@ MainWindow::Private::Private() :
     gammaLabel.set_halign(Gtk::Align::ALIGN_END);
     frameRateLabel.set_justify(Gtk::Justification::JUSTIFY_RIGHT);
     frameRateLabel.set_halign(Gtk::Align::ALIGN_END);
-    thresLabel.set_justify(Gtk::Justification::JUSTIFY_RIGHT);
-    thresLabel.set_halign(Gtk::Align::ALIGN_END);
-    scaleLabel.set_justify(Gtk::Justification::JUSTIFY_RIGHT);
-    scaleLabel.set_halign(Gtk::Align::ALIGN_END);
+    //thresLabel.set_justify(Gtk::Justification::JUSTIFY_RIGHT);
+    //thresLabel.set_halign(Gtk::Align::ALIGN_END);
+    //scaleLabel.set_justify(Gtk::Justification::JUSTIFY_RIGHT);
+    //scaleLabel.set_halign(Gtk::Align::ALIGN_END);
     // waitLabel.set_justify(Gtk::Justification::JUSTIFY_RIGHT);
     // waitLabel.set_halign(Gtk::Align::ALIGN_END);
    	recordingSizeLabel.set_justify(Gtk::Justification::JUSTIFY_RIGHT);
@@ -322,8 +322,8 @@ MainWindow::MainWindow() : Gtk::Window(),
     gammaScale(0.5, 2.5, 0.01, 1, 7, 150),
 	//frameRateScale(20, 80, 5, 30, 7, 150),
     frameSlider(0, 1799, 1, 0, 5, 200),
-    thresScale(0, 1, 0.01, 0.4, 6, 100),
-    scaleScale(0, 5, 0.01, 2.0, 6, 100),
+    //thresScale(0, 1, 0.01, 0.4, 6, 100),
+    //scaleScale(0, 5, 0.01, 2.0, 6, 100),
     waitScale(0, HVIGTK_STAB_LIM, 100, 0, 6, 100),
 	recordingSizeScale(100, 1800, 10, 900, 6, 100),
     //bestFocusScale(8, 632, 5, 200, 4, 100),
@@ -333,13 +333,14 @@ MainWindow::MainWindow() : Gtk::Window(),
     backToStartButton(),
     pauseButton(),
     playButton(),
-	resetButton("Reset"),
+	resetButton("Reset Lens"),
+	recenterButton("Recenter"),
     fileLoadButton("Load"),
     fileSaveButton("Save"),
 	frameRateEntry(),
 	enterButton("Enter"),
     liveToggle(),
-    makeMapToggle("Make Map"),
+    //makeMapToggle("Make Map"),
     stabiliseToggle("XY Stab."),
     showMapToggle("Show Map"),
     findFocusButton("Find Focus"),
@@ -353,7 +354,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 	drawFrame(nullptr),
 	newDrawFrame(false),
 	countFrames(),
-	makeMapActive(),
+	//makeMapActive(),
 	stabiliseActive(),
     showMapActive(),
 	holdFocusActive(),
@@ -370,8 +371,8 @@ MainWindow::MainWindow() : Gtk::Window(),
 	trackingFPS(),
 	sigFrameDrawn(),
 	sigFeatureUpdated(),
-	sigThresholdChanged(),
-	sigScaleChanged(),
+	//sigThresholdChanged(),
+	//sigScaleChanged(),
 	sigBestFocusChanged(),
 	gainScaleConnection(),
 	exposeScaleConnection(),
@@ -400,10 +401,12 @@ MainWindow::MainWindow() : Gtk::Window(),
 
 	//frameRateScaleConnection = frameRateScale.signalChanged().connect(sigc::mem_fun(*this, &MainWindow::onFrameRateChange) );
     
+	recenterButton.set_sensitive(false);
+
 	//Tooltip text for the buttons
-	makeMapToggle.set_tooltip_text("Make a vessel map of the current recording using given threshold and scale values");
+	//makeMapToggle.set_tooltip_text("Make a vessel map of the current recording using given threshold and scale values");
 	stabiliseToggle.set_tooltip_text("Using vessel map, XY-stabilise the current recording");
-	showMapToggle.set_tooltip_text("Show the loaded vessel map");
+	//showMapToggle.set_tooltip_text("Show the loaded vessel map");
     findFocusButton.set_tooltip_text("Finds focal plane with highest sharpness");
 	holdFocusToggle.set_tooltip_text("Holds current focal plane in-focus (even if not ");
 	threedStabToggle.set_tooltip_text("Shortcut for live angiograms which uses 'Hold Focus' and 'XY-Stab'");
@@ -509,19 +512,19 @@ MainWindow::MainWindow() : Gtk::Window(),
     fileSaveButton.set_sensitive(false);
 	fileSaveButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onSaveButtonClicked) );
     
-    stabiliseToggle.set_sensitive(false);
-    showMapToggle.set_sensitive(false);
-	showMapToggle.signal_clicked();
+    stabiliseToggle.set_sensitive(true);
+    //showMapToggle.set_sensitive(false);
+	//showMapToggle.signal_clicked();
     
     //thresScale.setScaleSizeRequest(100, 0);
     //thresScale.setSpinButtonWidth(4);
-    thresScale.setSpinButtonPrec(2);
-	thresScale.signalChanged().connect(sigc::mem_fun(*this, &MainWindow::onThresScaleChange) );
+    //thresScale.setSpinButtonPrec(2);
+	//thresScale.signalChanged().connect(sigc::mem_fun(*this, &MainWindow::onThresScaleChange) );
     
     //scaleScale.setScaleSizeRequest(100, 0);
     //scaleScale.setSpinButtonWidth(4);
-    scaleScale.setSpinButtonPrec(2);
-	scaleScale.signalChanged().connect(sigc::mem_fun(*this, &MainWindow::onScaleScaleChange) );
+    //scaleScale.setSpinButtonPrec(2);
+	//scaleScale.signalChanged().connect(sigc::mem_fun(*this, &MainWindow::onScaleScaleChange) );
 	recordingSizeScale.set_tooltip_text("Set the maximum number of frames for a single recording");
 	recordingSizeScale.signalChanged().connect(sigc::mem_fun(*this, &MainWindow::onRecordingSizeScaleChange) );
     
@@ -545,19 +548,22 @@ MainWindow::MainWindow() : Gtk::Window(),
 
     //CONDITIONS 
 
-	makeMapActive.toggleOnSignal(makeMapToggle.signal_toggled() );
-    makeMapActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenMakeMapToggled) );
+	// makeMapActive.toggleOnSignal(makeMapToggle.signal_toggled() );
+    // makeMapActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenMakeMapToggled) );
 
 	stabiliseActive.toggleOnSignal(stabiliseToggle.signal_toggled() );
 	stabiliseActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenStabiliseToggled) );
 
-	showMapActive.toggleOnSignal(showMapToggle.signal_toggled() );
-	showMapActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenShowMapToggled) );
+	//showMapActive.toggleOnSignal(showMapToggle.signal_toggled() );
+	//showMapActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenShowMapToggled) );
 
 	findFocusButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onFindFocusClicked));
 
 	resetButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onResetClicked));
     resetButton.set_tooltip_text("Resets the lens to home position");
+
+	recenterButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onRecenterClicked));
+	recenterButton.set_tooltip_text("Recenter the rendered video frames");
 
 	holdFocusActive.toggleOnSignal(holdFocusToggle.signal_toggled() );
 	holdFocusActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenHoldFocusToggled) );
@@ -565,8 +571,8 @@ MainWindow::MainWindow() : Gtk::Window(),
 	threedStabActive.toggleOnSignal(threedStabToggle.signal_toggled() );
 	threedStabActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::when3DStabToggled) );
 
-	twodStabActive.toggleOnSignal(twodStabToggle.signal_toggled() );
-	twodStabActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::when2DStabToggled) );
+	// twodStabActive.toggleOnSignal(twodStabToggle.signal_toggled() );
+	// twodStabActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::when2DStabToggled) );
 
 	hasBuffer.signalTrue().connect(sigc::mem_fun(*this, &MainWindow::bufferFilled) );
 	hasBuffer.signalFalse().connect(sigc::mem_fun(*this, &MainWindow::bufferEmptied) );
@@ -663,20 +669,21 @@ MainWindow::MainWindow() : Gtk::Window(),
 	priv->controlGrid.attach(priv->space4[3], 6, 0);
 
 	priv->controlGrid.attach(priv->stabilizationTitle, 7, 4, 4);
-    priv->controlGrid.attach(makeMapToggle, 7, 0);
-    priv->controlGrid.attach(stabiliseToggle, 7, 1);
-    priv->controlGrid.attach(showMapToggle, 7, 2);
+    //priv->controlGrid.attach(makeMapToggle, 7, 0); DEPRECATED
+    priv->controlGrid.attach(stabiliseToggle, 7, 0);
+	priv->controlGrid.attach(recenterButton, 7, 1);
+    //priv->controlGrid.attach(showMapToggle, 7, 2); DEPRECATED
 	//priv->controlGrid.attach(twodStabToggle, 7, 3); Retired functionality
 
     priv->controlGrid.attach(priv->space4[4], 8, 0);
 
-    priv->controlGrid.attach(priv->thresLabel, 9, 0);
-    priv->controlGrid.attach(priv->scaleLabel, 9, 1);
-    priv->controlGrid.attach(priv->recordingSizeLabel, 9, 2);
+    //priv->controlGrid.attach(priv->thresLabel, 9, 0); DEPRECATED
+    //priv->controlGrid.attach(priv->scaleLabel, 9, 1); DEPRECATED
+    priv->controlGrid.attach(priv->recordingSizeLabel, 9, 0);
 
-    priv->controlGrid.attach(thresScale, 10, 0);
-    priv->controlGrid.attach(scaleScale, 10, 1);
-    priv->controlGrid.attach(recordingSizeScale, 10, 2);
+    // priv->controlGrid.attach(thresScale, 10, 0);
+    // priv->controlGrid.attach(scaleScale, 10, 1);
+    priv->controlGrid.attach(recordingSizeScale, 10, 0);
 
 	priv->controlGrid.attach(priv->space4[5], 11, 0);
 	priv->controlGrid.attach(priv->verticalSeparator2, 12, 0, 1, 4);
@@ -836,15 +843,15 @@ MainWindow::SignalFeatureUpdated MainWindow::signalFeatureUpdated()
 	return sigFeatureUpdated;
 }
 
-MainWindow::SignalThresholdChanged MainWindow::signalThresholdChanged()
-{
-	return sigThresholdChanged;
-}
+// MainWindow::SignalThresholdChanged MainWindow::signalThresholdChanged()
+// {
+// 	return sigThresholdChanged;
+// }
 
-MainWindow::SignalScaleChanged MainWindow::signalScaleChanged()
-{
-	return sigScaleChanged;
-}
+// MainWindow::SignalScaleChanged MainWindow::signalScaleChanged()
+// {
+// 	return sigScaleChanged;
+// }
 
 MainWindow::SignalBestFocusChanged MainWindow::signalBestFocusChanged()
 {
@@ -869,6 +876,11 @@ MainWindow::SignalFindFocusClicked MainWindow::signalFindFocusClicked()
 MainWindow::SignalResetClicked MainWindow::signalResetClicked()
 {
 	return sigResetClicked;
+}
+
+MainWindow::SignalRecenterClicked MainWindow::signalRecenterClicked()
+{
+	return sigRecenterClicked;
 }
 
 void MainWindow::setHasBuffer(bool val)
@@ -921,16 +933,16 @@ void MainWindow::setRecording(bool val)
 	recording.setValue(val);
 }
 
-void MainWindow::setMakingMap(bool val)
-{
-	//makeMapActive.setValue(val);
-	makeMapToggle.set_active(val);
-}
+// void MainWindow::setMakingMap(bool val)
+// {
+// 	//makeMapActive.setValue(val);
+// 	makeMapToggle.set_active(val);
+// }
 
-void MainWindow::setShowingMap(bool val)
-{
-	showMapToggle.set_active(val);
-}
+// void MainWindow::setShowingMap(bool val)
+// {
+// 	showMapToggle.set_active(val);
+// }
 
 void MainWindow::set3DStab(bool val)
 {
@@ -947,20 +959,20 @@ void MainWindow::setTrackingFPS(bool val)
 	trackingFPS.setValue(val);
 }
 
-Condition& MainWindow::getMakeMapActive()
-{
-	return makeMapActive;
-}
+// Condition& MainWindow::getMakeMapActive()
+// {
+// 	return makeMapActive;
+// }
 
 Condition& MainWindow::getStabiliseActive()
 {
 	return stabiliseActive;
 }
 
-Condition& MainWindow::getShowMapActive()
-{
-	return showMapActive;
-}
+// Condition& MainWindow::getShowMapActive()
+// {
+// 	return showMapActive;
+// }
 
 Condition& MainWindow::getHoldFocusActive()
 {
@@ -1129,28 +1141,28 @@ bool MainWindow::updateFPSCounter()
 	return trackingFPS.getValue();
 }
 
-void MainWindow::whenMakeMapToggled(bool makingMap)
-{
-	if (makingMap)
-	{
-    	stabiliseToggle.set_sensitive(true);
-    	showMapToggle.set_sensitive(true);
+// void MainWindow::whenMakeMapToggled(bool makingMap)
+// {
+// 	if (makingMap)
+// 	{
+//     	stabiliseToggle.set_sensitive(true);
+//     	showMapToggle.set_sensitive(true);
 
-		//showMapToggle.set_active();
-		//GUI CHANGES WHEN "MAKE MAP" IS ENABLED GO HERE
-	    if(bMainWindowLogFlag) {logger->info("[MainWindow::whenMakeMapToggled] MakeMap toggled on");}
+// 		//showMapToggle.set_active();
+// 		//GUI CHANGES WHEN "MAKE MAP" IS ENABLED GO HERE
+// 	    if(bMainWindowLogFlag) {logger->info("[MainWindow::whenMakeMapToggled] MakeMap toggled on");}
 
-	}
-	else
-	{
-    	stabiliseToggle.set_active(false);
-    	stabiliseToggle.set_sensitive(false);
-		setShowingMap(false);
-    	showMapToggle.set_sensitive(false);
-		//GUI CHANGES WHEN "MAKE MAP" IS DISABLED GO HERE
-	    if(bMainWindowLogFlag) {logger->info("[MainWindow::whenMakeMapToggled] MakeMap toggled off");}
-	}
-}
+// 	}
+// 	else
+// 	{
+//     	stabiliseToggle.set_active(false);
+//     	stabiliseToggle.set_sensitive(false);
+// 		setShowingMap(false);
+//     	showMapToggle.set_sensitive(false);
+// 		//GUI CHANGES WHEN "MAKE MAP" IS DISABLED GO HERE
+// 	    if(bMainWindowLogFlag) {logger->info("[MainWindow::whenMakeMapToggled] MakeMap toggled off");}
+// 	}
+// }
 
 void MainWindow::whenStabiliseToggled(bool stabilising)
 {
@@ -1158,27 +1170,29 @@ void MainWindow::whenStabiliseToggled(bool stabilising)
 	{
 		//GUI CHANGES WHEN STABILISER IS ENABLED GO HERE
 		if(bMainWindowLogFlag) logger->info("[MainWindow::whenStabiliseToggled] Stabilise toggled on");
+		recenterButton.set_sensitive(true);
 	}
 	else
 	{
 		//GUI CHANGES WHEN STABILISER IS DISABLED GO HERE
 		if(bMainWindowLogFlag) logger->info("[MainWindow::whenStabiliseToggled] Stabilise toggled off");
+		recenterButton.set_sensitive(false);
 	}
 }
 
-void MainWindow::whenShowMapToggled(bool showingMap)
-{
-	if (showingMap)
-	{
-		//GUI CHANGES WHEN "SHOW MAP" IS ENABLED GO HERE
-		if(bMainWindowLogFlag) logger->info("[MainWindow::whenShowMapToggled] ShowMap toggled on");
-	}
-	else
-	{
-		//GUI CHANGES WHEN "SHOW MAP" IS DISABLED GO HERE
-		if(bMainWindowLogFlag) logger->info("[MainWindow::whenShowMapToggled] ShowMap toggled off");
-	}
-}
+// void MainWindow::whenShowMapToggled(bool showingMap)
+// {
+// 	if (showingMap)
+// 	{
+// 		//GUI CHANGES WHEN "SHOW MAP" IS ENABLED GO HERE
+// 		if(bMainWindowLogFlag) logger->info("[MainWindow::whenShowMapToggled] ShowMap toggled on");
+// 	}
+// 	else
+// 	{
+// 		//GUI CHANGES WHEN "SHOW MAP" IS DISABLED GO HERE
+// 		if(bMainWindowLogFlag) logger->info("[MainWindow::whenShowMapToggled] ShowMap toggled off");
+// 	}
+// }
 
 void MainWindow::onFindFocusClicked()
 {
@@ -1192,14 +1206,25 @@ void MainWindow::onFindFocusClicked()
 
 void MainWindow::onResetClicked()
 {
+	//GUI CHANGES WHEN "RESET" IS CLICKED
 	holdFocusToggle.set_active(false);
 	threedStabToggle.set_active(false);
 	twodStabToggle.set_active(false);
 	bResetLens = 1;
+
+	//Hide out-of-bounds label
+	hideOutOfBoundsWarning();
+
 	//GUI CHANGES WHEN "RESET" IS CLICKED
 	if(bMainWindowLogFlag) {logger->info("[MainWindow::onResetClicked] Reset clicked, so bResetLens set to 1");}
 }
 
+void MainWindow::onRecenterClicked()
+{
+	signalRecenterClicked().emit();
+	//GUI CHANGES WHEN "RECENTER" IS CLICKED
+	if(bMainWindowLogFlag) {logger->info("[MainWindow::onRecenterClicked] Recenter clicked");}
+}
 
 void MainWindow::whenHoldFocusToggled(bool holdingFocus)
 {
@@ -1230,7 +1255,7 @@ void MainWindow::when3DStabToggled(bool active)
 	if (active)
 	{
 		holdFocusToggle.set_active(true);
-		makeMapToggle.set_active(true);
+		//makeMapToggle.set_active(true);
 		stabiliseToggle.set_active(true);
 		//GUI CHANGES WHEN "3D STABILISER" IS ENABLED GO HERE
 		if(bMainWindowLogFlag) logger->info("[MainWindow::when3DStabToggled] 3DStab toggled on");
@@ -1238,28 +1263,10 @@ void MainWindow::when3DStabToggled(bool active)
 	else
 	{
 		holdFocusToggle.set_active(false);
-		makeMapToggle.set_active(false);
+		//makeMapToggle.set_active(false);
 		stabiliseToggle.set_active(false);
 		//GUI CHANGES WHEN "3D STABILISER" IS DISABLED GO HERE
 		if(bMainWindowLogFlag) logger->info("[MainWindow::when3DStabToggled] 3DStab toggled off");
-	}
-}
-
-void MainWindow::when2DStabToggled(bool active2)
-{
-	if (active2)
-	{
-		makeMapToggle.set_active(true);
-		stabiliseToggle.set_active(true);
-		//GUI CHANGES WHEN "2D STABILISER" IS ENABLED GO HERE
-		if(bMainWindowLogFlag) logger->info("[MainWindow::when2DStabToggled] 2DStab toggled on");
-	}
-	else
-	{
-		makeMapToggle.set_active(false);
-		stabiliseToggle.set_active(false);
-		//GUI CHANGES WHEN "2D STABILISER" IS DISABLED GO HERE
-		if(bMainWindowLogFlag) logger->info("[MainWindow::when2DStabToggled] 2DStab toggled off");
 	}
 }
 
@@ -1563,15 +1570,15 @@ void MainWindow::onGammaScaleChange(double val)
 	sigFeatureUpdated.emit("Gamma", val);
 }
 
-void MainWindow::onThresScaleChange(double val)
-{
-	sigThresholdChanged.emit(val);
-}
+// void MainWindow::onThresScaleChange(double val)
+// {
+// 	sigThresholdChanged.emit(val);
+// }
 
-void MainWindow::onScaleScaleChange(double val)
-{
-	sigScaleChanged.emit(val);
-}
+// void MainWindow::onScaleScaleChange(double val)
+// {
+// 	sigScaleChanged.emit(val);
+// }
 
 void MainWindow::onRecordingSizeScaleChange(double val)
 {

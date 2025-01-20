@@ -17,6 +17,7 @@
 #include "logfile.hpp"
 #include "stabiliser.hpp"
 #include "framefilter.hpp"
+#include "phasecorr_stabiliser.hpp"
 
 namespace Vimba = AVT::VmbAPI;
 
@@ -130,9 +131,9 @@ private:
 
 	void whenLiveViewToggled(bool viewingLive);
 
-	void whenMakeMapToggled(bool makingMap);
+	//void whenMakeMapToggled(bool makingMap); DEPRECATED
 	void whenStabiliseToggled(bool stabilising);
-	void whenShowMapToggled(bool showingMap);
+	//void whenShowMapToggled(bool showingMap); DEPRECATED
 
 	void whenHoldFocusToggled(bool holdingFocus);
 	void when3DStabToggled(bool active);
@@ -153,6 +154,7 @@ private:
 	void onWindowPauseClicked();
 	void onFindFocusClicked();
 	void onResetClicked();
+	void onRecenterClicked();
 	void onWindowEnterClicked();
 
 	bool onCloseClicked(const GdkEventAny* event);
@@ -193,6 +195,15 @@ private:
 	bool tiltedCamDisconnected = false;
 	bool imagingCamDisconnected = false;
 	bool lensDisconnected = false;
+
+	// Add a boolean to enable or disable PhaseCorr usage.
+	bool usePhaseCorr = true;
+
+	// Add a PhaseCorrStabiliser object
+	PhaseCorrStabiliser phaseCorrStabiliser;
+
+	// Add a boolean to check if the reference frame is set
+	bool phaseCorrStabiliserReferenceNotSet = true;
 };
 
 #endif

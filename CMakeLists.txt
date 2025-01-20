@@ -81,6 +81,7 @@ configure_file(settings_default.txt ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
 # Add the executable with existing sources
 add_executable(hvi-gtk 
     main.cpp 
+    main_XERYON.cpp
     mainwindow.cpp 
     sdlwindow.cpp 
     sdlwinchild.cpp 
@@ -98,6 +99,7 @@ add_executable(hvi-gtk
     Xeryon.cpp
     Axis.cpp
     Stage.cpp
+    phasecorr_stabiliser.cpp
 )
 
 configure_file(${CMAKE_SOURCE_DIR}/Vimba_6_0/VimbaGigETL.cti ${CMAKE_BINARY_DIR}/VimbaGigETL.cti COPYONLY)

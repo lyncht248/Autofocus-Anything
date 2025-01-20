@@ -31,7 +31,7 @@ const long img_size = 1280 * 960; //Replace with actual image size
 bool bSaveImages = 0; // Saves images from the tilted camera to output folder (check filepath is right). WARNING: will produce enourmous number of images!
 bool bSaveSharpnessCurves = 0; // Saves text files with the sharpness curve data, similar to above
 
-bool bBlinking = 0;
+bool bBlinking = 1;
 
 unsigned char* img_buf = (unsigned char*)malloc(img_size); // Accessed by thread1 and thread2
 unsigned char* img_get_buf = (unsigned char*)malloc(img_size); // Used by by image pulling thread

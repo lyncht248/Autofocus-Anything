@@ -72,7 +72,6 @@ public:
 	void displayMessageLoadSave(const std::string &msg);
 	void displayMessageError(const std::string &msg);
 
-	//TODO: Added this function
 	void displayWarningMessage(const std::string &msg);
 
 	void renderFrame(VidFrame *frame);
@@ -83,11 +82,11 @@ public:
 	using SignalFeatureUpdated = sigc::signal<void(std::string, double)>;
 	SignalFeatureUpdated signalFeatureUpdated();
 
-	using SignalThresholdChanged = sigc::signal<void(double)>;
-	SignalThresholdChanged signalThresholdChanged();
+	// using SignalThresholdChanged = sigc::signal<void(double)>;
+	// SignalThresholdChanged signalThresholdChanged();
 
-	using SignalScaleChanged = sigc::signal<void(double)>;
-	SignalScaleChanged signalScaleChanged();
+	// using SignalScaleChanged = sigc::signal<void(double)>;
+	// SignalScaleChanged signalScaleChanged();
 
 	using SignalBestFocusChanged = sigc::signal<void(double)>;
 	SignalBestFocusChanged signalBestFocusChanged();
@@ -104,6 +103,9 @@ public:
 	using SignalResetClicked = sigc::signal<void()>;
     SignalResetClicked signalResetClicked();
 
+	using SignalRecenterClicked = sigc::signal<void()>;
+    SignalRecenterClicked signalRecenterClicked();
+
 	void setHasBuffer(bool val);
 	void setLiveView(bool val);
 	void setLoading(bool val);
@@ -116,9 +118,9 @@ public:
 	void set3DStab(bool val);
 	void setHoldFocus(bool val);
 
-	Condition& getMakeMapActive();
+	//Condition& getMakeMapActive(); DEPRECATED
 	Condition& getStabiliseActive();
-	Condition& getShowMapActive();
+	//Condition& getShowMapActive(); DEPRECATED
 	Condition& getHoldFocusActive();
 	Condition& get3DStabActive();
 	Condition& get2DStabActive();
@@ -164,16 +166,16 @@ private:
 	void onFrameDrawn();
 	bool updateFPSCounter();
 
-	void whenMakeMapToggled(bool makingMap);
+	//void whenMakeMapToggled(bool makingMap); DEPRECATED
 	void whenStabiliseToggled(bool stabilising);
-	void whenShowMapToggled(bool showingMap);
+	//void whenShowMapToggled(bool showingMap); DEPRECATED
 
 	void whenHoldFocusToggled(bool holdingFocus);
 	void when3DStabToggled(bool active);
 	void when2DStabToggled(bool active2);
     void onFindFocusClicked(); 
     void onResetClicked(); 
-
+	void onRecenterClicked();
 
     void bufferFilled();
     void bufferEmptied();
@@ -205,15 +207,15 @@ private:
 	void onGammaScaleChange(double val);
 	void onFrameRateChange(double val);
 
-	void onThresScaleChange(double val);
-	void onScaleScaleChange(double val);
+	// void onThresScaleChange(double val); DEPRECATED
+	// void onScaleScaleChange(double val); DEPRECATED
 	void onRecordingSizeScaleChange(double val);
 	void onBestFocusScaleChange(double val);
     
     struct Private *priv;
     
-    ScaleWidget gainScale, exposeScale, gammaScale, frameSlider, thresScale, scaleScale, waitScale, recordingSizeScale, bestFocusScale;
-    Gtk::Button recordButton, backToStartButton, pauseButton, playButton, fileLoadButton, fileSaveButton, findFocusButton, resetButton, enterButton;
+    ScaleWidget gainScale, exposeScale, gammaScale, frameSlider, waitScale, recordingSizeScale, bestFocusScale;
+    Gtk::Button recordButton, backToStartButton, pauseButton, playButton, fileLoadButton, fileSaveButton, findFocusButton, resetButton, enterButton, recenterButton;
     
 	Gtk::Entry frameRateEntry;
     Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, holdFocusToggle, threedStabToggle, twodStabToggle;
@@ -229,14 +231,14 @@ private:
 
 	SignalFrameDrawn sigFrameDrawn;
 	SignalFeatureUpdated sigFeatureUpdated;
-	SignalThresholdChanged sigThresholdChanged;
-	SignalScaleChanged sigScaleChanged;
+	// SignalThresholdChanged sigThresholdChanged;
+	// SignalScaleChanged sigScaleChanged;
 	SignalBestFocusChanged sigBestFocusChanged;
 	SignalPauseClicked sigPauseClicked;
 	SignalEnterClicked sigEnterClicked;
 	SignalFindFocusClicked sigFindFocusClicked;
 	SignalResetClicked sigResetClicked;
-
+	SignalRecenterClicked sigRecenterClicked;
 	sigc::connection gainScaleConnection, exposeScaleConnection, gammaScaleConnection, frameRateScaleConnection, frameSliderConnection, stateChangeConnection;
 
 	std::unordered_map<std::string, RenderFilter*> renderFilters;

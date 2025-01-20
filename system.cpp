@@ -18,8 +18,9 @@
 #include "main.hpp"
 #include "autofocus.hpp"
 #include "notificationCenter.hpp"
+#include "phasecorr_stabiliser.hpp"
 
-bool bSystemLogFlag = 0; // 1 = log, 0 = no log
+bool bSystemLogFlag = 1; // 1 = log, 0 = no log
 bool bSystemQueueLengthFlag = 0; // 1 = log, 0 = no log
 bool bSystemFramesFlag = 0; // Used to track how each frame passes through the system
 
@@ -122,35 +123,130 @@ void FrameProcessor::stabilise()
 	if(bSystemFramesFlag) {logger->info("[FrameProcessor::stabilise] Thread started");}
 
 	ThreadStopper::makeStoppable();
+	
+	// This counter will be used to skip the phase-correlation calculation
+	// when the user-defined FPS is above 40.
+	static int frameCount = 0;
+
 	while (running)
 	{
-		VidFrame *vframe = stabQueue.pop();
-		//stabMutex.lock();
-		//_stabNewFrame = false;
-		//stabMutex.unlock();
-
-		if (system.stabiliser.is_valid() )
+		// If the queue is backing up, discard older frames and only keep the most recent one or two
+		// so we can keep up at higher framerates.
+		static const size_t MAX_ALLOWED_IN_QUEUE = 2; 
+		while (stabQueue.size() > MAX_ALLOWED_IN_QUEUE)
 		{
-			TooN::Vector<2> off = system.stabiliser.stabilise(*vframe, offset);
-			//TODO vframe seems to point to the same image regardless of whether its a loaded recording or a live view...
-			// but when its a loaded recording, offset and off become NULL. Why? 
-			stabMutex.lock();
-			currentOff = off;
-			offset += currentOff;
-			_stabComplete = stabQueue.empty();
-			if (_stabComplete)
-				stabComplete.broadcast();
-			stabMutex.unlock();
+			VidFrame* oldFrame = stabQueue.pop();
+			delete oldFrame;  // or recycle if you have a different memory scheme
+		}
+
+		VidFrame *vframe = stabQueue.pop();
+		
+		// If the frame is null, skip it
+		if (vframe == nullptr)
+			continue;
+		
+		// Check if we should skip this frame's offset calculation
+		bool skipOffsetCalculation = false;
+		if (system.getFPS() > 40.0)
+		{
+			skipOffsetCalculation = ((frameCount % 2) != 0); // Skip every other frame
+			frameCount++;
+		}
+
+		// If the user wants PhaseCorr, do that
+		if (system.usePhaseCorr)
+		{
+			if (!skipOffsetCalculation)
+			{
+				// Convert VidFrame -> cv::Mat
+				// vframe->data() is pointer to image data
+				// vframe->size().x is width, vframe->size().y is height
+				cv::Mat fullFrame(
+					vframe->size().y,
+					vframe->size().x,
+					CV_8UC1, // 8-bit single channel
+					vframe->data() // pointer to raw pixels
+				);
+
+				// Convert single-channel grayscale to 3-channel BGR (phaseCorrStabiliser uses COLOR_BGR2GRAY)
+				// If your camera is truly monochrome, you can adapt this to keep single channel as well.
+				cv::Mat colorFrame;
+				cv::cvtColor(fullFrame, colorFrame, cv::COLOR_GRAY2BGR);
+
+				// Downscale by factor 0.5 before calling phase correlation
+				cv::Mat halfFrame;
+				cv::resize(colorFrame, halfFrame, cv::Size(), 0.26, 0.26); // for some reason 0.25 causes problems
+
+				cv::Point2f shift(0.0f, 0.0f);
+				// If reference not set, init it
+				if (system.phaseCorrStabiliserReferenceNotSet) 
+				{
+					system.phaseCorrStabiliser.initReference(halfFrame);
+					system.phaseCorrStabiliserReferenceNotSet = false;
+				}
+				else
+				{
+					// Compute offset
+					shift = system.phaseCorrStabiliser.computeShift(halfFrame);
+				}
+
+				stabMutex.lock();
+				// Use shift to update currentOff. Multiply by factor 2 if needed
+				// (Since we used 0.26 scale, shift is 1/0.26 = 3.8461538461538462)
+				currentOff[0] = shift.x * -3.8461538461538462f;
+				currentOff[1] = shift.y * -3.8461538461538462f;
+
+				offset += currentOff;
+				_stabComplete = stabQueue.empty();
+				if (_stabComplete)
+					stabComplete.broadcast();
+				stabMutex.unlock();
+			}
+			else
+			{
+				// If skipping, still set _stabComplete when queue is empty
+				stabMutex.lock();
+				_stabComplete = stabQueue.empty();
+				if (_stabComplete)
+					stabComplete.broadcast();
+				stabMutex.unlock();
+			}
 		}
 		else
 		{
-			stabMutex.lock();
-			_stabComplete = stabQueue.empty();
-			if (_stabComplete)
-				stabComplete.broadcast();
-			stabMutex.unlock();
+			// Original stabiliser method
+			if (system.stabiliser.is_valid() )
+			{
+				if (!skipOffsetCalculation)
+				{
+					TooN::Vector<2> off = system.stabiliser.stabilise(*vframe, offset);
+					stabMutex.lock();
+					currentOff = off;
+					offset += currentOff;
+					_stabComplete = stabQueue.empty();
+					if (_stabComplete)
+						stabComplete.broadcast();
+					stabMutex.unlock();
+				}
+				else
+				{
+					stabMutex.lock();
+					_stabComplete = stabQueue.empty();
+					if (_stabComplete)
+						stabComplete.broadcast();
+					stabMutex.unlock();
+				}
+			}
+			else
+			{
+				stabMutex.lock();
+				_stabComplete = stabQueue.empty();
+				if (_stabComplete)
+					stabComplete.broadcast();
+				stabMutex.unlock();
+			}
 		}
-
+		
 		// HERE testing releasing of all frames at the end of processFrames
 		//released.push(vframe);
 	}
@@ -300,9 +396,6 @@ void FrameProcessor::processFrame() //What to do with each frame received from F
 				// 	VidFrame *vframe = released.pop();
 				// 	delete vframe;
 				// }
-				// if(bSystemFramesFlag) logger->info("[FrameProcessor::processFrame] released queue is empty now");
-				// //vidFrame = nullptr;
-				// released.clear();			
 				// if(bSystemFramesFlag) logger->info("[FrameProcessor::processFame] released queue cleared");
 				//     // Not recording, so can delete the released frames.
 				// for (VidFrame *vframe = released.pop(); !released.empty(); vframe = released.pop() ) 
@@ -495,8 +588,8 @@ System::System(int argc, char **argv) :
 
 	window.signalFrameDrawn().connect(sigc::mem_fun(*this, &System::releaseFrame) );
 	window.signalFeatureUpdated().connect(sigc::mem_fun(*this, &System::onWindowFeatureUpdated) );
-	window.signalThresholdChanged().connect(sigc::mem_fun(*this, &System::onWindowThresholdChanged) );
-	window.signalScaleChanged().connect(sigc::mem_fun(*this, &System::onWindowScaleChanged) );
+	// window.signalThresholdChanged().connect(sigc::mem_fun(*this, &System::onWindowThresholdChanged) );
+	// window.signalScaleChanged().connect(sigc::mem_fun(*this, &System::onWindowScaleChanged) );
 	window.signalBestFocusChanged().connect(sigc::mem_fun(*this, &System::onWindowBestFocusChanged) );
 	window.signalPauseClicked().connect(sigc::mem_fun(*this, &System::onWindowPauseClicked) );
 	sigNewFrame.connect(sigc::mem_fun(*this, &System::renderFrame) );
@@ -507,11 +600,12 @@ System::System(int argc, char **argv) :
 	
 	window.getLiveView().signalToggled().connect(sigc::mem_fun(*this, &System::whenLiveViewToggled) );
 
-	window.getMakeMapActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenMakeMapToggled) );
+	//window.getMakeMapActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenMakeMapToggled) );
 	window.getStabiliseActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenStabiliseToggled) );
-	window.getShowMapActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenShowMapToggled) );
+	//window.getShowMapActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenShowMapToggled) );
 
 	window.signalResetClicked().connect(sigc::mem_fun(*this, &System::onResetClicked));
+	window.signalRecenterClicked().connect(sigc::mem_fun(*this, &System::onRecenterClicked));
 
 	window.getHoldFocusActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenHoldFocusToggled) );
 	window.get3DStabActive().signalToggled().connect(sigc::mem_fun(*this, &System::when3DStabToggled) );
@@ -702,20 +796,20 @@ void System::renderFrame()
 
 void System::releaseFrame()
 {
-	if (window.getMakeMapActive().getValue() && !madeMap)
-	{
-		stabiliser.make_map(*getFrame(), DEFAULT_NUM_TRACKERS);
-		if(!window.get3DStabActive().getValue() && !window.get2DStabActive().getValue()) { //If either 3D or 2D stab is active, don't show map
-			window.setShowingMap(true);
-		}
-		madeMap = true;
-	}
+	// if (window.getMakeMapActive().getValue() && !madeMap)
+	// {
+	// 	stabiliser.make_map(*getFrame(), DEFAULT_NUM_TRACKERS);
+	// 	if(!window.get3DStabActive().getValue() && !window.get2DStabActive().getValue()) { //If either 3D or 2D stab is active, don't show map
+	// 		window.setShowingMap(true);
+	// 	}
+	// 	madeMap = true;
+	// }
 	frameProcessor.releaseFrame();
 }
 
 void System::whenLiveViewToggled(bool viewingLive)
 {
-	window.setMakingMap(false);
+	//window.setMakingMap(false);
 	if (viewingLive)
 	{
 		if(bSystemLogFlag) {logger->info("[System::whenLiveViewToggled] Live view toggled on");}
@@ -736,40 +830,41 @@ void System::whenLiveViewToggled(bool viewingLive)
 	}
 }
 
-void System::whenMakeMapToggled(bool makingMap)
-{
-	frameProcessor.stabMutex.lock();
-	while (!frameProcessor._stabComplete)
-		frameProcessor.stabComplete.wait(frameProcessor.stabMutex);
-	if (makingMap)
-	{
-		if(bSystemLogFlag) {logger->info("[System::whenMakeMapToggled] Making map toggled on");}
-		frameProcessor.resetRaster();
-		if (!window.getLiveView().getValue() )
-		{
-			VidFrame *vframe = recorder->getFrame(window.getFrameSliderValue() );
-			if (vframe)
-			{
-				stabiliser.make_map(*vframe, DEFAULT_NUM_TRACKERS);
-				if(!window.get3DStabActive().getValue() && !window.get2DStabActive().getValue()) {  //If either 3D or 2D stab is active, don't show map
-					window.setShowingMap(true);	
-				}
-			}
-			else
-				window.setMakingMap(false);
-			madeMap = true;
-		}
-		else
-			madeMap = false;
-	}
-	else 
-	{
-		if(bSystemLogFlag) {logger->info("[System::whenMakeMapToggled] Making map toggled off");}
+//DEPRECATED FUNCTIONALITY related to stabilizing 
+// void System::whenMakeMapToggled(bool makingMap)
+// {
+// 	frameProcessor.stabMutex.lock();
+// 	while (!frameProcessor._stabComplete)
+// 		frameProcessor.stabComplete.wait(frameProcessor.stabMutex);
+// 	if (makingMap)
+// 	{
+// 		if(bSystemLogFlag) {logger->info("[System::whenMakeMapToggled] Making map toggled on");}
+// 		frameProcessor.resetRaster();
+// 		if (!window.getLiveView().getValue() )
+// 		{
+// 			VidFrame *vframe = recorder->getFrame(window.getFrameSliderValue() );
+// 			if (vframe)
+// 			{
+// 				stabiliser.make_map(*vframe, DEFAULT_NUM_TRACKERS);
+// 				if(!window.get3DStabActive().getValue() && !window.get2DStabActive().getValue()) {  //If either 3D or 2D stab is active, don't show map
+// 					window.setShowingMap(true);	
+// 				}
+// 			}
+// 			else
+// 				window.setMakingMap(false);
+// 			madeMap = true;
+// 		}
+// 		else
+// 			madeMap = false;
+// 	}
+// 	else 
+// 	{
+// 		if(bSystemLogFlag) {logger->info("[System::whenMakeMapToggled] Making map toggled off");}
 	
-		stabiliser.invalidate(); //TODO: May need to memory manage?
-	}
-	frameProcessor.stabMutex.unlock();
-}
+// 		stabiliser.invalidate(); //TODO: May need to memory manage?
+// 	}
+// 	frameProcessor.stabMutex.unlock();
+// }
 
 void System::whenStabiliseToggled(bool stabilising)
 {
@@ -777,51 +872,76 @@ void System::whenStabiliseToggled(bool stabilising)
 	while (!frameProcessor._stabComplete)
 		frameProcessor.stabComplete.wait(frameProcessor.stabMutex);
 
+	// Reset the raster so we start from (0,0) offset
 	frameProcessor.resetRaster();
+
 	if (stabilising)
 	{
-		if(bSystemLogFlag) {logger->info("[System::whenStabiliseToggled] Stabilise toggled on");}
-		//CODE TO BE EXECUTED WHEN "STABILISER" IS ENABLED GOES HERE
+		if (bSystemLogFlag)
+			logger->info("[System::whenStabiliseToggled] Stabilise toggled on");
+
+		// If user wants the old stabiliser, we do nothing special here
+		// If user wants the new phase correlation, ensure it is reset so it starts fresh
+		if (usePhaseCorr)
+		{
+			phaseCorrStabiliser.reset(); // clear reference frame
+			phaseCorrStabiliserReferenceNotSet = true; // Important: Set this to true!
+		}
 	}
 	else
 	{
-		if(bSystemLogFlag) {logger->info("[System::whenStabiliseToggled] Stabilise toggled off");}
-		//CODE TO BE EXECUTED WHEN "STABILISER" IS DISABLED GOES HERE
+		if (bSystemLogFlag)
+			logger->info("[System::whenStabiliseToggled] Stabilise toggled off");
+
+		// Also reset the PhaseCorrStabiliser reference
+		phaseCorrStabiliser.reset();
+		phaseCorrStabiliserReferenceNotSet = true; // Important: Set this to true!
 	}
 	frameProcessor.stabMutex.unlock();
 }
 
-void System::whenShowMapToggled(bool showingMap)
-{
-	if (showingMap)
-	{
-		if(bSystemLogFlag) {logger->info("[System::whenShowMapToggled] Show map toggled on");}
-		stabiliser.predraw();
-		frameProcessor.filters["map"] = &stabiliser;
-		SDLWindow::setShowingMap(childwin, true);
-	}
-	else
-	{
-		if(bSystemLogFlag) {logger->info("[System::whenShowMapToggled] Show map toggled off");}
-		frameProcessor.filters.erase("map");
-		SDLWindow::setShowingMap(childwin, false);
-	}
+// void System::whenShowMapToggled(bool showingMap)
+// {
+// 	if (showingMap)
+// 	{
+// 		if(bSystemLogFlag) {logger->info("[System::whenShowMapToggled] Show map toggled on");}
+// 		stabiliser.predraw();
+// 		frameProcessor.filters["map"] = &stabiliser;
+// 		SDLWindow::setShowingMap(childwin, true);
+// 	}
+// 	else
+// 	{
+// 		if(bSystemLogFlag) {logger->info("[System::whenShowMapToggled] Show map toggled off");}
+// 		frameProcessor.filters.erase("map");
+// 		SDLWindow::setShowingMap(childwin, false);
+// 	}
 
-	/*
-	if (!window.getLiveView().getValue() && !window.getPlayingBuffer().getValue() )
-	{
-		VidFrame *vframe = recorder->getFrame(window.getFrameSliderValue() );
-		if (vframe)
-		{
-			frameQueue.clear();
-			frameQueue.push(vframe);
-		}
-	}
-	*/
-}
+// 	/*
+// 	if (!window.getLiveView().getValue() && !window.getPlayingBuffer().getValue() )
+// 	{
+// 		VidFrame *vframe = recorder->getFrame(window.getFrameSliderValue() );
+// 		if (vframe)
+// 		{
+// 			frameQueue.clear();
+// 			frameQueue.push(vframe);
+// 		}
+// 	}
+// 	*/
+// }
 
 void System::onResetClicked() {
-	if(bSystemLogFlag) {logger->info("[System::onResetClicked] Lens reset button clicked");}
+    if(bSystemLogFlag) {logger->info("[System::onResetClicked] Lens reset button clicked");}
+    // Hide the out of bounds warning when reset is clicked
+    window.hideOutOfBoundsWarning();
+}
+
+void System::onRecenterClicked() {
+    if(bSystemLogFlag) {logger->info("[System::onRecenterClicked] Recenter clicked");}
+    // recenter the rendered video frames
+	//HERE HERE HERE
+
+	frameProcessor.resetRaster();
+
 }
 
 void System::whenHoldFocusToggled(bool holdingFocus)
