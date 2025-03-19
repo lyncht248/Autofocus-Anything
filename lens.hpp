@@ -29,8 +29,11 @@ private:
     
     // For out of bounds detection
     int outOfBoundsOnceOnly = 0;
-    const double MIN_POSITION = -16.0;  // mm, to the right from operator perspective
-    const double MAX_POSITION = 8.5; // mm, to the left from operator perspective
+    // const double MIN_POSITION = -18.0;  // mm, to the right from operator perspective
+    // const double MAX_POSITION = 8.5; // mm, to the left from operator perspective
+    const double MIN_POSITION = -10.0;  // mm, to the right from operator perspective
+    const double MAX_POSITION = 10.0; // mm, to the left from operator perspective
+
 };
 
 #endif // LENS_H

@@ -34,19 +34,118 @@ bool lens::initialize() {
 
     controller->start();
 
-    // enable the lens, then reset, then enable, then find index, then enable
+    // enable the lens, then reset (which loads settings), then enable, then find index, then enable
     axis->sendCommand("ENBL",1);
     axis->sendCommand("RSET",1);
+    // wait for 0.5s
+    usleep(500000);
     axis->sendCommand("ENBL",1);
     axis->findIndex();
+    // wait for 0.5s
+    usleep(500000);
     axis->sendCommand("ENBL",1);    
 
-    // set to use maximum speed
-    axis->setSpeed(400_mm);
-    axis->setDPOS(-8_mm);
-    currentLensLoc = -8;
+
+    // // send each command in settings_default.txt to lens and ensure it is successful
+    axis->sendCommand("INFO",4);
+    axis->sendCommand("POLI",97);
+    axis->sendCommand("FREQ",90000);
+    axis->sendCommand("FRQ2",88000);
+    axis->sendCommand("HFRQ",92000);
+    axis->sendCommand("LFRQ",86000);
+    // axis->sendCommand("LLIM",-15);
+    // axis->sendCommand("HLIM",15);
+    // axis->sendCommand("PROP",120);
+    // axis->sendCommand("PRO2",40);
+    // axis->sendCommand("MPRO",250);
+    // axis->sendCommand("INTF",15);
+    // axis->sendCommand("MASS",0);
+    // axis->sendCommand("MMAS",1000);
+    // axis->sendCommand("ZON1",0.01);
+    // axis->sendCommand("ZON2",1);
+
+    // axis->sendCommand("MSPD",200);
+    //axis->sendCommand("SSPD",100);
+    // axis->sendCommand("ISPD",10);
+    axis->sendCommand("ACCE",65500);
+    axis->sendCommand("DECE",65500);
+
+    // axis->sendCommand("ILIM",3000);
+    // axis->sendCommand("ELIM",0);
+    // axis->sendCommand("SLIM",100000);
+    // axis->sendCommand("ENCD",0);
+    // axis->sendCommand("ACTD",0);
+    // axis->sendCommand("ENCO",47);
+
+    // axis->sendCommand("PTOL",2);
+    // axis->sendCommand("PTO2",4);
+    // axis->sendCommand("TOUT",1000);
+    // axis->sendCommand("TOU2",60);
+    // axis->sendCommand("TOU3",0);
+
+    // axis->sendCommand("PHAC",0);
+    // axis->sendCommand("PHAS",90);
+    // axis->sendCommand("DUCO",1);
+    // axis->sendCommand("MIMP",20);
+    // axis->sendCommand("MAMP",45);
+    // axis->sendCommand("AMPL",45);
+    // axis->sendCommand("DUTY",32768);
+    // axis->sendCommand("OFSA",0);
+    // axis->sendCommand("OFSB",0);
+    // axis->sendCommand("SQEZ",0);
+    // axis->sendCommand("FILE",0);
+    // axis->sendCommand("FILG",0);
+    // axis->sendCommand("FILA",1);
+    // axis->sendCommand("FILP",1);
+    // axis->sendCommand("COMP",0);
+    // axis->sendCommand("DLAY",10);
+    
+    // axis->sendCommand("DTIM",0);
+    // axis->sendCommand("ECHO",0);
+    // axis->sendCommand("INDA",1);
+    // axis->sendCommand("ENBR",1);
+    // axis->sendCommand("ENBL",0);
+    // axis->sendCommand("GPIO",0);
+    // axis->sendCommand("PLIM",0);
+    // axis->sendCommand("UART",0);
+    // axis->sendCommand("PWMF",1000);
+    // axis->sendCommand("TRGS",0);
+    // axis->sendCommand("TRGW",0);
+    // axis->sendCommand("TRGP",0);
+    // axis->sendCommand("TRGN",0);
+    // axis->sendCommand("STPS",1);
+
+    // axis->sendCommand("LEAD",0);
+    // axis->sendCommand("FLAG",0);
+    // axis->sendCommand("VMIN",40000);
+    // axis->sendCommand("ECAT",0);
+    // axis->sendCommand("BLCK",0);  
+
+    //set speed to 200mm/s
+    axis->setSpeed(200_mm);
+
+    axis->setDPOS(-3_mm);
+    currentLensLoc = -3.0;
+
+    // wait for 0.5s
+    usleep(500000);
+
+    // //left limit
+    // axis->setDPOS(10_mm);
+    // currentLensLoc = 10.0;
+
+
+    // axis->setDPOS(-10_mm);
+    // currentLensLoc = -10.0;
+
+
     //wait for 0.5s
     usleep(500000);
+
+    // After setting position
+    Distance epos = axis->getEPOS();
+    double actualPos = epos(Distance::MM);
+    logger->info("[lens::initialize] Requested position: {}mm, Actual position: {}mm", 14.0, actualPos);
 
     // axis->setDPOS(5_mm);
     // std::cout << "moved 5mm" << std::endl;
@@ -91,8 +190,8 @@ void lens::return_to_start() {
     try {
         std::cout << "returning to start" << std::endl;
         axis->findIndex();
-        axis->setDPOS(-8_mm);
-        currentLensLoc = -8;
+        axis->setDPOS(-3_mm);
+        currentLensLoc = -3.0;
         //wait for 0.5s
         usleep(500000);
     }
