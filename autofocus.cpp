@@ -104,7 +104,7 @@ void autofocus::run () {
   //The following variables assume imgWidth = 320; must be changed if this isn't the case.
   int moved = 1;
   int previous = desiredLocBestFocus; //TODO: should be in a mutex
-  int tol = 4 * scale; //Tolerance zone of pixels about the desiredLocBestFocus where no lense movement is triggered. Lower than 4 causes constant signals to lens
+  int tol = 8; //Tolerance zone of pixels about the desiredLocBestFocus where no lense movement is triggered. Lower than 4 causes constant signals to lens
   //Should be 4 for scale=0.5
   int blink = 0; //Becomes 1 when a blink is detected
   int blinkframes = 15; //number of frames to ignore when blink is detected
@@ -123,7 +123,7 @@ void autofocus::run () {
   double min = -3; 
   //double Kp = 0.0018 * 3.0; //*4-5.0 is on the edge of instability; *3.0 seems stable
   //double Kp = 0.004;
-  double Kp = 0.0015;
+  double Kp = 0.002;
   double Ki = 0.0;
   double Kd = 0.0; //Should try to add a small Kd; further testing required
   PID pid = PID(dt, max, min, Kp, Kd, Ki);  
@@ -217,11 +217,11 @@ void autofocus::run () {
           else { //outside tol band
             // PID CONTROLLER with TOL band removed
             if(locBestFocus - desiredLocBestFocus > 0) {
-              mmToMove = pid.calculate(desiredLocBestFocus + tol, locBestFocus) * -1.0;
+              mmToMove = pid.calculate(desiredLocBestFocus + tol, locBestFocus);
               std::cout << mmToMove << "\n";
             }
             else if(locBestFocus - desiredLocBestFocus < 0) {
-              mmToMove = pid.calculate(desiredLocBestFocus - tol, locBestFocus) * -1.0;
+              mmToMove = pid.calculate(desiredLocBestFocus - tol, locBestFocus);
               std::cout << mmToMove << "\n";
             }              
             bNewMoveRel = 1;

@@ -21,7 +21,7 @@ private:
     Axis* axis;
     
     // Current position in mm
-    double currentLensLoc = 0.0;
+    double currentLensLoc = -3.0;
     
     // this thread gets instructions from the GUI
     std::thread tLens;
@@ -31,7 +31,7 @@ private:
     int outOfBoundsOnceOnly = 0;
     // const double MIN_POSITION = -18.0;  // mm, to the right from operator perspective
     // const double MAX_POSITION = 8.5; // mm, to the left from operator perspective
-    const double MIN_POSITION = -10.0;  // mm, to the right from operator perspective
+    const double MIN_POSITION = -15.0;  // mm, to the right from operator perspective
     const double MAX_POSITION = 10.0; // mm, to the left from operator perspective
 
 };
