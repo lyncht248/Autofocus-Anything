@@ -124,8 +124,13 @@ bool lens::initialize() {
     //set speed to 200mm/s
     axis->setSpeed(200_mm);
 
-    axis->setDPOS(-3_mm);
-    currentLensLoc = -3.0;
+    // For some reason INDX causes LLIM to be set to 0, so we need to set it manually. The encoder resolution is 1250
+
+    axis->setSetting("LLIM", -14.9_mm);
+
+
+    axis->setDPOS(-9_mm);
+    currentLensLoc = -9.0;
 
     // wait for 0.5s
     usleep(500000);
@@ -161,11 +166,16 @@ void lens::mov_rel(double mmToMove) {
         try {
             // Convert mm to Distance object
             Distance newLensLocString(newLensLoc, Distance::MM);
+
             axis->setDPOS(newLensLocString);
-                        
+            
+            //TODO: remove this
+            Distance epos = axis->getEPOS();
+            double actualPos = epos(Distance::MM);
+            logger->error("[lens::mov_rel] Requested move: {}mm to position {}mm, Actual position: {}mm", mmToMove, newLensLoc, actualPos);
+
             currentLensLoc = newLensLoc;
             
-            //
             if(outOfBoundsOnceOnly > 0) {
                 outOfBoundsOnceOnly--;
             }
@@ -190,8 +200,8 @@ void lens::return_to_start() {
     try {
         std::cout << "returning to start" << std::endl;
         axis->findIndex();
-        axis->setDPOS(-3_mm);
-        currentLensLoc = -3.0;
+        axis->setDPOS(-9_mm);
+        currentLensLoc = -9.0;
         //wait for 0.5s
         usleep(500000);
     }
@@ -229,9 +239,9 @@ void lens::lens_thread() {
         }
 
         if(bNewMoveRel) {
-            if(bLensLogFlag) logger->info("[lens::lens_thread] Moving lens to new position");
+            //if(bLensLogFlag) logger->info("[lens::lens_thread] Moving lens to new position");
             mov_rel(mmToMove);
-            if(bLensLogFlag) logger->info("[lens::lens_thread] Lens moved to new position");
+            //if(bLensLogFlag) logger->info("[lens::lens_thread] Lens moved to new position");
             bNewMoveRel = 0;
         }
         

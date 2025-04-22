@@ -123,7 +123,7 @@ void autofocus::run () {
   double min = -3; 
   //double Kp = 0.0018 * 3.0; //*4-5.0 is on the edge of instability; *3.0 seems stable
   //double Kp = 0.004;
-  double Kp = 0.002;
+  double Kp = 0.001;
   double Ki = 0.0;
   double Kd = 0.0; //Should try to add a small Kd; further testing required
   PID pid = PID(dt, max, min, Kp, Kd, Ki);  
@@ -183,8 +183,8 @@ void autofocus::run () {
             //window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to the current location of best-focus
           }
           else if (bFindFocus) {
-            desiredLocBestFocus = 140 * (scale/0.25); //This was set when scale=0.25, so adjusting
-            previous = 140 * (scale/0.25);
+            desiredLocBestFocus = 180 * (scale/0.25); //This was set when scale=0.25, so adjusting
+            previous = 180 * (scale/0.25);
             if(bAutofocusLogFlag) {logger->info("[autofocus::run] Set desiredLocBestFocus back to 140 in autofocus.cc");}
             //window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to 160, the center-point
           }
@@ -217,11 +217,11 @@ void autofocus::run () {
           else { //outside tol band
             // PID CONTROLLER with TOL band removed
             if(locBestFocus - desiredLocBestFocus > 0) {
-              mmToMove = pid.calculate(desiredLocBestFocus + tol, locBestFocus);
+              mmToMove = pid.calculate(desiredLocBestFocus + tol, locBestFocus) * -1.0;
               std::cout << mmToMove << "\n";
             }
             else if(locBestFocus - desiredLocBestFocus < 0) {
-              mmToMove = pid.calculate(desiredLocBestFocus - tol, locBestFocus);
+              mmToMove = pid.calculate(desiredLocBestFocus - tol, locBestFocus) * -1.0;
               std::cout << mmToMove << "\n";
             }              
             bNewMoveRel = 1;
