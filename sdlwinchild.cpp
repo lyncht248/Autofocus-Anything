@@ -31,6 +31,8 @@ SDL_Rect borders[4] = {
 
 using namespace SDLWindow;
 
+TTF_Font* font = nullptr;
+
 void convert_g8_to_rgb888(uint32_t *dst, const uint8_t *src, ssize_t n)
 {
 	for (; n >= 0; n--)
@@ -54,29 +56,64 @@ static inline void redraw(SDL_Renderer *renderer, SDL_Texture *frame, SDL_Textur
 	if (frame)
 	{
 		//scale and buffer frame
-		double xscale = ( (double) w - BORDER_THRES*2) / sdlwin->raster.w;
-		double yscale = ( (double) h - BORDER_THRES*2) / sdlwin->raster.h;
+		double xscale = ((double) w - BORDER_THRES*2) / sdlwin->raster.w;
+		double yscale = ((double) h - BORDER_THRES*2) / sdlwin->raster.h;
 
 		SDL_Rect dstrect;
 		double centerx;
+		double centery;
 		{
 			double arscale = xscale > yscale ? yscale : xscale;
-			double swidth = arscale * sdlwin->raster.w;
-			centerx = xscale > yscale ? ( ( (w-BORDER_THRES*2) - swidth) / 2.0) : 0.0;
+			
+			// Apply zoom factor to the scaling
+			double zoomedScale = arscale * sdlwin->zoomFactor;
+			double swidth = zoomedScale * sdlwin->raster.w;
+			double sheight = zoomedScale * sdlwin->raster.h;
+			
+			// Calculate center position to keep zoom centered
+			centerx = (w - swidth) / 2.0;
+			centery = (h - sheight) / 2.0;
+			
+			// Make sure we don't go beyond borders
+			if (centerx < BORDER_THRES) centerx = BORDER_THRES;
+			if (centery < BORDER_THRES) centery = BORDER_THRES;
+			
 			dstrect = (SDL_Rect) { 
-				(int) (arscale * sdlwin->raster.x + centerx) + BORDER_THRES, 
-				(int) (arscale * sdlwin->raster.y) + BORDER_THRES, 
-				(int) swidth, 
-				(int) (arscale * sdlwin->raster.h)};
+				(int)(centerx + zoomedScale * (sdlwin->raster.x + sdlwin->zoomOffsetX)), 
+				(int)(centery + zoomedScale * (sdlwin->raster.y + sdlwin->zoomOffsetY)), 
+				(int)swidth, 
+				(int)sheight
+			};
 		}
 
 		SDL_RenderCopy(renderer, frame, NULL, &dstrect);
 		bool showingMap = sdlwin->luser[0].d_bool;
 		if (showingMap && map)
 		{
+			// Apply the same zoom to the map if it's showing
 			dstrect.x = centerx + BORDER_THRES;
 			dstrect.y = BORDER_THRES;
 			SDL_RenderCopy(renderer, map, NULL, &dstrect);
+		}
+
+		// After rendering the frame in redraw function, add zoom indicator
+		if (sdlwin->zoomFactor > 1.0)
+		{
+			// Requires SDL_ttf to be initialized
+			if (font) // Make sure you have a TTF_Font* font initialized
+			{
+				char zoomText[32];
+				sprintf(zoomText, "Zoom: %.1fx", sdlwin->zoomFactor);
+				SDL_Color textColor = {255, 255, 255, 255};
+				SDL_Surface* textSurface = TTF_RenderText_Solid(font, zoomText, textColor);
+				SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+				
+				SDL_Rect textRect = {10, 10, textSurface->w, textSurface->h};
+				SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
+				
+				SDL_FreeSurface(textSurface);
+				SDL_DestroyTexture(textTexture);
+			}
 		}
 	}
 
@@ -141,6 +178,13 @@ int SDLWindow::child_main()
 
 	if (TTF_Init() < 0) {
 		return 1;
+	}
+
+	// Load font - replace path with your actual font file location
+	font = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16);
+	if (!font) {
+		printf("TTF_OpenFont error: %s\n", TTF_GetError());
+		// Consider whether to return an error or continue without text rendering
 	}
 
 	int scalexyz = 2;
@@ -278,8 +322,103 @@ int SDLWindow::child_main()
 			pthread_mutex_unlock(&sdlwin->mutex);
 		}
 
-		while( SDL_PollEvent( &e ) != 0 )
+		while(SDL_PollEvent(&e) != 0)
 		{
+			if(e.type == SDL_MOUSEWHEEL)
+			{
+				// Get mouse position
+				int mouseX, mouseY;
+				SDL_GetMouseState(&mouseX, &mouseY);
+				
+				// Get current window dimensions
+				int windowWidth, windowHeight;
+				SDL_GetRendererOutputSize(renderer, &windowWidth, &windowHeight);
+				
+				// Calculate scaling factors before zoom change
+				double xscale = ((double) windowWidth - BORDER_THRES*2) / sdlwin->raster.w;
+				double yscale = ((double) windowHeight - BORDER_THRES*2) / sdlwin->raster.h;
+				double arscale = xscale > yscale ? yscale : xscale;
+				double oldZoom = sdlwin->zoomFactor;
+				
+				// Calculate current visible region dimensions
+				double currentVisibleWidth = arscale * oldZoom * sdlwin->raster.w;
+				double currentVisibleHeight = arscale * oldZoom * sdlwin->raster.h;
+				
+				// Center position of the visible region
+				double centerX = (windowWidth - currentVisibleWidth) / 2.0;
+				if (centerX < BORDER_THRES) centerX = BORDER_THRES;
+				double centerY = (windowHeight - currentVisibleHeight) / 2.0;
+				if (centerY < BORDER_THRES) centerY = BORDER_THRES;
+				
+				// Calculate the true image coordinates under the mouse pointer
+				// This is in the original image space coordinates (before any zoom)
+				double imageX = (mouseX - centerX) / (arscale * oldZoom) - sdlwin->zoomOffsetX;
+				double imageY = (mouseY - centerY) / (arscale * oldZoom) - sdlwin->zoomOffsetY;
+				
+				// Check for zoom out at minimum zoom level
+				bool resetPosition = false;
+				
+				// Change zoom factor
+				if(e.wheel.y > 0) // Scroll up (zoom in)
+				{
+					sdlwin->zoomFactor *= 1.1; // Increase zoom by 10%
+					if(sdlwin->zoomFactor > 5.0) // Limit maximum zoom
+						sdlwin->zoomFactor = 5.0;
+				}
+				else if(e.wheel.y < 0) // Scroll down (zoom out)
+				{
+					// Check if we're already at min zoom and trying to zoom out further
+					if(sdlwin->zoomFactor <= 1.0) {
+						resetPosition = true; // Signal to reset position
+						sdlwin->zoomFactor = 1.0; // Keep zoom at minimum
+					} else {
+						sdlwin->zoomFactor /= 1.1; // Decrease zoom by 10%
+						if(sdlwin->zoomFactor < 1.0) // Limit minimum zoom
+							sdlwin->zoomFactor = 1.0;
+					}
+				}
+				
+				// If zoom changed or we need to reset position
+				if (oldZoom != sdlwin->zoomFactor || resetPosition) 
+				{
+					if (resetPosition) {
+						// Reset position to center
+						sdlwin->zoomOffsetX = 0.0;
+						sdlwin->zoomOffsetY = 0.0;
+					} else {
+						// Calculate new visible dimensions after zoom
+						double newVisibleWidth = arscale * sdlwin->zoomFactor * sdlwin->raster.w;
+						double newVisibleHeight = arscale * sdlwin->zoomFactor * sdlwin->raster.h;
+						
+						// New center position
+						double newCenterX = (windowWidth - newVisibleWidth) / 2.0;
+						if (newCenterX < BORDER_THRES) newCenterX = BORDER_THRES;
+						double newCenterY = (windowHeight - newVisibleHeight) / 2.0;
+						if (newCenterY < BORDER_THRES) newCenterY = BORDER_THRES;
+						
+						// Calculate where the same image point would be displayed after zoom
+						double newDisplayX = imageX * arscale * sdlwin->zoomFactor + newCenterX;
+						double newDisplayY = imageY * arscale * sdlwin->zoomFactor + newCenterY;
+						
+						// Calculate the adjustment needed to keep mouse over the same point
+						double deltaX = mouseX - newDisplayX;
+						double deltaY = mouseY - newDisplayY;
+						
+						// Update zoom offsets - convert to image space coordinates
+						sdlwin->zoomOffsetX = deltaX / (arscale * sdlwin->zoomFactor);
+						sdlwin->zoomOffsetY = deltaY / (arscale * sdlwin->zoomFactor);
+					}
+				}
+			}
+			if (e.type == SDL_MOUSEBUTTONDOWN)
+			{
+				if (e.button.button == SDL_BUTTON_MIDDLE)  // Middle mouse button
+				{
+					sdlwin->zoomFactor = 1.0;  // Reset zoom
+					sdlwin->zoomOffsetX = 0.0; // Reset zoom offsets
+					sdlwin->zoomOffsetY = 0.0;
+				}
+			}
 		}
 		
 		if (SDL_GetWindowFlags(window) & SDL_WINDOW_SHOWN)
@@ -299,6 +438,13 @@ int SDLWindow::child_main()
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
+	
+	if (font) {
+		TTF_CloseFont(font);
+		font = nullptr;
+	}
+
+	TTF_Quit();
 	
 	return 0;
 }

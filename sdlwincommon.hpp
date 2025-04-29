@@ -58,7 +58,9 @@ namespace SDLWindow
 		ldata_t lcmd[8], lre[8], luser[16];
 		mdata_t mcmd[3], mre[3], muser[4];
 		bdata_t bcmd, buser;
-
+		double zoomFactor;
+		double zoomOffsetX;
+		double zoomOffsetY;
 	};
 }
 

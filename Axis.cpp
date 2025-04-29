@@ -60,8 +60,8 @@ void Axis::setDPOS(Distance d)
     auto send_time = getActualTime_();
     bool error = false;
 
-    // Do NOT wait for the position to be reached... 
-    // //waitForUpdate_();
+    //Do NOT wait for the position to be reached... 
+    //waitForUpdate_();
     // while (!(isWithinTol_(DPOS) && isPositionReached())) {
 
     //     if (timeOutReached_(send_time, distance)) {

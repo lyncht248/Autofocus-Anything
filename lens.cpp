@@ -164,6 +164,34 @@ void lens::mov_rel(double mmToMove) {
     double newLensLoc = currentLensLoc + mmToMove;
     if (newLensLoc > MIN_POSITION && newLensLoc < MAX_POSITION) {
         try {
+            
+            // We need to use as high a frequency as possible to avoid judder, but 
+            // high frequencies also cause resonance/oscillation. This driving frequency regime seems to 
+            // minimize judder while avoiding oscillation. 
+
+            // Check if we're crossing a frequency boundary
+            bool wasInMiddleZone = (currentLensLoc >= -13.7 && currentLensLoc <= -7.4);
+            bool willBeInMiddleZone = (newLensLoc >= -13.7 && newLensLoc <= -7.4);
+            
+            // Only change frequencies if crossing boundary
+            if (wasInMiddleZone != willBeInMiddleZone) {
+                if (willBeInMiddleZone) {
+                    // Moving into the -7.4 to -12 zone - use lower frequencies
+                    axis->sendCommand("FREQ", 89000);
+                    axis->sendCommand("FRQ2", 87000);
+                    axis->sendCommand("HFRQ", 91000);
+                    axis->sendCommand("LFRQ", 85000);
+                    if(bLensLogFlag) logger->error("[lens::mov_rel] Switching to lower frequencies for -8mm to -12mm zone");
+                } else {
+                    // Moving to outer zone - use higher frequencies
+                    axis->sendCommand("FREQ", 90000);
+                    axis->sendCommand("FRQ2", 88000);
+                    axis->sendCommand("HFRQ", 92000);
+                    axis->sendCommand("LFRQ", 86000);
+                    if(bLensLogFlag) logger->error("[lens::mov_rel] Switching to higher frequencies for outer zone");
+                }
+            }
+
             // Convert mm to Distance object
             Distance newLensLocString(newLensLoc, Distance::MM);
 
@@ -199,11 +227,12 @@ void lens::mov_rel(double mmToMove) {
 void lens::return_to_start() {
     try {
         std::cout << "returning to start" << std::endl;
-        axis->findIndex();
+        //axis->findIndex();
         axis->setDPOS(-9_mm);
         currentLensLoc = -9.0;
         //wait for 0.5s
         usleep(500000);
+        
     }
     catch (const std::exception& e) {
         logger->error("[lens::return_to_start] Error: " + std::string(e.what()));

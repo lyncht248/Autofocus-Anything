@@ -1210,6 +1210,8 @@ void MainWindow::onResetClicked()
 	holdFocusToggle.set_active(false);
 	threedStabToggle.set_active(false);
 	twodStabToggle.set_active(false);
+	// pause for 100ms
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	bResetLens = 1;
 
 	//Hide out-of-bounds label

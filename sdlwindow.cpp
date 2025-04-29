@@ -53,6 +53,9 @@ SDLWin* SDLWindow::sdlwin_open()
 
 	out->command = CMD_NONE;
 	out->response = RE_NONE;
+	out->zoomFactor = 1.0;
+	out->zoomOffsetX = 0.0;
+	out->zoomOffsetY = 0.0;
 
 	//Does the fork here. PID is process ID
 	pid_t cpid = fork();
