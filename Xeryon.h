@@ -34,6 +34,17 @@ public:
 	void readSettings();
 	
 	void sendCommand(Axis * axis, const char * command);
+
+	// Check if the controller is initialized (added by me, not Xeryon)
+	bool isInitialized() const {
+	#if defined (__linux__) || defined(__APPLE__)
+			return port_fd_ != -1;
+	#else
+			return port_handle_ != INVALID_HANDLE_VALUE;
+	#endif
+		}
+	// Past here is original Xeryon code
+
 private:
     int readPort_(char * c, unsigned int timeout);
 	void processData_();

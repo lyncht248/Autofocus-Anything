@@ -41,6 +41,9 @@ class autofocus { //This class handles autofocusing
   int computebestfocusReversed (cv::Mat image, int imgHeight, int imgWidth);
   void adjust_bestFocus(int val);
 
+  // Add a method to get the lens object
+  lens& getLens() { return lens1; }
+
   private:
   //computes the sharpness curve along the horizontal of the image using a sharpness algorithm
   std::vector<double> computesharpness(cv::Mat image, int imgHeight, int imgWidth, int kernel);

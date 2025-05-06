@@ -56,9 +56,11 @@ void Axis::setDPOS(Distance d)
     sendCommand_("DPOS", DPOS);
     was_valid_DPOS_ = true;
 
-    int distance = std::abs(DPOS - getData("EPOS"));
-    auto send_time = getActualTime_();
-    bool error = false;
+    // int distance = std::abs(DPOS - getData("EPOS"));
+
+    // // Store the time when the DPOS command was sent to track timeouts
+    // auto send_time = getActualTime_();
+    // bool error = false;
 
     //Do NOT wait for the position to be reached... 
     //waitForUpdate_();

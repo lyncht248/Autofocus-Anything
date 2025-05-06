@@ -7,56 +7,102 @@
 #include <iostream>
 #include <sstream>
 #include "Xeryon.h"
+#include <fmt/chrono.h>
+#include <iomanip>
 
 bool bLensLogFlag = 1;
 
 lens::lens() : stop_thread(false), controller(nullptr), axis(nullptr) {}
 
-bool lens::initialize() {
-
+bool lens::initialize()
+{
     // start lens thread
     tLens = std::thread(&lens::lens_thread, this);
 
-    controller = new Xeryon("/dev/ttyACM0", 115200);
-    if (controller == nullptr) {
-        controller = new Xeryon("/dev/ttyACM1", 115200);
+    // Try multiple port options
+    const char *portNames[] = {"/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyACM2", "/dev/ttyACM3"};
+    bool connection_successful = false;
+
+    for (const char *port : portNames)
+    {
+        if (controller)
+        {
+            delete controller; // Clean up previous attempt if any
+            controller = nullptr;
+        }
+
+        if (bLensLogFlag)
+            logger->info("[lens::initialize] Trying to connect to {}", port);
+        controller = new Xeryon(port, 115200);
+
+        // Try to add the axis first (addAxis doesn't actually need a working port)
+        axis = controller->addAxis('X', &XLA_1250_3N);
+        if (!axis)
+        {
+            if (bLensLogFlag)
+                logger->error("[lens::initialize] Failed to add axis on {}", port);
+            continue;
+        }
+
+        // Now call start() to actually open the port
+        controller->start();
+
+        // Check if the port opened successfully
+        if (controller->isInitialized())
+        {
+            if (bLensLogFlag)
+                logger->info("[lens::initialize] Connected successfully to {}", port);
+            connection_successful = true;
+            break; // Successfully connected
+        }
+
+        if (bLensLogFlag)
+            logger->error("[lens::initialize] Failed to connect to {}", port);
     }
-    if (controller == nullptr) {
-        logger->error("[lens::initialize] Failed to initialize controller");
+
+    if (!connection_successful)
+    {
+        logger->error("[lens::initialize] Failed to initialize controller on any port");
         return false;
     }
 
-    axis = controller->addAxis('X', &XLA_1250_3N);
-    if (axis == nullptr) {
-        logger->error("[lens::initialize] Failed to create axis");
-        return false;
-    }
-
-    controller->start();
+    // start() was already called, so skip to the configuration
 
     // enable the lens, then reset (which loads settings), then enable, then find index, then enable
-    axis->sendCommand("ENBL",1);
-    axis->sendCommand("RSET",1);
+    axis->sendCommand("ENBL", 1);
+    axis->sendCommand("RSET", 1);
     // wait for 0.5s
     usleep(500000);
-    axis->sendCommand("ENBL",1);
+    axis->sendCommand("ENBL", 1);
     axis->findIndex();
     // wait for 0.5s
     usleep(500000);
-    axis->sendCommand("ENBL",1);    
+    axis->sendCommand("ENBL", 1);
 
+    // send each command in settings_default.txt to lens and ensure it is successful
 
-    // // send each command in settings_default.txt to lens and ensure it is successful
-    axis->sendCommand("INFO",4);
-    axis->sendCommand("POLI",97);
-    axis->sendCommand("FREQ",90000);
-    axis->sendCommand("FRQ2",88000);
-    axis->sendCommand("HFRQ",92000);
-    axis->sendCommand("LFRQ",86000);
+    // axis->sendCommand("INFO", 4);
+    // axis->sendCommand("POLI", 97);
+    //  axis->sendCommand("FREQ", 87000);
+    //  axis->sendCommand("FRQ2", 85000);
+    //  axis->sendCommand("HFRQ", 89000);
+    //  axis->sendCommand("LFRQ", 83000);
+
+    // Increasing the frequencies to reduce judder. Above 90.5kHz, the lens locks up.
+    axis->sendCommand("FREQ", 90000);
+    axis->sendCommand("FRQ2", 87000);
+    axis->sendCommand("HFRQ", 92000);
+    axis->sendCommand("LFRQ", 86000);
     // axis->sendCommand("LLIM",-15);
     // axis->sendCommand("HLIM",15);
+    axis->sendCommand("HLIM", 0); // Set a soft limit of 0mm
+
+    // These are the proportional gains for the controller. When we turn the Freq up, we need to turn these down a bit
     // axis->sendCommand("PROP",120);
     // axis->sendCommand("PRO2",40);
+    axis->sendCommand("PROP", 90);
+    axis->sendCommand("PRO2", 35);
+
     // axis->sendCommand("MPRO",250);
     // axis->sendCommand("INTF",15);
     // axis->sendCommand("MASS",0);
@@ -65,10 +111,12 @@ bool lens::initialize() {
     // axis->sendCommand("ZON2",1);
 
     // axis->sendCommand("MSPD",200);
-    //axis->sendCommand("SSPD",100);
+    // axis->sendCommand("SSPD",100);
     // axis->sendCommand("ISPD",10);
-    axis->sendCommand("ACCE",65500);
-    axis->sendCommand("DECE",65500);
+    // axis->sendCommand("ACCE",65500);
+    // axis->sendCommand("DECE",65500);
+    axis->sendCommand("ACCE", 65500);
+    axis->sendCommand("DECE", 65500);
 
     // axis->sendCommand("ILIM",3000);
     // axis->sendCommand("ELIM",0);
@@ -99,7 +147,7 @@ bool lens::initialize() {
     // axis->sendCommand("FILP",1);
     // axis->sendCommand("COMP",0);
     // axis->sendCommand("DLAY",10);
-    
+
     // axis->sendCommand("DTIM",0);
     // axis->sendCommand("ECHO",0);
     // axis->sendCommand("INDA",1);
@@ -119,18 +167,18 @@ bool lens::initialize() {
     // axis->sendCommand("FLAG",0);
     // axis->sendCommand("VMIN",40000);
     // axis->sendCommand("ECAT",0);
-    // axis->sendCommand("BLCK",0);  
+    // axis->sendCommand("BLCK",0);
 
-    //set speed to 200mm/s
+    // set speed to 200mm/s
     axis->setSpeed(200_mm);
+    // wait 0.5s
+    usleep(500000);
 
-    // For some reason INDX causes LLIM to be set to 0, so we need to set it manually. The encoder resolution is 1250
-
+    // For some reason INDX causes LLIM to be set to -10mm, so we need to set it manually.
     axis->setSetting("LLIM", -14.9_mm);
 
-
-    axis->setDPOS(-9_mm);
-    currentLensLoc = -9.0;
+    axis->setDPOS(-9.1_mm);
+    currentLensLoc = -9.1;
 
     // wait for 0.5s
     usleep(500000);
@@ -139,141 +187,159 @@ bool lens::initialize() {
     // axis->setDPOS(10_mm);
     // currentLensLoc = 10.0;
 
-
     // axis->setDPOS(-10_mm);
     // currentLensLoc = -10.0;
 
-
-    //wait for 0.5s
+    // wait for 0.5s
     usleep(500000);
 
-    // After setting position
-    Distance epos = axis->getEPOS();
-    double actualPos = epos(Distance::MM);
-    logger->info("[lens::initialize] Requested position: {}mm, Actual position: {}mm", 14.0, actualPos);
+    // print the MASS setting, which is an integer
+    int massSetting = axis->getSetting("MASS");
+    logger->error("[lens::initialize] MASS setting: {}", massSetting);
 
     // axis->setDPOS(5_mm);
     // std::cout << "moved 5mm" << std::endl;
     // axis->setDPOS(-10_mm);
     // std::cout << "moved -10mm" << std::endl;
-    if(bLensLogFlag) logger->info("Controller initialized!");
+    if (bLensLogFlag)
+        logger->info("Controller initialized!");
     return true;
 }
 
-void lens::mov_rel(double mmToMove) {
+void lens::mov_rel(double mmToMove)
+{
     double newLensLoc = currentLensLoc + mmToMove;
-    if (newLensLoc > MIN_POSITION && newLensLoc < MAX_POSITION) {
-        try {
-            
-            // We need to use as high a frequency as possible to avoid judder, but 
-            // high frequencies also cause resonance/oscillation. This driving frequency regime seems to 
-            // minimize judder while avoiding oscillation. 
-
-            // Check if we're crossing a frequency boundary
-            bool wasInMiddleZone = (currentLensLoc >= -13.7 && currentLensLoc <= -7.4);
-            bool willBeInMiddleZone = (newLensLoc >= -13.7 && newLensLoc <= -7.4);
-            
-            // Only change frequencies if crossing boundary
-            if (wasInMiddleZone != willBeInMiddleZone) {
-                if (willBeInMiddleZone) {
-                    // Moving into the -7.4 to -12 zone - use lower frequencies
-                    axis->sendCommand("FREQ", 89000);
-                    axis->sendCommand("FRQ2", 87000);
-                    axis->sendCommand("HFRQ", 91000);
-                    axis->sendCommand("LFRQ", 85000);
-                    if(bLensLogFlag) logger->error("[lens::mov_rel] Switching to lower frequencies for -8mm to -12mm zone");
-                } else {
-                    // Moving to outer zone - use higher frequencies
-                    axis->sendCommand("FREQ", 90000);
-                    axis->sendCommand("FRQ2", 88000);
-                    axis->sendCommand("HFRQ", 92000);
-                    axis->sendCommand("LFRQ", 86000);
-                    if(bLensLogFlag) logger->error("[lens::mov_rel] Switching to higher frequencies for outer zone");
-                }
-            }
-
+    if (newLensLoc > MIN_POSITION && newLensLoc < MAX_POSITION)
+    {
+        try
+        {
             // Convert mm to Distance object
             Distance newLensLocString(newLensLoc, Distance::MM);
 
             axis->setDPOS(newLensLocString);
-            
-            //TODO: remove this
+
+            // TODO: remove this
             Distance epos = axis->getEPOS();
             double actualPos = epos(Distance::MM);
-            logger->error("[lens::mov_rel] Requested move: {}mm to position {}mm, Actual position: {}mm", mmToMove, newLensLoc, actualPos);
+            // Alternative approach if including fmt/chrono.h doesn't work
+            auto now = std::chrono::system_clock::now();
+            auto now_time_t = std::chrono::system_clock::to_time_t(now);
+            auto ms = std::chrono::duration_cast<std::chrono::microseconds>(
+                          now - std::chrono::system_clock::from_time_t(now_time_t))
+                          .count();
+
+            std::stringstream ss;
+            ss << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S");
+            ss << '.' << std::setfill('0') << std::setw(6) << ms;
+
+            logger->error("[lens::mov_rel] [{}] Requested move: {}mm to position {}mm, Actual position: {}mm",
+                          ss.str(), mmToMove, newLensLoc, actualPos);
 
             currentLensLoc = newLensLoc;
-            
-            if(outOfBoundsOnceOnly > 0) {
+
+            if (outOfBoundsOnceOnly > 0)
+            {
                 outOfBoundsOnceOnly--;
             }
-            else if(outOfBoundsOnceOnly == 0) {
+            else if (outOfBoundsOnceOnly == 0)
+            {
                 NotificationCenter::instance().postNotification("lensInBounds");
             }
         }
-        catch (const std::exception& e) {
+        catch (const std::exception &e)
+        {
             logger->error("[lens::mov_rel] Movement error: " + std::string(e.what()));
         }
     }
-    else {
+    else
+    {
         logger->error("[lens::mov_rel] Lens is out of bounds!");
-        if (outOfBoundsOnceOnly == 0) {
+        if (outOfBoundsOnceOnly == 0)
+        {
             NotificationCenter::instance().postNotification("outOfBoundsError");
             outOfBoundsOnceOnly = 10;
         }
     }
 }
 
-void lens::return_to_start() {
-    try {
-        std::cout << "returning to start" << std::endl;
-        //axis->findIndex();
-        axis->setDPOS(-9_mm);
-        currentLensLoc = -9.0;
-        //wait for 0.5s
+void lens::return_to_start()
+{
+    try
+    {
+        std::cout << "returning to start position: " << returnPosition << "mm" << std::endl;
+        Distance returnPos(returnPosition, Distance::MM);
+        axis->setDPOS(returnPos);
+        currentLensLoc = returnPosition;
+        // wait for 0.5s
         usleep(500000);
-        
     }
-    catch (const std::exception& e) {
+    catch (const std::exception &e)
+    {
         logger->error("[lens::return_to_start] Error: " + std::string(e.what()));
     }
 }
 
-lens::~lens() {
+void lens::set_return_position(double position)
+{
+    // Ensure the position is within bounds
+    if (position >= MIN_POSITION && position <= MAX_POSITION)
+    {
+        returnPosition = position;
+        if (bLensLogFlag)
+            logger->info("[lens::set_return_position] Return position set to {}mm", position);
+    }
+    else
+    {
+        if (bLensLogFlag)
+            logger->error("[lens::set_return_position] Requested position {}mm is out of bounds", position);
+    }
+}
+
+lens::~lens()
+{
     stop_thread.store(true);
     if (tLens.joinable())
         tLens.join();
-        
-    if (controller) {
-        if (axis) {
-            axis->stop();  // Stop the axis before stopping controller
+
+    if (controller)
+    {
+        if (axis)
+        {
+            axis->stop(); // Stop the axis before stopping controller
         }
         controller->stop();
         delete controller;
     }
-    
-    if(bLensLogFlag) 
+
+    if (bLensLogFlag)
         logger->info("[lens::~lens] Lens destructor called, controller stopped");
 }
 
-void lens::lens_thread() {
-    if(bLensLogFlag) logger->info("[lens::lens_thread] Lens thread started");
+void lens::lens_thread()
+{
+    if (bLensLogFlag)
+        logger->info("[lens::lens_thread] Lens thread started");
     std::cout << "lens thread started" << std::endl;
-    while(!stop_thread.load()) {
-        if(bResetLens) {
-            if(bLensLogFlag) logger->info("[lens::lens_thread] Resetting lens to start position");
+    while (!stop_thread.load())
+    {
+        if (bResetLens)
+        {
+            if (bLensLogFlag)
+                logger->info("[lens::lens_thread] Resetting lens to start position");
             return_to_start();
-            if(bLensLogFlag) logger->info("[lens::lens_thread] Lens reset to start position");
+            if (bLensLogFlag)
+                logger->info("[lens::lens_thread] Lens reset to start position");
             bResetLens = 0;
         }
 
-        if(bNewMoveRel) {
-            //if(bLensLogFlag) logger->info("[lens::lens_thread] Moving lens to new position");
+        if (bNewMoveRel)
+        {
+            // if(bLensLogFlag) logger->info("[lens::lens_thread] Moving lens to new position");
             mov_rel(mmToMove);
-            //if(bLensLogFlag) logger->info("[lens::lens_thread] Lens moved to new position");
+            // if(bLensLogFlag) logger->info("[lens::lens_thread] Lens moved to new position");
             bNewMoveRel = 0;
         }
-        
+
         // Small sleep to prevent busy-waiting
         usleep(1000); // 1ms
     }

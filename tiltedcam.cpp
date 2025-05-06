@@ -41,8 +41,9 @@ bool tiltedcam::initialize() {
         noError = false;
     }    
 
-    if (ASISetControlValue(0, ASI_EXPOSURE, 16000, ASI_FALSE) == ASI_SUCCESS) {
-        if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] set tilted camera exposure to 16ms (and bAuto=FALSE)");
+    //16ms exposure, the highest possible at 60fps. Could try reducing (minimizing motion blur) but it's already very dark. 
+    if (ASISetControlValue(0, ASI_EXPOSURE, 16000, ASI_TRUE) == ASI_SUCCESS) {
+        if(bTiltedCamLogFlag) logger->info("[tiltedcam::tiltedcam()] set tilted camera exposure to auto mode");
     }
     else {
         logger->error("[tiltedcam::tiltedcam()] failed to set tilted camera exposure");

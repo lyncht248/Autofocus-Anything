@@ -11,6 +11,7 @@ public:
     ~lens();
     bool initialize();
     void return_to_start();
+    void set_return_position(double position);
 
 private:
     void lens_thread();
@@ -23,6 +24,9 @@ private:
     // Current position in mm
     //double currentLensLoc = -3.0;
     double currentLensLoc;
+
+    // Return position in mm (new variable)
+    double returnPosition = -9.1;
 
     // this thread gets instructions from the GUI
     std::thread tLens;

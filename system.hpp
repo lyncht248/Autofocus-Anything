@@ -1,7 +1,6 @@
 #ifndef HVIGTK_SYSTEM_H
 #define HVIGTK_SYSTEM_H
 
-
 #include <fstream>
 #include <iostream>
 #include <queue>
@@ -23,24 +22,25 @@ namespace Vimba = AVT::VmbAPI;
 
 class System;
 
-class FrameProcessor 
+class FrameProcessor
 {
 	friend class System;
+
 public:
 	FrameProcessor(System &sys);
 	~FrameProcessor();
-	
+
 	void releaseFrame();
 	void resetRaster();
-	::Cairo::RefPtr< ::Cairo::Surface> getFrame();
+	::Cairo::RefPtr<::Cairo::Surface> getFrame();
 
-protected: //Only available to derived and friend classes
+protected: // Only available to derived and friend classes
 	void stabilise();
 	void processFrame();
 
-	::Cairo::RefPtr< ::Cairo::ImageSurface> processed;
+	::Cairo::RefPtr<::Cairo::ImageSurface> processed;
 	VidFrame *vidFrame;
-	std::unordered_map<std::string, FrameFilter*> filters;
+	std::unordered_map<std::string, FrameFilter *> filters;
 	bool running;
 	bool _stabNewFrame;
 	bool _stabComplete;
@@ -58,31 +58,30 @@ protected: //Only available to derived and friend classes
 };
 
 /*
-This class is responsible for all the processing behind the GUI, including frame streaming (see FrameProcessor), closing/opening the GUI, 
+This class is responsible for all the processing behind the GUI, including frame streaming (see FrameProcessor), closing/opening the GUI,
 and operating other neccessary threads.
 */
 class System
 {
-	friend class FrameProcessor; //Allows FrameProcessor to access private methods
+	friend class FrameProcessor; // Allows FrameProcessor to access private methods
 public:
-
 	// Constructor function for system class
 	System(int argc, char **argv);
 	~System();
 
-	MainWindow& getWindow();
-	Recorder& getRecorder();
+	MainWindow &getWindow();
+	Recorder &getRecorder();
 
 	bool startStreaming();
 	void stopStreaming();
-	
-	template<typename T>
+
+	template <typename T>
 	bool setFeature(const std::string &fname, T val)
 	{
 		if (cam != nullptr)
 		{
 			Vimba::FeaturePtr pFeature;
-			if (cam->GetFeatureByName(fname.c_str(), pFeature ) == VmbErrorSuccess && pFeature->SetValue(val) == VmbErrorSuccess)
+			if (cam->GetFeatureByName(fname.c_str(), pFeature) == VmbErrorSuccess && pFeature->SetValue(val) == VmbErrorSuccess)
 			{
 				logger->info("[System.hpp] Set {} to: {}", fname, val);
 				return true;
@@ -96,13 +95,13 @@ public:
 		return false;
 	}
 
-	template<typename T>
+	template <typename T>
 	T getFeature(const std::string &fname)
 	{
 		if (cam != nullptr)
 		{
 			Vimba::FeaturePtr pFeature;
-			if (cam->GetFeatureByName(fname.c_str(), pFeature ) == VmbErrorSuccess )
+			if (cam->GetFeatureByName(fname.c_str(), pFeature) == VmbErrorSuccess)
 			{
 				T out;
 				pFeature->GetValue(out);
@@ -118,12 +117,13 @@ public:
 		return T();
 	}
 
-	TSQueue<VidFrame *>& getFrameQueue();
-	Glib::Dispatcher& signalNewFrame();
+	TSQueue<VidFrame *> &getFrameQueue();
+	Glib::Dispatcher &signalNewFrame();
 
-	VidFrame* getFrame();
-	double getFPS(); //see TODO below
+	VidFrame *getFrame();
+	double getFPS(); // see TODO below
 
+	void onWindowHomePositionChanged(double val);
 
 private:
 	void renderFrame();
@@ -131,9 +131,9 @@ private:
 
 	void whenLiveViewToggled(bool viewingLive);
 
-	//void whenMakeMapToggled(bool makingMap); DEPRECATED
+	// void whenMakeMapToggled(bool makingMap); DEPRECATED
 	void whenStabiliseToggled(bool stabilising);
-	//void whenShowMapToggled(bool showingMap); DEPRECATED
+	// void whenShowMapToggled(bool showingMap); DEPRECATED
 
 	void whenHoldFocusToggled(bool holdingFocus);
 	void when3DStabToggled(bool active);
@@ -157,18 +157,18 @@ private:
 	void onRecenterClicked();
 	void onWindowEnterClicked();
 
-	bool onCloseClicked(const GdkEventAny* event);
+	bool onCloseClicked(const GdkEventAny *event);
 
 	void on_error();
 	void handleDisconnection();
 
 	struct Private;
-	MainWindow window; //object from mainwindow.cpp class
-	autofocus AF; //object from autofocus.cpp class
-	Vimba::VimbaSystem &vsys; //For interacting with Vimba camera
-	Vimba::CameraPtr cam; //For interacting with Vimba camera
+	MainWindow window;		  // object from mainwindow.cpp class
+	autofocus AF;			  // object from autofocus.cpp class
+	Vimba::VimbaSystem &vsys; // For interacting with Vimba camera
+	Vimba::CameraPtr cam;	  // For interacting with Vimba camera
 
-	CVD::ImageRef size; 
+	CVD::ImageRef size;
 	CVD::Image<unsigned int> im;
 
 	struct Private *priv;
@@ -177,19 +177,18 @@ private:
 
 	TSQueue<VidFrame *> frameQueue;
 
-	
 	FrameProcessor frameProcessor;
-	
+
 	ObjectThread thread;
 
-	//Recorder *recorder;
-	std::unique_ptr<Recorder> recorder; //Attempting to fix some memory leakage
+	// Recorder *recorder;
+	std::unique_ptr<Recorder> recorder; // Attempting to fix some memory leakage
 	VDispatcher<RecOpRes> sRecorderOperationComplete;
 
-	Stabiliser stabiliser; //For running x-y stabilization
+	Stabiliser stabiliser; // For running x-y stabilization
 	bool madeMap;
 	bool errorDialogShown = false;
-	//double actualFPS; //TODO: Implement actualFPS instead of using value in box
+	// double actualFPS; //TODO: Implement actualFPS instead of using value in box
 
 	// Flags for disconnection states
 	bool tiltedCamDisconnected = false;
