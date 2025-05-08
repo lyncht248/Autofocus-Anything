@@ -1,3 +1,7 @@
 build/
 .vscode/.ipch/ipch
 .vscode/.ipch/ipch/*
+.vscode/
+.cursorrules
+.cache/
+.directory
