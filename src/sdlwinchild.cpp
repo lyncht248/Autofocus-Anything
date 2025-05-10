@@ -11,6 +11,7 @@
 #include "sdlwinchild.hpp"
 #include "main.hpp"
 #include <SDL_ttf.h>
+#include <SDL.h>
 
 #define BORDER_THRES 9
 
@@ -32,6 +33,17 @@ SDL_Rect borders[4] = {
 using namespace SDLWindow;
 
 TTF_Font* font = nullptr;
+
+// Track mouse dragging for image panning
+bool isDraggingImage = false;
+int dragStartX = 0;
+int dragStartY = 0;
+
+SDL_Cursor* handCursor = nullptr;
+SDL_Cursor* defaultCursor = nullptr;
+
+static bool debug_print = true;
+static int counter = 0;
 
 void convert_g8_to_rgb888(uint32_t *dst, const uint8_t *src, ssize_t n)
 {
@@ -138,6 +150,11 @@ static inline void redraw(SDL_Renderer *renderer, SDL_Texture *frame, SDL_Textur
 
 static SDL_HitTestResult hit_test(SDL_Window *window, const SDL_Point *pt, void *data)
 {
+	// If we're zoomed in, don't allow window dragging
+	if (sdlwin->zoomFactor > 1.0) {
+		return SDL_HITTEST_NORMAL; // Normal handling, will let our mouse events handle dragging
+	}
+
 	int w, h;
 	SDL_GetWindowSize(window, &w, &h);
 	if (pt->x < BORDER_THRES)
@@ -213,6 +230,10 @@ int SDLWindow::child_main()
 	SDL_Texture *frame = NULL, *map = NULL;
 
 	sdlwin->raster = (SDL_Rect) {0,0,0,0};
+
+	// Initialize cursors
+	defaultCursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
+	handCursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
 
 	SDL_Event e;
 	while(running)
@@ -314,6 +335,14 @@ int SDLWindow::child_main()
 					pthread_mutex_unlock(&sdlwin->mutex);
 					goto quit;
 				}
+				case CMD_RESET_ZOOM:
+				{
+					sdlwin->zoomFactor = 1.0;  // Reset zoom
+					sdlwin->zoomOffsetX = 0.0; // Reset zoom offsets
+					sdlwin->zoomOffsetY = 0.0;
+					sdlwin->response = RE_OK;
+					break;
+				}
 				default:
 					break;
 			}
@@ -410,13 +439,71 @@ int SDLWindow::child_main()
 					}
 				}
 			}
-			if (e.type == SDL_MOUSEBUTTONDOWN)
+			else if (e.type == SDL_MOUSEBUTTONDOWN)
 			{
 				if (e.button.button == SDL_BUTTON_MIDDLE)  // Middle mouse button
 				{
 					sdlwin->zoomFactor = 1.0;  // Reset zoom
 					sdlwin->zoomOffsetX = 0.0; // Reset zoom offsets
 					sdlwin->zoomOffsetY = 0.0;
+				}
+				else if (e.button.button == SDL_BUTTON_LEFT) // Left mouse button
+				{
+					// Only start dragging image if we're zoomed in
+					if (sdlwin->zoomFactor > 1.0)
+					{
+						isDraggingImage = true;
+						SDL_GetMouseState(&dragStartX, &dragStartY);
+						SDL_SetCursor(handCursor); // Change to hand cursor
+					}
+					// Otherwise the default window dragging behavior will occur
+				}
+			}
+			else if (e.type == SDL_MOUSEBUTTONUP)
+			{
+				if (e.button.button == SDL_BUTTON_LEFT)
+				{
+					if (isDraggingImage) {
+						SDL_SetCursor(defaultCursor); // Change back to default cursor
+					}
+					isDraggingImage = false;
+				}
+			}
+			else if (e.type == SDL_MOUSEMOTION)
+			{
+				if (isDraggingImage)
+				{
+					int currentX, currentY;
+					SDL_GetMouseState(&currentX, &currentY);
+					
+					// Simple direct translation at higher zoom levels
+					if (sdlwin->zoomFactor > 1.0) {
+						// Calculate delta in screen pixels
+						int deltaX = currentX - dragStartX;
+						int deltaY = currentY - dragStartY;
+						
+						// Skip tiny movements
+						if (abs(deltaX) < 2 && abs(deltaY) < 2) {
+							dragStartX = currentX;
+							dragStartY = currentY;
+						} else {
+							// Get the scale factor (how many screen pixels per image pixel)
+							int windowWidth, windowHeight;
+							SDL_GetRendererOutputSize(renderer, &windowWidth, &windowHeight);
+							
+							double xscale = ((double)windowWidth - BORDER_THRES*2) / sdlwin->raster.w;
+							double yscale = ((double)windowHeight - BORDER_THRES*2) / sdlwin->raster.h;
+							double scale = (xscale < yscale) ? xscale : yscale;
+							scale *= sdlwin->zoomFactor;
+							
+							// Convert to image space (simpler approach)
+							sdlwin->zoomOffsetX += (double)deltaX / scale;
+							sdlwin->zoomOffsetY += (double)deltaY / scale;
+							
+							dragStartX = currentX;
+							dragStartY = currentY;
+						}
+					}
 				}
 			}
 		}
@@ -435,6 +522,10 @@ int SDLWindow::child_main()
 	quit:;
 	if (frame)
 		SDL_DestroyTexture(frame);
+	if (handCursor)
+		SDL_FreeCursor(handCursor);
+	if (defaultCursor)
+		SDL_FreeCursor(defaultCursor);
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit();

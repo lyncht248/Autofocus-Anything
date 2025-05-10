@@ -504,6 +504,14 @@ void FrameProcessor::resetRaster()
 	}
 }
 
+void FrameProcessor::resetZoom()
+{
+	// Access the childwin member which is private to this class
+	if (childwin) {
+		SDLWindow::resetZoom(childwin);
+	}
+}
+
 ::Cairo::RefPtr<::Cairo::Surface> FrameProcessor::getFrame()
 {
 	return processed;
@@ -1091,9 +1099,11 @@ void System::onRecenterClicked()
 	{
 		logger->info("[System::onRecenterClicked] Recenter clicked");
 	}
-	// recenter the rendered video frames
-	// HERE HERE HERE
-
+	
+	// Reset the zoom using the FrameProcessor method
+	frameProcessor.resetZoom();
+	
+	// Recenter the rendered video frames
 	frameProcessor.resetRaster();
 }
 

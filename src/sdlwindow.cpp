@@ -186,3 +186,15 @@ void SDLWindow::move(SDLWin *win, int x, int y)
 	win->command = CMD_MOVE;
 	unlockcmd(win);
 }
+
+void SDLWindow::resetZoom(SDLWin *win)
+{
+	lockcmd(win);
+	win->zoomFactor = 1.0;  // Reset zoom
+	win->zoomOffsetX = 0.0; // Reset zoom offsets
+	win->zoomOffsetY = 0.0;
+	win->command = CMD_RESET_ZOOM;
+	pthread_cond_broadcast(&win->hasCommand);
+	waitForResponse(win);
+	unlockcmd(win);
+}

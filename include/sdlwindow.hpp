@@ -37,6 +37,7 @@ namespace SDLWindow
 	extern unsigned long long upload(SDLWin *win, const void *buf, size_t n, bool lock = true, int i = 0, unsigned long long off=0);
 	extern Response updateMap(SDLWin *win, const void *buf, int width, int height, int pitch);
 	extern void setShowingMap(SDLWin *win, bool value);
+	extern void resetZoom(SDLWin *win);
 
 	extern void raise(SDLWin *win);
 	extern void unraise(SDLWin *win);

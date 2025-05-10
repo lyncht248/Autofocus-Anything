@@ -93,7 +93,6 @@ autofocus::~autofocus()
 
 void autofocus::run()
 {
-
   // COMMENT THIS OUT!
   std::ofstream out_file("/home/hvi/Desktop/HVI-data/output.txt");
   std::streambuf *original_cout = std::cout.rdbuf(); // Save the buffer of std::cout
@@ -110,8 +109,9 @@ void autofocus::run()
   // Scale the 1280*960 image to 640*480, or 320*240, etc.
   double scale = 0.5;
 
-  // Starting the capture video thread
-  std::thread tCaptureVideo(&autofocus::capturevideo, this);
+  // Start the camera capture thread
+  logger->info("[autofocus::run] Starting camera capture thread");
+  tiltedcam1.startCaptureThread();
 
   // The following variables assume imgWidth = 320; must be changed if this isn't the case.
   int moved = 1;
@@ -143,189 +143,155 @@ void autofocus::run()
   {
     logger->info("[autofocus::run] while thread loop about to start");
   }
+  
   while (!stop_thread.load())
   {
-
-    if (bNewImage && (bHoldFocus || bFindFocus))
+    // Only perform autofocus when either HoldFocus or FindFocus is active
+    if (bHoldFocus || bFindFocus)
     {
-
-      t1 = std::chrono::steady_clock::now();
-
+      // Check if we have a new frame
+      if (tiltedcam1.getLatestFrame(img_calc_buf, img_size))
       {
-        std::lock_guard<std::mutex> lck{mtx};
-        img_calc_buf = img_buf;
-      }
-      bNewImage = 0;
-      imgcount++;
-      imgcountfile++;
+        bNewImage = true;
+        imgcount++;
+        imgcountfile++;
 
-      // cv::Mat image = cv::Mat(imHeight, imWidth, CV_8U, img_calc_buf);
-      // cv::Mat resized;
-      // double scale = 1;
-      // cv::resize(image, resized, cv::Size(), scale, scale); //function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
+        // cv::Mat image = cv::Mat(imHeight, imWidth, CV_8U, img_calc_buf);
+        // cv::Mat resized;
+        // double scale = 1;
+        // cv::resize(image, resized, cv::Size(), scale, scale); //function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
 
-      // Same as above but OpenCL-friendly
-      cv::Mat image = cv::Mat(imHeight, imWidth, CV_8U, img_calc_buf);
-      // cv::UMat image = temp_image.getUMat(cv::ACCESS_READ);
-      cv::Mat resized;
-      cv::resize(image, resized, cv::Size(), scale, scale); // function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
+        // Same as above but OpenCL-friendly
+        cv::Mat image = cv::Mat(imHeight, imWidth, CV_8U, img_calc_buf);
+        // cv::UMat image = temp_image.getUMat(cv::ACCESS_READ);
+        cv::Mat resized;
+        cv::resize(image, resized, cv::Size(), scale, scale); // function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
 
-      // int locBestFocus = computebestfocus(resized, resized.rows, resized.cols); //drops to 0.5 fps if placed in while loop
-      int locBestFocus = computebestfocusReversed(resized, resized.rows, resized.cols);
-      // std::cout << locBestFocus << ", ";
+        // int locBestFocus = computebestfocus(resized, resized.rows, resized.cols); //drops to 0.5 fps if placed in while loop
+        int locBestFocus = computebestfocusReversed(resized, resized.rows, resized.cols);
+        // std::cout << locBestFocus << ", ";
 
-      // int locBestFocus = 220; //this is fast AF, like 960 fps
-      //  std::cout << locBestFocus << ", ";
-      //  std::cout << locBestFocusReversed << ", ";
-      //  std::cout << locBestFocus - locBestFocusReversed << ", ";
-      //  //Print image with line at the location of best focus
-      cv::Point p1(locBestFocus, 0), p2(locBestFocus, resized.cols);
-      cv::line(resized, p1, p2, cv::Scalar(0, 0, 255), 2);
-      // cv::namedWindow("Image With Loc of Best-Focus", cv::WINDOW_AUTOSIZE);
-      // cv::imshow("Image With Loc of Best-Focus", resized);
-      std::string FilePath = "/home/hvi/Desktop/TiltedCam-Output/" + std::to_string(imgcountfile - 1) + "_" + std::to_string(locBestFocus) + ".png";
-      if (bSaveImages)
-      {
-        cv::imwrite(FilePath, resized);
-      };
-      // cv::waitKey(0);
-
-      std::cout << s_int.count() << ", " << desiredLocBestFocus << ", " << locBestFocus << ", ";
-
-      // If imgcount==1, then the user has just turned on FindFocus or HoldFocus
-      if (imgcount == 1)
-      {
-        if (bHoldFocus)
+        // int locBestFocus = 220; //this is fast AF, like 960 fps
+        //  std::cout << locBestFocus << ", ";
+        //  std::cout << locBestFocusReversed << ", ";
+        //  std::cout << locBestFocus - locBestFocusReversed << ", ";
+        //  //Print image with line at the location of best focus
+        cv::Point p1(locBestFocus, 0), p2(locBestFocus, resized.cols);
+        cv::line(resized, p1, p2, cv::Scalar(0, 0, 255), 2);
+        // cv::namedWindow("Image With Loc of Best-Focus", cv::WINDOW_AUTOSIZE);
+        // cv::imshow("Image With Loc of Best-Focus", resized);
+        std::string FilePath = "/home/hvi/Desktop/TiltedCam-Output/" + std::to_string(imgcountfile - 1) + "_" + std::to_string(locBestFocus) + ".png";
+        if (bSaveImages)
         {
-          desiredLocBestFocus = locBestFocus;
-          previous = desiredLocBestFocus;
-          // window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to the current location of best-focus
-        }
-        else if (bFindFocus)
+          cv::imwrite(FilePath, resized);
+        };
+        // cv::waitKey(0);
+
+        std::cout << s_int.count() << ", " << desiredLocBestFocus << ", " << locBestFocus << ", ";
+
+        // If imgcount==1, then the user has just turned on FindFocus or HoldFocus
+        if (imgcount == 1)
         {
-          desiredLocBestFocus = 180 * (scale / 0.25); // This was set when scale=0.25, so adjusting
-          previous = 180 * (scale / 0.25);
-          if (bAutofocusLogFlag)
+          if (bHoldFocus)
           {
-            logger->info("[autofocus::run] Set desiredLocBestFocus back to 140 in autofocus.cc");
+            desiredLocBestFocus = locBestFocus;
+            previous = desiredLocBestFocus;
+            // window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to the current location of best-focus
           }
-          // window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to 160, the center-point
+          else if (bFindFocus)
+          {
+            desiredLocBestFocus = 180 * (scale / 0.25); // This was set when scale=0.25, so adjusting
+            previous = 180 * (scale / 0.25);
+            if (bAutofocusLogFlag)
+            {
+              logger->info("[autofocus::run] Set desiredLocBestFocus back to 140 in autofocus.cc");
+            }
+            // window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to 160, the center-point
+          }
         }
-      }
 
-      //// BLINK DETECTION. TODO: try removing 'moved' variable
-      else if (moved == 0 && blink == 0 && abs(locBestFocus - previous) > (50) && bBlinking)
-      { // if the location of best focus changes by more than 50 pixels with no move, it is a blink
-        // Blink starts
-        if (bAutofocusLogFlag)
-          logger->info("[autofocus::run] Frame ignored; blink detected");
-        blink = 1;
-      }
-      else if (blink == 1)
-      {
-        if (bAutofocusLogFlag)
-          logger->info("[autofocus::run] Frame ignored; blink detected");
-        blinkframes--;
-        if (blinkframes == 0)
+        //// BLINK DETECTION. TODO: try removing 'moved' variable
+        else if (moved == 0 && blink == 0 && abs(locBestFocus - previous) > (50) && bBlinking)
+        { // if the location of best focus changes by more than 50 pixels with no move, it is a blink
+          // Blink starts
+          if (bAutofocusLogFlag)
+            logger->info("[autofocus::run] Frame ignored; blink detected");
+          blink = 1;
+        }
+        else if (blink == 1)
         {
-          blinkframes = 15; // resets blinkframes
-          blink = 0;
+          if (bAutofocusLogFlag)
+            logger->info("[autofocus::run] Frame ignored; blink detected");
+          blinkframes--;
+          if (blinkframes == 0)
+          {
+            blinkframes = 15; // resets blinkframes
+            blink = 0;
+          }
         }
-      }
 
-      else
-      {
-        // do nothing inside tol band
-        if (abs(locBestFocus - desiredLocBestFocus) <= tol)
-        { // tol
-          std::cout << ", in TOL band\n";
-          moved = 0;
-
-          // locBestFocusHistory.clear(); //When a value is inside the tolerance band, focus has been found, so clear the history
-        }
         else
-        { // outside tol band
-          // PID CONTROLLER
-          mmToMove = pid.calculate(desiredLocBestFocus, locBestFocus) * -1.0;
-          std::cout << mmToMove << "\n";
-          bNewMoveRel = 1;
-          moved = 1;
+        {
+          // do nothing inside tol band
+          if (abs(locBestFocus - desiredLocBestFocus) <= tol)
+          { // tol
+            std::cout << ", in TOL band\n";
+            moved = 0;
 
-          // //// OSCILLATION DETECTION
-          // //Adding to locBestFocusHistory when outside TOL band
-          // locBestFocusHistory.push_back(locBestFocus);
-          // // If we have more than 20 values, remove the oldest
-          // if (locBestFocusHistory.size() > 20) {
-          //   locBestFocusHistory.pop_front();
-          // }
-          // // Check if history contains values both above and below desiredLocBestFocus
-          // if(locBestFocusHistory.size() == 20) {
-          //   bool hasAbove = std::any_of(locBestFocusHistory.begin(), locBestFocusHistory.end(), [](int x) { return x > desiredLocBestFocus; });
-          //   bool hasBelow = std::any_of(locBestFocusHistory.begin(), locBestFocusHistory.end(), [](int x) { return x < desiredLocBestFocus; });
-          //   if (hasAbove && hasBelow) {
-          //     // Find the value closest to desiredLocBestFocus
-          //     auto closestIt = std::min_element(locBestFocusHistory.begin(), locBestFocusHistory.end(), [](int a, int b) {
-          //         return std::abs(a - desiredLocBestFocus) < std::abs(b - desiredLocBestFocus);
-          //     });
-          //     desiredLocBestFocus = *closestIt;
-          //     std::cout << "DETECTED OSCILLATION!! Adjusting desiredLocBestFocus to " << desiredLocBestFocus << "\n";
-          //     locBestFocusHistory.clear(); // Clear history after adjusting desiredLocBestFocus
-          //   }
-          // }
+            // locBestFocusHistory.clear(); //When a value is inside the tolerance band, focus has been found, so clear the history
+          }
+          else
+          { // outside tol band
+            // PID CONTROLLER
+            mmToMove = pid.calculate(desiredLocBestFocus, locBestFocus) * -1.0;
+            std::cout << mmToMove << "\n";
+            bNewMoveRel = 1;
+            moved = 1;
+
+            // //// OSCILLATION DETECTION
+            // //Adding to locBestFocusHistory when outside TOL band
+            // locBestFocusHistory.push_back(locBestFocus);
+            // // If we have more than 20 values, remove the oldest
+            // if (locBestFocusHistory.size() > 20) {
+            //   locBestFocusHistory.pop_front();
+            // }
+            // // Check if history contains values both above and below desiredLocBestFocus
+            // if(locBestFocusHistory.size() == 20) {
+            //   bool hasAbove = std::any_of(locBestFocusHistory.begin(), locBestFocusHistory.end(), [](int x) { return x > desiredLocBestFocus; });
+            //   bool hasBelow = std::any_of(locBestFocusHistory.begin(), locBestFocusHistory.end(), [](int x) { return x < desiredLocBestFocus; });
+            //   if (hasAbove && hasBelow) {
+            //     // Find the value closest to desiredLocBestFocus
+            //     auto closestIt = std::min_element(locBestFocusHistory.begin(), locBestFocusHistory.end(), [](int a, int b) {
+            //         return std::abs(a - desiredLocBestFocus) < std::abs(b - desiredLocBestFocus);
+            //     });
+            //     desiredLocBestFocus = *closestIt;
+            //     std::cout << "DETECTED OSCILLATION!! Adjusting desiredLocBestFocus to " << desiredLocBestFocus << "\n";
+            //     locBestFocusHistory.clear(); // Clear history after adjusting desiredLocBestFocus
+            //   }
+            // }
+          }
         }
+        previous = locBestFocus;
+        t2 = std::chrono::steady_clock::now();
+        s_int = s_int + std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
       }
-      previous = locBestFocus;
-      t2 = std::chrono::steady_clock::now();
-      s_int = s_int + std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
     }
-    // t2 = std::chrono::steady_clock::now();
-    // s_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
-    // if (s_int.count() > (time_autofocusing_s*1000)) {
-    // }
+    else {
+      // Reset counter when autofocus is not active
+      imgcount = 0;
+      
+      // Sleep a bit to reduce CPU usage when not actively focusing
+      usleep(50000); // 50ms
+    }
   }
+  
   // t2 = std::chrono::steady_clock::now();
   // s_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
   // std::cout << " Analyzed " << imgcountfile << " images in " << s_int.count() << " milliseconds" << "\n";
-  tCaptureVideo.join(); // Stops the CaptureVideo thread too
+  tiltedcam1.stopCaptureThread();
 
   // std::cout.rdbuf(original_cout);  // Redirect std::cout back to the console
   // out_file.close();
-}
-
-// TODO: This should be in tiltedcam.cpp, but I need to use the global variables... Poor code!
-void autofocus::capturevideo()
-{
-  if (bAutofocusLogFlag)
-  {
-    logger->info("[autofocus::capturevideo] thread started");
-  }
-  while (!stop_thread.load())
-  {
-
-    // for testing
-    //  cv::Mat image;
-    //  image = cv::imread("/home/tom/projects/autofocus_v9/test/NoLine/img1748_294.png", 1 );
-    //  if ( !image.data )
-    //  {
-    //      std::cout << "No image data \n";
-    //  }
-
-    // Actually pulling from camera. TODO: get img_size from camera, not from global variables...
-    if (ASIGetVideoData(0, img_get_buf, img_size, -1) != ASI_SUCCESS)
-    {
-      logger->error("[autofocus::capturevideo] Error getting image from tilted camera!");
-    }
-
-    // TODO: replace with a temp storage queue
-    {
-      std::lock_guard<std::mutex> lck{mtx};
-      // img_buf = image.data;
-      img_buf = img_get_buf;
-    }
-    bNewImage = 1;
-    // std::cout << "got an image" << "\n";
-    // usleep(16670); //is in microseconds
-  }
 }
 
 int autofocus::computebestfocusReversed(cv::Mat image, int imgHeight, int imgWidth)

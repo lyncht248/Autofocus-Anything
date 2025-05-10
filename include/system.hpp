@@ -33,6 +33,7 @@ public:
 	void releaseFrame();
 	void resetRaster();
 	::Cairo::RefPtr<::Cairo::Surface> getFrame();
+	void resetZoom();
 
 protected: // Only available to derived and friend classes
 	void stabilise();

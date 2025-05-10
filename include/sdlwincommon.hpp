@@ -36,7 +36,8 @@ namespace SDLWindow
 		CMD_UNRAISE,
 		CMD_HIDE,
 		CMD_MOVE,
-		CMD_QUIT
+		CMD_QUIT,
+		CMD_RESET_ZOOM
 	};
 
 	enum Response

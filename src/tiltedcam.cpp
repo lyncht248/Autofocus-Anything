@@ -4,11 +4,23 @@
 #include "notificationCenter.hpp"
 #include <iostream>
 #include <unistd.h>
+#include <string.h> // For memcpy
 
 #include <atomic>
 #include <thread>
 
 bool bTiltedCamLogFlag = 0; // 1 = log, 0 = don't log
+
+tiltedcam::tiltedcam() : 
+    m_captureBuffer(nullptr),
+    m_processingBuffer(nullptr),
+    m_newFrameAvailable(false),
+    m_stopThread(false),
+    m_bufferSize(0),
+    m_threadRunning(false)
+{
+    // Constructor properly initializes all members
+}
 
 bool tiltedcam::initialize()
 {
@@ -205,28 +217,15 @@ unsigned char *tiltedcam::capturevideowrapper(const long img_size)
 
 tiltedcam::~tiltedcam()
 {
-    if (ASIStopVideoCapture(0) == ASI_SUCCESS)
-    {
-        if (bTiltedCamLogFlag)
-            logger->info("[tiltedcam::~tiltedcam()] stopped tilted camera video capture");
-    }
-    else
-    {
-        logger->error("[tiltedcam::~tiltedcam()] failed to stop video capture");
-    };
+    // First stop video capture and the thread
+    ASIStopVideoCapture(0);
+    stopCaptureThread();
 
-    if (ASICloseCamera(0) == ASI_SUCCESS)
-    {
-        if (bTiltedCamLogFlag)
-            logger->info("[tiltedcam::~tiltedcam()] closed tilted camera");
-    }
-    else
-    {
-        logger->error("[tiltedcam::~tiltedcam()] failed to close tilted camera");
-    }
-
-    if (bTiltedCamLogFlag)
-        logger->info("[tiltedcam::~tiltedcam()] destructor finished");
+    // Then close the camera with proper delay
+    usleep(50000);  // 50ms to ensure camera operations are complete
+    ASICloseCamera(0);
+    
+    logger->info("[tiltedcam::~tiltedcam] Camera closed and resources freed");
 }
 
 // Getters
@@ -363,4 +362,148 @@ void tiltedcam::setHighSpeedMode(long newHighSpeedMode)
     {
         logger->error("[tiltedcam::setHighSpeedMode()] failed to change setting of tilted camera");
     }
+}
+
+void tiltedcam::startCaptureThread() {
+    // Make sure we don't start twice
+    if (m_threadRunning) {
+        return;
+    }
+
+    // Make sure buffers are allocated
+    if (!m_captureBuffer) {
+        int width, height;
+        ASI_IMG_TYPE type;
+        int bin;
+        
+        if (ASIGetROIFormat(0, &width, &height, &bin, &type) != ASI_SUCCESS) {
+            logger->error("[tiltedcam::startCaptureThread] Failed to get ROI format");
+            return;
+        }
+        
+        m_bufferSize = width * height; // Assuming 8-bit images
+        
+        try {
+            m_captureBuffer = (unsigned char*)malloc(m_bufferSize);
+            if (!m_captureBuffer) {
+                logger->error("[tiltedcam::startCaptureThread] Failed to allocate capture buffer");
+                return;
+            }
+            
+            m_processingBuffer = (unsigned char*)malloc(m_bufferSize);
+            if (!m_processingBuffer) {
+                logger->error("[tiltedcam::startCaptureThread] Failed to allocate processing buffer");
+                free(m_captureBuffer);
+                m_captureBuffer = nullptr;
+                return;
+            }
+        } catch (const std::exception& e) {
+            logger->error("[tiltedcam::startCaptureThread] Exception during buffer allocation: {}", e.what());
+            return;
+        }
+    }
+    
+    logger->info("[tiltedcam::startCaptureThread] Starting capture thread");
+    
+    m_stopThread = false;
+    m_newFrameAvailable = false;
+    
+    try {
+        m_captureThread = std::thread(&tiltedcam::captureThreadFunc, this);
+        m_threadRunning = true;
+    } catch (const std::exception& e) {
+        logger->error("[tiltedcam::startCaptureThread] Failed to create thread: {}", e.what());
+        free(m_captureBuffer);
+        free(m_processingBuffer);
+        m_captureBuffer = nullptr;
+        m_processingBuffer = nullptr;
+    }
+}
+
+void tiltedcam::stopCaptureThread() {
+    if (!m_threadRunning) {
+        return;
+    }
+    
+    logger->info("[tiltedcam::stopCaptureThread] Stopping capture thread");
+    
+    // Signal thread to stop
+    m_stopThread = true;
+    
+    // Add a short delay to ensure the thread sees the flag
+    usleep(100000);  // 100ms
+    
+    // Join the thread - with timeout protection
+    if (m_captureThread.joinable()) {
+        try {
+            m_captureThread.join();
+            logger->info("[tiltedcam::stopCaptureThread] Thread joined successfully");
+        } catch (const std::exception& e) {
+            logger->error("[tiltedcam::stopCaptureThread] Exception during thread join: {}", e.what());
+        }
+    }
+    
+    // Make sure camera is stopped before freeing buffers
+    ASIStopVideoCapture(0);
+    
+    // Free the buffers - with null checks
+    if (m_captureBuffer) {
+        void* bufToFree = m_captureBuffer;
+        m_captureBuffer = nullptr;  // Set to null before freeing to prevent use-after-free
+        free(bufToFree);
+    }
+    
+    if (m_processingBuffer) {
+        void* bufToFree = m_processingBuffer;
+        m_processingBuffer = nullptr;
+        free(bufToFree);
+    }
+    
+    m_threadRunning = false;
+    logger->info("[tiltedcam::stopCaptureThread] Cleanup completed");
+}
+
+void tiltedcam::captureThreadFunc() {
+    logger->info("[tiltedcam::captureThreadFunc] Capture thread started");
+    
+    while (!m_stopThread) {
+        // Get the image from the camera
+        ASI_ERROR_CODE err = ASIGetVideoData(0, m_captureBuffer, m_bufferSize, 200); // Use timeout to avoid hanging
+        
+        if (err == ASI_SUCCESS) {
+            // Lock the mutex to safely update the processing buffer
+            std::lock_guard<std::mutex> lock(m_bufferMutex);
+            
+            // Copy new frame to processing buffer
+            memcpy(m_processingBuffer, m_captureBuffer, m_bufferSize);
+            
+            // Set flag that new frame is available
+            m_newFrameAvailable = true;
+        } else {
+            logger->error("[tiltedcam::captureThreadFunc] Error getting image from camera: {}", err);
+            // Short sleep to avoid hammering the camera on errors
+            usleep(10000); // 10ms
+        }
+    }
+    
+    logger->info("[tiltedcam::captureThreadFunc] Capture thread ending");
+}
+
+bool tiltedcam::getLatestFrame(unsigned char* destination, long size) {
+    if (!m_threadRunning || !destination || size != m_bufferSize) {
+        return false;
+    }
+    
+    bool result = false;
+    
+    {
+        std::lock_guard<std::mutex> lock(m_bufferMutex);
+        if (m_newFrameAvailable) {
+            memcpy(destination, m_processingBuffer, m_bufferSize);
+            m_newFrameAvailable = false;
+            result = true;
+        }
+    }
+    
+    return result;
 }

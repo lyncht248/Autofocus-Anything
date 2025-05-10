@@ -10,7 +10,7 @@
 #include <fmt/chrono.h>
 #include <iomanip>
 
-bool bLensLogFlag = 1;
+bool bLensLogFlag = 0;
 
 lens::lens() : stop_thread(false), controller(nullptr), axis(nullptr) {}
 
@@ -232,8 +232,10 @@ void lens::mov_rel(double mmToMove)
             ss << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S");
             ss << '.' << std::setfill('0') << std::setw(6) << ms;
 
-            logger->error("[lens::mov_rel] [{}] Requested move: {}mm to position {}mm, Actual position: {}mm",
-                          ss.str(), mmToMove, newLensLoc, actualPos);
+            if (bLensLogFlag) {
+                logger->info("[lens::mov_rel] [{}] Requested move: {}mm to position {}mm, Actual position: {}mm",
+                              ss.str(), mmToMove, newLensLoc, actualPos);
+            }
 
             currentLensLoc = newLensLoc;
 
