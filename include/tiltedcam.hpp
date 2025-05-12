@@ -10,7 +10,7 @@
  * @class tiltedcam
  * @brief Handles the tilted camera operations and video capture
  * 
- * This class provides an interface to control a ZWO ASI camera, which  in a tilted position.
+ * This class provides an interface to control a ZWO ASI camera, which is mounted in a tilted position.
  * It manages camera initialization, configuration, and video capture through a dedicated thread.
  */
 class tiltedcam { //This object handles the tilted camera

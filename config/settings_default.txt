@@ -1,3 +1,4 @@
+% This is the default configuration file for the XLA-5-65-1250 payload, from Xeryon. Modifications are made in lens.cpp. 
 
 % S_202404_107-XLA_5_65_1250
 % For use with Windows Interface V4_2_59

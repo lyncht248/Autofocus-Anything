@@ -183,13 +183,6 @@ bool lens::initialize()
     // wait for 0.5s
     usleep(500000);
 
-    // //left limit
-    // axis->setDPOS(10_mm);
-    // currentLensLoc = 10.0;
-
-    // axis->setDPOS(-10_mm);
-    // currentLensLoc = -10.0;
-
     // wait for 0.5s
     usleep(500000);
 
@@ -219,15 +212,21 @@ void lens::mov_rel(double mmToMove)
             axis->setDPOS(newLensLocString);
 
             // TODO: remove this
+            // Get the actual position of the lens from the controller
             Distance epos = axis->getEPOS();
             double actualPos = epos(Distance::MM);
-            // Alternative approach if including fmt/chrono.h doesn't work
+
+            // Get current timestamp with microsecond precision
+            // First get current time
             auto now = std::chrono::system_clock::now();
+            // Convert to time_t for date/time formatting
             auto now_time_t = std::chrono::system_clock::to_time_t(now);
+            // Calculate microseconds portion
             auto ms = std::chrono::duration_cast<std::chrono::microseconds>(
                           now - std::chrono::system_clock::from_time_t(now_time_t))
                           .count();
 
+            // Format timestamp as YYYY-MM-DD HH:MM:SS.uuuuuu
             std::stringstream ss;
             ss << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S");
             ss << '.' << std::setfill('0') << std::setw(6) << ms;
