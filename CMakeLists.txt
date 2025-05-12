@@ -117,4 +117,50 @@ configure_file(${CMAKE_SOURCE_DIR}/lib/VimbaGigETL.cti ${CMAKE_BINARY_DIR}/Vimba
 target_link_libraries(hvi-gtk ${GTKMM_LIBRARIES} ${TOON_LIBRARIES} ${OpenCV_LIBS} ${SDL_LIBRARIES} ${SDL2TTF_LIBRARIES} ${FMT_LIBRARIES} ${SPDLOG_LIBRARIES} cvd VimbaCPP rt pthread xeryon_lib ${CMAKE_SOURCE_DIR}/lib/libASICamera2.a -lusb-1.0)
 
 # Copy settings file to build directory
-configure_file(${CMAKE_SOURCE_DIR}/config/settings_default.txt ${CMAKE_BINARY_DIR}/settings_default.txt COPYONLY) 
+configure_file(${CMAKE_SOURCE_DIR}/config/settings_default.txt ${CMAKE_BINARY_DIR}/settings_default.txt COPYONLY)
+
+# Add Google Test
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  GIT_REPOSITORY https://github.com/google/googletest.git
+  GIT_TAG release-1.12.1
+)
+FetchContent_MakeAvailable(googletest)
+
+# Enable testing
+enable_testing()
+
+# Create logs directory for tests
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/logs)
+
+# Create a library target for testing tiltedcam
+add_library(tiltedcam_lib STATIC
+    ${CMAKE_SOURCE_DIR}/src/tiltedcam.cpp
+    ${CMAKE_SOURCE_DIR}/test/mock_logfile.cpp  # Use the mock implementation
+)
+
+target_link_libraries(tiltedcam_lib 
+    ${OpenCV_LIBS} 
+    ${SDL_LIBRARIES} 
+    ${FMT_LIBRARIES} 
+    ${SPDLOG_LIBRARIES}
+    ${GTKMM_LIBRARIES}
+    cvd
+    VimbaCPP
+    rt 
+    pthread 
+    ${CMAKE_SOURCE_DIR}/lib/libASICamera2.a 
+    -lusb-1.0
+)
+
+# Add test executable
+add_executable(tiltedcam_test test/tiltedcam_test.cpp)
+target_link_libraries(tiltedcam_test PRIVATE 
+    gtest_main
+    tiltedcam_lib
+)
+
+# Register test
+include(GoogleTest)
+gtest_discover_tests(tiltedcam_test)
