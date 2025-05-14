@@ -81,10 +81,15 @@ autofocus::~autofocus()
 {
   // Stops the autofocus thread
   stop_thread.store(true);
+  
+  // Make sure the tiltedcam capture thread is stopped
+  tiltedcam1.stopCaptureThread();
+  
   if (tAutofocus.joinable())
   {
     tAutofocus.join();
   }
+  
   if (bAutofocusLogFlag)
   {
     logger->info("[autofocus::~autofocus] destructor completed");

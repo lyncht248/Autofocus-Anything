@@ -93,7 +93,10 @@ int main(int argc, char **argv)
     // Closes the SDL window
     SDLWindow::sdlwin_close(childwin);
     logger->info("[Main] sdlwin_close is closed");
-
+    
+    // Flush logger before exit
+    logger->flush();
+    
     // Returns the exit code of the GTK application
     logger->info("[Main] main.cpp about to complete");
     return 0;

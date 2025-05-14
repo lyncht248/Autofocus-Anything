@@ -32,7 +32,7 @@ Recorder::Recorder(System &sys) :
 
 Recorder::~Recorder()
 {
-	//If there is frame data still accessed by frames, delete it
+	// If there is frame data still accessed by frames, delete it
 	if(frames.size() > 0) {
 		for (VidFrame *vf : frames)
 		{
