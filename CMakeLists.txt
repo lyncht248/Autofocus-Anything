@@ -86,7 +86,6 @@ configure_file(${CMAKE_SOURCE_DIR}/config/settings_default.txt ${CMAKE_CURRENT_B
 # Define source files
 set(SOURCES
     ${CMAKE_SOURCE_DIR}/src/main.cpp 
-    ${CMAKE_SOURCE_DIR}/src/main_XERYON.cpp
     ${CMAKE_SOURCE_DIR}/src/mainwindow.cpp 
     ${CMAKE_SOURCE_DIR}/src/sdlwindow.cpp 
     ${CMAKE_SOURCE_DIR}/src/sdlwinchild.cpp 
@@ -164,3 +163,39 @@ target_link_libraries(tiltedcam_test PRIVATE
 # Register test
 include(GoogleTest)
 gtest_discover_tests(tiltedcam_test)
+
+# Create a library target for testing lens
+add_library(lens_lib STATIC
+    ${CMAKE_SOURCE_DIR}/src/lens.cpp
+    ${CMAKE_SOURCE_DIR}/test/mock_logfile.cpp  # Use the mock implementation
+    ${CMAKE_SOURCE_DIR}/test/mock_lens_globals.cpp  # Add mock globals
+)
+
+target_link_libraries(lens_lib 
+    xeryon_lib
+    ${OpenCV_LIBS} 
+    ${SDL_LIBRARIES} 
+    ${FMT_LIBRARIES} 
+    ${SPDLOG_LIBRARIES}
+    ${GTKMM_LIBRARIES}
+    cvd
+    rt 
+    pthread 
+)
+
+# Add the lens_test executable
+add_executable(lens_test
+    test/lens_test.cpp
+)
+
+# Link against the necessary libraries
+target_link_libraries(lens_test
+    PRIVATE
+    lens_lib
+    gtest
+    gtest_main
+    pthread
+)
+
+# Add the test to CTest
+add_test(NAME LensTest COMMAND lens_test)

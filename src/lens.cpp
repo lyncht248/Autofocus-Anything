@@ -263,7 +263,7 @@ void lens::mov_rel(double mmToMove)
     }
 }
 
-void lens::return_to_start()
+void lens::returnToStart()
 {
     try
     {
@@ -276,23 +276,23 @@ void lens::return_to_start()
     }
     catch (const std::exception &e)
     {
-        logger->error("[lens::return_to_start] Error: " + std::string(e.what()));
+        logger->error("[lens::returnToStart] Error: " + std::string(e.what()));
     }
 }
 
-void lens::set_return_position(double position)
+void lens::setReturnPosition(double position)
 {
     // Ensure the position is within bounds
     if (position >= MIN_POSITION && position <= MAX_POSITION)
     {
         returnPosition = position;
         if (bLensLogFlag)
-            logger->info("[lens::set_return_position] Return position set to {}mm", position);
+            logger->info("[lens::setReturnPosition] Return position set to {}mm", position);
     }
     else
     {
         if (bLensLogFlag)
-            logger->error("[lens::set_return_position] Requested position {}mm is out of bounds", position);
+            logger->error("[lens::setReturnPosition] Requested position {}mm is out of bounds", position);
     }
 }
 
@@ -327,7 +327,7 @@ void lens::lens_thread()
         {
             if (bLensLogFlag)
                 logger->info("[lens::lens_thread] Resetting lens to start position");
-            return_to_start();
+            returnToStart();
             if (bLensLogFlag)
                 logger->info("[lens::lens_thread] Lens reset to start position");
             bResetLens = 0;

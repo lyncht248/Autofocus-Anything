@@ -10,8 +10,8 @@ public:
     lens();
     ~lens();
     bool initialize();
-    void return_to_start();
-    void set_return_position(double position);
+    void returnToStart();
+    void setReturnPosition(double position);
 
 private:
     void lens_thread();

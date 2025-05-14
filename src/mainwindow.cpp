@@ -659,7 +659,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 
 	priv->controlGrid.attach(priv->bestFocusLabel, 3, 0);
 	priv->controlGrid.attach(bestFocusScale, 3, 1);
-	// priv->controlGrid.attach(returnPositionScale, 3, 2);	// Uncomment to give user control of home position
+	priv->controlGrid.attach(homePositionScale, 3, 2);	// Uncomment to give user control of home position
 	//  Add warning label below best focus scale in the grid when lens is out of bounds
 	priv->controlGrid.attach(outOfBoundsWarningLabel, 3, 2, 2, 2);
 

@@ -1560,5 +1560,5 @@ void System::onWindowHomePositionChanged(double val)
 		logger->info("[System::onWindowHomePositionChanged] Lens home position changed to: {}mm", val);
 	}
 	// Update the lens return position
-	AF.getLens().set_return_position(val);
+	AF.getLens().setReturnPosition(val);
 }
