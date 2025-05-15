@@ -89,6 +89,22 @@ autofocus::~autofocus()
   {
     tAutofocus.join();
   }
+
+  // Free the globally allocated buffers
+  if (img_buf != nullptr) {
+    free(img_buf);
+    img_buf = nullptr;
+  }
+  
+  if (img_get_buf != nullptr) {
+    free(img_get_buf);
+    img_get_buf = nullptr;
+  }
+  
+  if (img_calc_buf != nullptr) {
+    free(img_calc_buf);
+    img_calc_buf = nullptr;
+  }
   
   if (bAutofocusLogFlag)
   {

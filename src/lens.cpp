@@ -342,6 +342,6 @@ void lens::lens_thread()
         }
 
         // Small sleep to prevent busy-waiting
-        usleep(1000); // 1ms
+        usleep(10000); // 10ms
     }
 }
