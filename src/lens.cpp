@@ -9,10 +9,48 @@
 #include "Xeryon.h"
 #include <fmt/chrono.h>
 #include <iomanip>
+#include <filesystem>
 
 bool bLensLogFlag = 0;
 
-lens::lens() : stop_thread(false), controller(nullptr), axis(nullptr) {}
+lens::lens() : stop_thread(false), controller(nullptr), axis(nullptr) {
+    // Comment out CSV file initialization
+    /*
+    // Create output directory and initialize CSV file
+    if (createOutputDirectory()) {
+        logFile.open(logFilePath, std::ios::out);
+        if (logFile.is_open()) {
+            // Write header row
+            logFile << "timestamp,DPOS,EPOS,Desired Lens Position" << std::endl;
+            if (bLensLogFlag)
+                logger->info("[lens::lens] CSV log file initialized at {}", logFilePath);
+        } else {
+            logger->error("[lens::lens] Failed to open log file at {}", logFilePath);
+        }
+    }
+    */
+}
+
+// Comment out createOutputDirectory method
+/*
+bool lens::createOutputDirectory() {
+    try {
+        if (!std::filesystem::exists(outputDir)) {
+            if (std::filesystem::create_directory(outputDir)) {
+                if (bLensLogFlag)
+                    logger->info("[lens::createOutputDirectory] Created output directory: {}", outputDir);
+            } else {
+                logger->error("[lens::createOutputDirectory] Failed to create output directory: {}", outputDir);
+                return false;
+            }
+        }
+        return true;
+    } catch (const std::filesystem::filesystem_error& e) {
+        logger->error("[lens::createOutputDirectory] Filesystem error: {}", e.what());
+        return false;
+    }
+}
+*/
 
 bool lens::initialize()
 {
@@ -81,8 +119,14 @@ bool lens::initialize()
 
     // send each command in settings_default.txt to lens and ensure it is successful
 
-    // axis->sendCommand("INFO", 4);
+    // axis->sendCommand("INFO", 0);   // no streaming EPOS, only upon request. This means axis->getEPOS() will not work.
+    // axis->sendCommand("INFO", 3); // EPOS, DPOS, STAT being streamed
+    axis->sendCommand("INFO", 7); // EPOS, STAT being streamed
+
+
     // axis->sendCommand("POLI", 97);
+    axis->sendCommand("POLI", 40);// ms delay between EPOS samples. Dropping this too low interrupts DPOS updates !!
+
     //  axis->sendCommand("FREQ", 87000);
     //  axis->sendCommand("FRQ2", 85000);
     //  axis->sendCommand("HFRQ", 89000);
@@ -211,11 +255,12 @@ void lens::mov_rel(double mmToMove)
 
             axis->setDPOS(newLensLocString);
 
-            // TODO: remove this
             // Get the actual position of the lens from the controller
             Distance epos = axis->getEPOS();
             double actualPos = epos(Distance::MM);
 
+            // Comment out CSV file writing
+            /*
             // Get current timestamp with microsecond precision
             // First get current time
             auto now = std::chrono::system_clock::now();
@@ -230,10 +275,18 @@ void lens::mov_rel(double mmToMove)
             std::stringstream ss;
             ss << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S");
             ss << '.' << std::setfill('0') << std::setw(6) << ms;
+            std::string timestamp = ss.str();
+
+            // Write to CSV file
+            if (logFile.is_open()) {
+                logFile << timestamp << "," << newLensLoc << "," << actualPos << std::endl;
+            }
+            */
 
             if (bLensLogFlag) {
-                logger->info("[lens::mov_rel] [{}] Requested move: {}mm to position {}mm, Actual position: {}mm",
-                              ss.str(), mmToMove, newLensLoc, actualPos);
+                // We can keep the logging but remove the timestamp variable
+                logger->info("[lens::mov_rel] Requested move: {}mm to position {}mm, Actual position: {}mm",
+                              mmToMove, newLensLoc, actualPos);
             }
 
             currentLensLoc = newLensLoc;
@@ -302,6 +355,16 @@ lens::~lens()
     if (tLens.joinable())
         tLens.join();
 
+    // Comment out CSV file closing
+    /*
+    // Close the CSV file
+    if (logFile.is_open()) {
+        logFile.close();
+        if (bLensLogFlag)
+            logger->info("[lens::~lens] CSV log file closed");
+    }
+    */
+
     if (controller)
     {
         if (axis)
@@ -342,6 +405,37 @@ void lens::lens_thread()
         }
 
         // Small sleep to prevent busy-waiting
-        usleep(10000); // 10ms
+        usleep(1000); // 1ms
     }
+}
+
+
+// set DPOS using axis
+void lens::setDesiredLensPosition(double mmDesiredPosition)
+{
+    // Convert mm to Distance object
+    Distance desiredPosition(mmDesiredPosition, Distance::MM);
+    axis->setDPOS(desiredPosition);
+}
+
+// get DPOS using axis
+double lens::getDesiredLensPosition()
+{
+    // Send the command to change to INFO=3 mode so that DPOS is streamed
+    axis->sendCommand("INFO", 3);
+    // Wait for a short time to ensure the command is processed
+    usleep(100000); // 100ms (0.1s)
+    Distance dpos = axis->getDPOS();
+    double result = dpos(Distance::MM);
+    
+    // Send the command to change back to INFO=7 mode
+    axis->sendCommand("INFO", 7);
+    return result;
+}
+
+// get lens position using axis epos (mm)
+double lens::getLensPosition()
+{
+    Distance epos = axis->getEPOS();
+    return epos(Distance::MM);
 }
