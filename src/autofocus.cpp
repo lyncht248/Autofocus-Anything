@@ -114,13 +114,8 @@ autofocus::~autofocus()
 
 void autofocus::run()
 {
-  // COMMENT THIS OUT!
-  std::ofstream out_file("/home/hvi/Desktop/HVI-data/output.txt");
-  std::streambuf *original_cout = std::cout.rdbuf(); // Save the buffer of std::cout
-  std::cout.rdbuf(out_file.rdbuf());                 // Redirect std::cout to the file
-
   auto t1 = std::chrono::steady_clock::now();
-  usleep(10000);
+  usleep(10000); // 10ms
   auto t2 = std::chrono::steady_clock::now();
   auto s_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
 
@@ -134,7 +129,6 @@ void autofocus::run()
   logger->info("[autofocus::run] Starting camera capture thread");
   tiltedcam1.startCaptureThread();
 
-  // The following variables assume imgWidth = 320; must be changed if this isn't the case.
   int moved = 1;
   int previous = desiredLocBestFocus; // TODO: should be in a mutex
   int tol = 6;                        // Tolerance zone of pixels about the desiredLocBestFocus where no lense movement is triggered. Lower than 4 causes constant signals to lens
@@ -153,11 +147,10 @@ void autofocus::run()
   double dt = 1.0 / 60.0; // time per frame on the TILTED CAMERA! Assumes 60Hz.
   double max = 3;         // maximum relative move the lens can be ordered to make. Set to +-3mm
   double min = -3;
-  // double Kp = 0.0018 * 3.0; //*4-5.0 is on the edge of instability; *3.0 seems stable
-  // double Kp = 0.004;
   double Kp = 0.0011;
   double Ki = 0.0;
-  double Kd = 0.00008;
+  // double Kd = 0.00008;
+  double Kd = 0.0;
   PID pid = PID(dt, max, min, Kp, Kd, Ki);
 
   if (bAutofocusLogFlag)
@@ -177,36 +170,20 @@ void autofocus::run()
         imgcount++;
         imgcountfile++;
 
-        // cv::Mat image = cv::Mat(imHeight, imWidth, CV_8U, img_calc_buf);
-        // cv::Mat resized;
-        // double scale = 1;
-        // cv::resize(image, resized, cv::Size(), scale, scale); //function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
-
-        // Same as above but OpenCL-friendly
         cv::Mat image = cv::Mat(imHeight, imWidth, CV_8U, img_calc_buf);
-        // cv::UMat image = temp_image.getUMat(cv::ACCESS_READ);
         cv::Mat resized;
         cv::resize(image, resized, cv::Size(), scale, scale); // function is fast; negligible speed difference if placed in while loop. TODO: Replace with crop
 
-        // int locBestFocus = computebestfocus(resized, resized.rows, resized.cols); //drops to 0.5 fps if placed in while loop
-        int locBestFocus = computebestfocusReversed(resized, resized.rows, resized.cols);
-        // std::cout << locBestFocus << ", ";
+        int locBestFocus = computeBestFocus(resized, resized.rows, resized.cols);
 
-        // int locBestFocus = 220; //this is fast AF, like 960 fps
-        //  std::cout << locBestFocus << ", ";
-        //  std::cout << locBestFocusReversed << ", ";
-        //  std::cout << locBestFocus - locBestFocusReversed << ", ";
-        //  //Print image with line at the location of best focus
-        cv::Point p1(locBestFocus, 0), p2(locBestFocus, resized.cols);
-        cv::line(resized, p1, p2, cv::Scalar(0, 0, 255), 2);
-        // cv::namedWindow("Image With Loc of Best-Focus", cv::WINDOW_AUTOSIZE);
-        // cv::imshow("Image With Loc of Best-Focus", resized);
-        std::string FilePath = "/home/hvi/Desktop/TiltedCam-Output/" + std::to_string(imgcountfile - 1) + "_" + std::to_string(locBestFocus) + ".png";
+        //  Print image with line at the location of best focus
         if (bSaveImages)
         {
+          cv::Point p1(locBestFocus, 0), p2(locBestFocus, resized.cols);
+          cv::line(resized, p1, p2, cv::Scalar(0, 0, 255), 2);
+          std::string FilePath = "./output/TiltedCam_Images/" + std::to_string(imgcountfile - 1) + "_" + std::to_string(locBestFocus) + ".png";
           cv::imwrite(FilePath, resized);
         };
-        // cv::waitKey(0);
 
         std::cout << s_int.count() << ", " << desiredLocBestFocus << ", " << locBestFocus << ", ";
 
@@ -217,7 +194,6 @@ void autofocus::run()
           {
             desiredLocBestFocus = locBestFocus;
             previous = desiredLocBestFocus;
-            // window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to the current location of best-focus
           }
           else if (bFindFocus)
           {
@@ -227,7 +203,6 @@ void autofocus::run()
             {
               logger->info("[autofocus::run] Set desiredLocBestFocus back to 140 in autofocus.cc");
             }
-            // window.setBestFocusScaleValue(desiredLocBestFocus); //set the slider to be equal to 160, the center-point
           }
         }
 
@@ -258,8 +233,6 @@ void autofocus::run()
           { // tol
             std::cout << ", in TOL band\n";
             moved = 0;
-
-            // locBestFocusHistory.clear(); //When a value is inside the tolerance band, focus has been found, so clear the history
           }
           else
           { // outside tol band
@@ -268,6 +241,19 @@ void autofocus::run()
             std::cout << mmToMove << "\n";
             bNewMoveRel = 1;
             moved = 1;
+
+
+            // // FEEDFORWARD
+            // int error = desiredLocBestFocus - locBestFocus;
+            // double currentLensPosition = lens1.getPosition();
+            // double desiredLensPosition = currentLensPosition + error;
+            // lens1.move(desiredLensPosition);
+
+
+
+
+
+
 
             // //// OSCILLATION DETECTION
             // //Adding to locBestFocusHistory when outside TOL band
@@ -315,7 +301,7 @@ void autofocus::run()
   // out_file.close();
 }
 
-int autofocus::computebestfocusReversed(cv::Mat image, int imgHeight, int imgWidth)
+int autofocus::computeBestFocus(cv::Mat image, int imgHeight, int imgWidth)
 {
   cv::Mat blurred;
   cv::GaussianBlur(image, blurred, cv::Size(3, 3), 1, 1, cv::BORDER_DEFAULT);
@@ -383,27 +369,6 @@ int autofocus::computebestfocusReversed(cv::Mat image, int imgHeight, int imgWid
     outputFile2.close();
     increment++;
   }
-
-  int locBestFocus = distance(begin(sharpnesscurvenormalized), max_element(begin(sharpnesscurvenormalized), end(sharpnesscurvenormalized)));
-  return locBestFocus + kernel / 2;
-}
-
-int autofocus::computebestfocus(cv::Mat image, int imgHeight, int imgWidth)
-{
-  // //Specular reflection rejection
-  // cv::Mat thresh;
-  // cv::threshold(image, thresh, 140, 255, cv::THRESH_TRUNC);
-
-  // Gaussian blurring, very little differences
-  cv::Mat blurred;
-  cv::GaussianBlur(image, blurred, cv::Size(3, 3), 1, 1, cv::BORDER_DEFAULT);
-
-  // Computing the sharpness curve along the horizontal of the image
-  int kernel = 16; // must be an even number
-  std::vector<double> sharpnesscurve = computesharpness(image, imgHeight, imgWidth, kernel);
-
-  // Fitting a normal curve to the sharpness curve, to avoid local peaks in the data around vessel edges
-  std::vector<double> sharpnesscurvenormalized = fitnormalcurve(sharpnesscurve, kernel);
 
   int locBestFocus = distance(begin(sharpnesscurvenormalized), max_element(begin(sharpnesscurvenormalized), end(sharpnesscurvenormalized)));
   return locBestFocus + kernel / 2;

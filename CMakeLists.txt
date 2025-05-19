@@ -199,3 +199,45 @@ target_link_libraries(lens_test
 
 # Add the test to CTest
 add_test(NAME LensTest COMMAND lens_test)
+
+# Create a library target for testing autofocus
+add_library(autofocus_lib STATIC
+    ${CMAKE_SOURCE_DIR}/src/autofocus.cpp
+    ${CMAKE_SOURCE_DIR}/src/lens.cpp
+    ${CMAKE_SOURCE_DIR}/src/tiltedcam.cpp
+    ${CMAKE_SOURCE_DIR}/src/pid.cpp
+    ${CMAKE_SOURCE_DIR}/test/mock_logfile.cpp
+    ${CMAKE_SOURCE_DIR}/test/mock_lens_globals.cpp
+)
+
+target_link_libraries(autofocus_lib 
+    xeryon_lib
+    ${OpenCV_LIBS} 
+    ${SDL_LIBRARIES} 
+    ${FMT_LIBRARIES} 
+    ${SPDLOG_LIBRARIES}
+    ${GTKMM_LIBRARIES}
+    cvd
+    VimbaCPP
+    rt 
+    pthread 
+    ${CMAKE_SOURCE_DIR}/lib/libASICamera2.a 
+    -lusb-1.0
+)
+
+# Add the autofocus_test executable
+add_executable(autofocus_test
+    test/autofocus_test.cpp
+)
+
+# Link against the necessary libraries
+target_link_libraries(autofocus_test
+    PRIVATE
+    autofocus_lib
+    gtest
+    gtest_main
+    pthread
+)
+
+# Add the test to CTest
+add_test(NAME AutofocusTest COMMAND autofocus_test)

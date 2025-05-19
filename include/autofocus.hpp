@@ -35,14 +35,15 @@ class autofocus { //This class handles autofocusing
 
   //static void crapGUI();
 
-  //computes the location of best-focus, from 8 to 310
-  int computebestfocus (cv::Mat image, int imgHeight, int imgWidth); 
-
-  int computebestfocusReversed (cv::Mat image, int imgHeight, int imgWidth);
+  //computes the location of best-focus
+  int computeBestFocus (cv::Mat image, int imgHeight, int imgWidth);
   void adjust_bestFocus(int val);
 
   // Add a method to get the lens object
   lens& getLens() { return lens1; }
+  tiltedcam& getTiltedCam() { return tiltedcam1; }
+
+  friend class AutofocusTest;
 
   private:
   //computes the sharpness curve along the horizontal of the image using a sharpness algorithm

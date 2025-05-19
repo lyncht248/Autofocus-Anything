@@ -93,6 +93,13 @@ public:
      */
     int getInfoMode();
 
+    /**
+     * @brief Moves the lens by a relative amount
+     * 
+     * @param mmToMove Distance to move in mm (positive or negative)
+     */
+    void mov_rel(double mmToMove);
+    
 private:
     /**
      * @brief Thread function for lens control
@@ -101,13 +108,6 @@ private:
      * for lens movement commands and reset requests.
      */
     void lens_thread();
-    
-    /**
-     * @brief Moves the lens by a relative amount
-     * 
-     * @param mmToMove Distance to move in mm (positive or negative)
-     */
-    void mov_rel(double mmToMove);
     
     /**
      * @brief Creates the output directory for logs
