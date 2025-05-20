@@ -94,11 +94,18 @@ public:
     int getInfoMode();
 
     /**
-     * @brief Moves the lens by a relative amount
+     * @brief Moves the lens by a relative amount, with bounds checking
      * 
      * @param mmToMove Distance to move in mm (positive or negative)
      */
     void mov_rel(double mmToMove);
+
+    /**
+     * @brief Moves the lens to a specific position, with bounds checking
+     * 
+     * @param mmToMoveTo Location to move to in mm (positive or negative)
+     */
+    void mov_abs(double mmToMoveTo);
     
 private:
     /**

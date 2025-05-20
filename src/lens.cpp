@@ -119,9 +119,9 @@ bool lens::initialize()
 
     // send each command in settings_default.txt to lens and ensure it is successful
 
-    // axis->sendCommand("INFO", 0);   // no streaming EPOS, only upon request. This means axis->getEPOS() will not work.
+    axis->sendCommand("INFO", 0);   // no streaming EPOS, only upon request. This means axis->getEPOS() will not work.
     // axis->sendCommand("INFO", 3); // EPOS, DPOS, STAT being streamed
-    axis->sendCommand("INFO", 7); // EPOS, STAT being streamed
+    // axis->sendCommand("INFO", 7); // EPOS, STAT being streamed
 
 
     // axis->sendCommand("POLI", 97);
@@ -259,44 +259,23 @@ void lens::mov_rel(double mmToMove)
             Distance epos = axis->getEPOS();
             double actualPos = epos(Distance::MM);
 
-            // Comment out CSV file writing
-            /*
-            // Get current timestamp with microsecond precision
-            // First get current time
-            auto now = std::chrono::system_clock::now();
-            // Convert to time_t for date/time formatting
-            auto now_time_t = std::chrono::system_clock::to_time_t(now);
-            // Calculate microseconds portion
-            auto ms = std::chrono::duration_cast<std::chrono::microseconds>(
-                          now - std::chrono::system_clock::from_time_t(now_time_t))
-                          .count();
-
-            // Format timestamp as YYYY-MM-DD HH:MM:SS.uuuuuu
-            std::stringstream ss;
-            ss << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S");
-            ss << '.' << std::setfill('0') << std::setw(6) << ms;
-            std::string timestamp = ss.str();
-
-            // Write to CSV file
-            if (logFile.is_open()) {
-                logFile << timestamp << "," << newLensLoc << "," << actualPos << std::endl;
-            }
-            */
-
             if (bLensLogFlag) {
                 // We can keep the logging but remove the timestamp variable
                 logger->info("[lens::mov_rel] Requested move: {}mm to position {}mm, Actual position: {}mm",
                               mmToMove, newLensLoc, actualPos);
             }
 
-            currentLensLoc = newLensLoc;
+            currentLensLoc = newLensLoc; // Using this makes for smoother control even though the actual position is not being used
+            //currentLensLoc = actualPos; // Using this makes for more oscillations and poor control
 
+            // If lens is went out of bounds, ensure error message is persistent (avoids flickering)
             if (outOfBoundsOnceOnly > 0)
             {
                 outOfBoundsOnceOnly--;
             }
             else if (outOfBoundsOnceOnly == 0)
             {
+                
                 NotificationCenter::instance().postNotification("lensInBounds");
             }
         }
@@ -315,6 +294,59 @@ void lens::mov_rel(double mmToMove)
         }
     }
 }
+
+
+void lens::mov_abs(double mmToMoveTo)
+{
+    // Check if the target position is within bounds
+    if (mmToMoveTo > MIN_POSITION && mmToMoveTo < MAX_POSITION)
+    {
+        try
+        {
+            // Convert mm to Distance object
+            Distance newLensLocDistance(mmToMoveTo, Distance::MM);
+
+            // Set the new position
+            axis->setDPOS(newLensLocDistance);
+
+            // Get the actual position of the lens from the controller
+            Distance epos = axis->getEPOS();
+            double actualPos = epos(Distance::MM);
+
+            if (bLensLogFlag) {
+                logger->info("[lens::mov_abs] Moved to absolute position: {}mm, Actual position: {}mm",
+                             mmToMoveTo, actualPos);
+            }
+
+            // Update the current lens location
+            currentLensLoc = mmToMoveTo;
+
+            // If lens is went out of bounds, ensure error message is persistent (avoids flickering)
+            if (outOfBoundsOnceOnly > 0)
+            {
+                outOfBoundsOnceOnly--;
+            }
+            else if (outOfBoundsOnceOnly == 0)
+            {
+                NotificationCenter::instance().postNotification("lensInBounds");
+            }
+        }
+        catch (const std::exception &e)
+        {
+            logger->error("[lens::mov_abs] Movement error: " + std::string(e.what()));
+        }
+    }
+    else
+    {
+        logger->error("[lens::mov_abs] Target position {}mm is out of bounds!", mmToMoveTo);
+        if (outOfBoundsOnceOnly == 0)
+        {
+            NotificationCenter::instance().postNotification("outOfBoundsError");
+            outOfBoundsOnceOnly = 10;
+        }
+    }
+}
+
 
 void lens::returnToStart()
 {
@@ -355,7 +387,6 @@ lens::~lens()
     if (tLens.joinable())
         tLens.join();
 
-    // Comment out CSV file closing
     /*
     // Close the CSV file
     if (logFile.is_open()) {
@@ -399,7 +430,8 @@ void lens::lens_thread()
         if (bNewMoveRel)
         {
             // if(bLensLogFlag) logger->info("[lens::lens_thread] Moving lens to new position");
-            mov_rel(mmToMove);
+            //mov_rel(mmToMove);
+            mov_abs(mmToMove + currentLensLoc);
             // if(bLensLogFlag) logger->info("[lens::lens_thread] Lens moved to new position");
             bNewMoveRel = 0;
         }

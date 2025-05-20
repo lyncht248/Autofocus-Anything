@@ -153,10 +153,11 @@ void autofocus::run()
   double dt = 1.0 / 60.0; // time per frame on the TILTED CAMERA! Assumes 60Hz.
   double max = 3;         // maximum relative move the lens can be ordered to make. Set to +-3mm
   double min = -3;
-  double Kp = 0.0011;
+  double Kp = 0.0012;
+  //double Kp = 0.006;
   double Ki = 0.0;
-  // double Kd = 0.00008;
-  double Kd = 0.0;
+  double Kd = 0.00008;
+  //double Kd = 0.0;
   PID pid = PID(dt, max, min, Kp, Kd, Ki);
 
   if (bAutofocusLogFlag)
@@ -321,8 +322,12 @@ void autofocus::run()
           { // outside tol band
             // PID CONTROLLER
             mmToMove = pid.calculate(desiredLocBestFocus, locBestFocus) * -1.0;
+            // reduce mmToMove if near desiredLocBestFocus to prevent overshooting
+            if (abs(locBestFocus - desiredLocBestFocus) < 50) {
+              mmToMove = mmToMove * 0.5;
+            }
             std::cout << locBestFocus << ", " << desiredLocBestFocus << ", " << mmToMove << "\n";
-            bNewMoveRel = 1;
+            bNewMoveRel = 1; // MoveRel lets the lens object keep track of the actual lens position
             moved = 1;
 
 

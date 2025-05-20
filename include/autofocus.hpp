@@ -20,7 +20,6 @@ extern bool bNewMoveRel;
 extern int desiredLocBestFocus;
 extern std::atomic<double> mmToMove;
 
-
 class autofocus { //This class handles autofocusing
   public:
   //Called by int main()

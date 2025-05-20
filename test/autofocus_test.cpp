@@ -141,7 +141,7 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
             }
         }
         
-        // First scan: Increment in 0.1mm steps until best focus reaches left edge (~8)
+        // First scan: Increment in 0.4mm steps until best focus reaches left edge (~8)
         std::cout << "\nScanning toward left edge (focus ~8)..." << std::endl;
         
         double lensPos = lens.getLensPosition();
@@ -186,9 +186,9 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
                 currentFocus = point.focusLocation;
             }
             
-            // mov_rel lens by 0.1mm
+            // Move lens by 0.4mm
             prevLensPos = lensPos;
-            lensPos += 0.1;
+            lensPos += 0.4;
             lens.setDesiredLensPosition(lensPos);
             
             // Wait for lens to settle
@@ -211,7 +211,7 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
         
         currentFocus = focusController->computeBestFocus(resized, resized.rows, resized.cols);
         
-        // Second scan: Decrement in -0.1mm steps until best focus reaches right edge (~632)
+        // Second scan: Decrement in -0.4mm steps until best focus reaches right edge (~632)
         std::cout << "\nScanning toward right edge (focus ~632)..." << std::endl;
         
         lensPos = lens.getLensPosition();
@@ -256,9 +256,9 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
                 currentFocus = point.focusLocation;
             }
             
-            // Move lens by -0.1mm
+            // Move lens by -0.4mm
             prevLensPos = lensPos;
-            lensPos -= 0.1;
+            lensPos -= 0.4;
             lens.setDesiredLensPosition(lensPos);
             
             // Wait for lens to settle
