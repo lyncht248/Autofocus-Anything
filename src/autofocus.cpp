@@ -23,9 +23,12 @@
 #include "opencv2/highgui/highgui.hpp"
 
 // Global variables
+
+// 0.0057 mm per pixel is the average!!!!
+
 bool bAutofocusLogFlag = 0; // Flag that is 1 for when the autofocus log is being written to, 0 when it is not
 
-std::atomic<bool> bNewImage = 1; // Flag that is 1 for when the buffer image is new, 0 when buffer image is old
+std::atomic<bool> bNewImage = 0; // Flag that is 1 for when the buffer image is new, 0 when buffer image is old
 
 const long img_size = 1280 * 960; // Replace with actual image size
 bool bSaveImages = 0;             // Saves images from the tilted camera to output folder (check filepath is right). WARNING: will produce enourmous number of images!
@@ -50,6 +53,9 @@ int desiredLocBestFocus;
 
 std::atomic<double> mmToMove = 0.0;
 int increment = 0;
+
+std::vector<double> lastSharpnessCurve;
+std::vector<double> lastFittedCurve;
 
 autofocus::autofocus() : lens1(),
                          tiltedcam1(),
@@ -179,13 +185,90 @@ void autofocus::run()
         //  Print image with line at the location of best focus
         if (bSaveImages)
         {
-          cv::Point p1(locBestFocus, 0), p2(locBestFocus, resized.cols);
-          cv::line(resized, p1, p2, cv::Scalar(0, 0, 255), 2);
-          std::string FilePath = "./output/TiltedCam_Images/" + std::to_string(imgcountfile - 1) + "_" + std::to_string(locBestFocus) + ".png";
-          cv::imwrite(FilePath, resized);
+          // Draw vertical line at best focus position
+          cv::Point p1(locBestFocus, 0), p2(locBestFocus, resized.rows);
+          
+          // Convert resized to color if it's grayscale to match the graph image type
+          cv::Mat colorResized;
+          if (resized.channels() == 1) {
+            cv::cvtColor(resized, colorResized, cv::COLOR_GRAY2BGR);
+          } else {
+            colorResized = resized.clone();
+          }
+          
+          // Draw on the color version
+          cv::line(colorResized, p1, p2, cv::Scalar(0, 0, 255), 2);
+          
+          // Create a separate visualization for the curves
+          int graphHeight = 150; // Height of the graph area
+          cv::Mat graphImage(graphHeight, colorResized.cols, CV_8UC3, cv::Scalar(255, 255, 255));
+          
+          // Only draw the curves if we have data
+          if (!lastSharpnessCurve.empty() && !lastFittedCurve.empty() && 
+              lastSharpnessCurve.size() == lastFittedCurve.size()) {
+            
+            // Normalize curves for visualization
+            double maxSharpness = *std::max_element(lastSharpnessCurve.begin(), lastSharpnessCurve.end());
+            double minSharpness = *std::min_element(lastSharpnessCurve.begin(), lastSharpnessCurve.end());
+            double range = maxSharpness - minSharpness;
+            
+            if (range > 0) {  // Prevent division by zero
+              // Draw sharpness curve in blue
+              for (size_t i = 0; i < lastSharpnessCurve.size() - 1 && i + 1 < graphImage.cols; i++) {
+                double normalized1 = (lastSharpnessCurve[i] - minSharpness) / range;
+                double normalized2 = (lastSharpnessCurve[i+1] - minSharpness) / range;
+                
+                cv::Point p1(i, graphHeight - normalized1 * (graphHeight - 20) - 10);
+                cv::Point p2(i+1, graphHeight - normalized2 * (graphHeight - 20) - 10);
+                
+                // Make sure points are within image bounds
+                p1.y = std::max(0, std::min(p1.y, graphHeight - 1));
+                p2.y = std::max(0, std::min(p2.y, graphHeight - 1));
+                
+                cv::line(graphImage, p1, p2, cv::Scalar(255, 0, 0), 1);
+              }
+              
+              // Draw fitted normal curve in green
+              for (size_t i = 0; i < lastFittedCurve.size() - 1 && i + 1 < graphImage.cols; i++) {
+                double normalized1 = (lastFittedCurve[i] - minSharpness) / range;
+                double normalized2 = (lastFittedCurve[i+1] - minSharpness) / range;
+                
+                cv::Point p1(i, graphHeight - normalized1 * (graphHeight - 20) - 10);
+                cv::Point p2(i+1, graphHeight - normalized2 * (graphHeight - 20) - 10);
+                
+                // Make sure points are within image bounds
+                p1.y = std::max(0, std::min(p1.y, graphHeight - 1));
+                p2.y = std::max(0, std::min(p2.y, graphHeight - 1));
+                
+                cv::line(graphImage, p1, p2, cv::Scalar(0, 255, 0), 1);
+              }
+            }
+            
+            // Draw vertical line at best focus position on graph
+            if (locBestFocus < graphImage.cols) {
+              cv::line(graphImage, cv::Point(locBestFocus, 0), cv::Point(locBestFocus, graphHeight), cv::Scalar(0, 0, 255), 2);
+            }
+            
+            // Add legend
+            cv::putText(graphImage, "Sharpness Curve", cv::Point(10, 15), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 0, 0), 1);
+            cv::putText(graphImage, "Fitted Normal", cv::Point(10, 35), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 1);
+          }
+          
+          // Verify both matrices have the same width and type before concatenating
+          if (colorResized.cols == graphImage.cols && colorResized.type() == graphImage.type()) {
+            // Combine original image with graph
+            cv::Mat combined;
+            cv::vconcat(colorResized, graphImage, combined);
+            
+            // Save the combined image
+            std::string FilePath = "../output/TiltedCam_Images/" + std::to_string(imgcountfile - 1) + "_" + std::to_string(locBestFocus) + ".png";
+            cv::imwrite(FilePath, combined);
+          } else {
+            // Just save the original image if we can't combine
+            std::string FilePath = "../output/TiltedCam_Images/" + std::to_string(imgcountfile - 1) + "_" + std::to_string(locBestFocus) + ".png";
+            cv::imwrite(FilePath, colorResized);
+          }
         };
-
-        std::cout << s_int.count() << ", " << desiredLocBestFocus << ", " << locBestFocus << ", ";
 
         // If imgcount==1, then the user has just turned on FindFocus or HoldFocus
         if (imgcount == 1)
@@ -238,13 +321,20 @@ void autofocus::run()
           { // outside tol band
             // PID CONTROLLER
             mmToMove = pid.calculate(desiredLocBestFocus, locBestFocus) * -1.0;
-            std::cout << mmToMove << "\n";
+            std::cout << locBestFocus << ", " << desiredLocBestFocus << ", " << mmToMove << "\n";
             bNewMoveRel = 1;
             moved = 1;
 
 
             // // FEEDFORWARD
+            // // get actual lens position
+            // double EPOS = lens1.getLensPosition();
             // int error = desiredLocBestFocus - locBestFocus;
+            // double desiredEPOS = EPOS - (error * 0.00057);
+            // lens1.setDesiredLensPosition(desiredEPOS);
+            // std::cout << s_int.count() << ", " << desiredLocBestFocus << ", " << locBestFocus << ", " << EPOS << ", " << error << ", " << desiredEPOS << "\n";
+
+            // calculate desired lens position
             // double currentLensPosition = lens1.getPosition();
             // double desiredLensPosition = currentLensPosition + error;
             // lens1.move(desiredLensPosition);
@@ -371,6 +461,11 @@ int autofocus::computeBestFocus(cv::Mat image, int imgHeight, int imgWidth)
   }
 
   int locBestFocus = distance(begin(sharpnesscurvenormalized), max_element(begin(sharpnesscurvenormalized), end(sharpnesscurvenormalized)));
+  
+  // Store the curves for visualization
+  lastSharpnessCurve = sharpnesscurve;
+  lastFittedCurve = sharpnesscurvenormalized;
+  
   return locBestFocus + kernel / 2;
 }
 
@@ -480,13 +575,13 @@ cv::Scalar autofocus::canny(cv::Mat img)
   return mean_grad_canny;
 }
 
-std::vector<double> autofocus::fitnormalcurve(std::vector<double> sharpnesscurve, int kernel)
+std::vector<double> autofocus::fitnormalcurve(std::vector<double> sharpnesscurve, int kernel, double std_dev_factor)
 {
   // Fits a normal curve to the data. Should try to find a proper curve-fitting library...
   std::vector<double> norm_curve;
   std::vector<double> sum_of_diffs;
-  double std_dev = 70.0 * (sharpnesscurve.size() / 400.0); // determined experimentally using 304-length data, and approximately scaled for larger images. TODO: Tune properly!
-  // double std_dev = 56.0 * (sharpnesscurve.size() / 304.0); //determined experimentally using 304-length data, and approximately scaled for larger images. Needs to be replaced! (was 58)
+  double std_dev = std_dev_factor * (sharpnesscurve.size()); // now uses the parameter
+
   double amplitude = (*max_element(begin(sharpnesscurve), end(sharpnesscurve)) - *min_element(begin(sharpnesscurve), end(sharpnesscurve)));
   double offset = *min_element(begin(sharpnesscurve), end(sharpnesscurve));
 

@@ -241,3 +241,20 @@ target_link_libraries(autofocus_test
 
 # Add the test to CTest
 add_test(NAME AutofocusTest COMMAND autofocus_test)
+
+# Add the new_device_calibration executable
+add_executable(new_device_calibration
+    test/new_device_calibration.cpp
+)
+
+# Link against the necessary libraries
+target_link_libraries(new_device_calibration
+    PRIVATE
+    autofocus_lib
+    gtest
+    gtest_main
+    pthread
+)
+
+# Add the test to CTest
+add_test(NAME DeviceCalibrationTest COMMAND new_device_calibration)

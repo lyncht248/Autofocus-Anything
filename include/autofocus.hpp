@@ -44,6 +44,7 @@ class autofocus { //This class handles autofocusing
   tiltedcam& getTiltedCam() { return tiltedcam1; }
 
   friend class AutofocusTest;
+  friend class DeviceCalibrationTest;
 
   private:
   //computes the sharpness curve along the horizontal of the image using a sharpness algorithm
@@ -57,7 +58,7 @@ class autofocus { //This class handles autofocusing
 
  
   //fits a normal curve to the given curve, which avoids local maxima
-  std::vector<double> fitnormalcurve(std::vector<double> curve, int kernel);
+  std::vector<double> fitnormalcurve(std::vector<double> sharpnesscurve, int kernel, double std_dev_factor = 0.12);
   double normpdf(double x, double u, double s); //helper function
 
   std::atomic<bool> stop_thread; //Controls the autofocus, tilted camera, and lens threads
