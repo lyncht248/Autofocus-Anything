@@ -430,16 +430,23 @@ int autofocus::computeBestFocus(cv::Mat image, int imgHeight, int imgWidth)
   // cv::UMat sharpness_image;
   // cv::add(Gx2, Gy2, sharpness_image);
 
-  // ///// ROI'ING ////
+  
+  // First reduce sharpness_image to 1D by computing the mean of each column
+  std::vector<double> columnMeans(imgWidth);
+  for (int col = 0; col < imgWidth; col++) {
+    cv::Scalar mean = cv::mean(sharpness_image(cv::Rect(col, 0, 1, imgHeight)));
+    columnMeans[col] = mean[0];
+  }
+  // Then apply sliding window on the 1D array
   std::vector<double> sharpnesscurve;
   int kernel = 16; // must be an even number
 
-  for (int i = 0; i < imgWidth - kernel; i++)
-  {
-    cv::Rect roi(i, 0, kernel, imgHeight);
-    cv::Mat regionSharpnessImage = sharpness_image(roi);
-    cv::Scalar regionSharpness = cv::mean(regionSharpnessImage);
-    double regionSharpnessScore = regionSharpness[0];
+  for (int i = 0; i < imgWidth - kernel; i++) {
+    double regionSharpnessScore = 0.0;
+    for (int k = 0; k < kernel; k++) {
+      regionSharpnessScore += columnMeans[i + k];
+    }
+    regionSharpnessScore /= kernel;
     sharpnesscurve.push_back(regionSharpnessScore);
   }
 
