@@ -117,6 +117,7 @@ public:
 	void setShowingMap(bool val);
 	void set3DStab(bool val);
 	void setHoldFocus(bool val);
+	void setFindFocus(bool val);
 
 	// Condition& getMakeMapActive(); DEPRECATED
 	Condition &getStabiliseActive();
@@ -132,6 +133,7 @@ public:
 	Condition &getSeeking();
 	Condition &getRecording();
 	Condition &getPausedRecording();
+	Condition &getFindFocusActive();
 
 	int getFrameSliderValue() const;
 	double getFrameRateEntryBox() const;
@@ -214,15 +216,18 @@ private:
 	// void onScaleScaleChange(double val); DEPRECATED
 	void onRecordingSizeScaleChange(double val);
 	void onBestFocusScaleChange(double val);
+	void onHomePositionScaleChange(double val);
+
+	// Add the missing function declaration for handling findFocusToggle
+	void onFindFocusToggled();
 
 	struct Private *priv;
 
 	ScaleWidget gainScale, exposeScale, gammaScale, frameSlider, waitScale, recordingSizeScale, bestFocusScale, homePositionScale;
-	Gtk::Button recordButton, backToStartButton, pauseButton, playButton, fileLoadButton, fileSaveButton, findFocusButton, resetButton, enterButton, recenterButton;
-
-	Gtk::Entry frameRateEntry;
-	Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, holdFocusToggle, threedStabToggle, twodStabToggle;
+	Gtk::Button recordButton, backToStartButton, pauseButton, playButton, fileLoadButton, fileSaveButton, resetButton, enterButton, recenterButton;
+	Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, holdFocusToggle, threedStabToggle, twodStabToggle, findFocusToggle;
 	Gtk::Label fpsLabel, loadSaveLabel, errorLabel, outOfBoundsWarningLabel;
+	Gtk::Entry frameRateEntry;
 
 	VidFrame *drawFrame;
 	bool newDrawFrame;
@@ -247,8 +252,6 @@ private:
 
 	SignalHomePositionChanged sigHomePositionChanged;
 	sigc::connection homePositionScaleConnection;
-
-	void onHomePositionScaleChange(double val);
 };
 
 #endif

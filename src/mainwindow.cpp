@@ -342,7 +342,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 						   // makeMapToggle("Make Map"),
 						   stabiliseToggle("XY Stab."),
 						   showMapToggle("Show Map"),
-						   findFocusButton("Find Focus"),
+						   findFocusToggle("Find Focus"),
 						   holdFocusToggle("Hold Focus"),
 						   threedStabToggle("3D Stab."),
 						   twodStabToggle("2D Stab."),
@@ -407,8 +407,8 @@ MainWindow::MainWindow() : Gtk::Window(),
 	// makeMapToggle.set_tooltip_text("Make a vessel map of the current recording using given threshold and scale values");
 	stabiliseToggle.set_tooltip_text("Using vessel map, XY-stabilise the current recording");
 	// showMapToggle.set_tooltip_text("Show the loaded vessel map");
-	findFocusButton.set_tooltip_text("Finds focal plane with highest sharpness");
-	holdFocusToggle.set_tooltip_text("Holds current focal plane in-focus (even if not ");
+	findFocusToggle.set_tooltip_text("Finds focal plane with highest sharpness and then holds it in focus");
+	holdFocusToggle.set_tooltip_text("Holds current focal plane in-focus (even if not the highest sharpness)");
 	threedStabToggle.set_tooltip_text("Shortcut for live angiograms which uses 'Hold Focus' and 'XY-Stab'");
 
 	recordButton.set_image_from_icon_name("media-record");
@@ -556,7 +556,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 	// showMapActive.toggleOnSignal(showMapToggle.signal_toggled() );
 	// showMapActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenShowMapToggled) );
 
-	findFocusButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onFindFocusClicked));
+	findFocusToggle.signal_toggled().connect(sigc::mem_fun(*this, &MainWindow::onFindFocusToggled));
 
 	resetButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onResetClicked));
 	resetButton.set_tooltip_text("Resets the lens to home position");
@@ -650,7 +650,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 	priv->controlGrid.attach(priv->space4[0], 0, 0);
 
 	priv->controlGrid.attach(priv->autofocusTitle, 1, 4, 3);
-	priv->controlGrid.attach(findFocusButton, 1, 0);
+	priv->controlGrid.attach(findFocusToggle, 1, 0);
 	priv->controlGrid.attach(holdFocusToggle, 1, 1);
 	priv->controlGrid.attach(threedStabToggle, 1, 2);
 	priv->controlGrid.attach(resetButton, 1, 3);
@@ -1207,19 +1207,108 @@ void MainWindow::whenStabiliseToggled(bool stabilising)
 // 	}
 // }
 
-void MainWindow::onFindFocusClicked()
+void MainWindow::onFindFocusToggled()
 {
-	imgcount = 0;
-	bFindFocus = 1;
-	if (bMainWindowLogFlag)
-	{
-		logger->info("[MainWindow::onFindFocusClicked] FindFocus clicked, so bFindFocus set to 1");
+	if (findFocusToggle.get_active()) {
+		// When toggled on, disable other related toggles
+		holdFocusToggle.set_sensitive(false);
+		threedStabToggle.set_sensitive(false);
+		
+		// Make best focus scale active
+		bestFocusScale.set_sensitive(true);
+		
+		// Start the find focus process
+		imgcount = 0;
+		bFindFocus = 1;
+		
+		if (bMainWindowLogFlag) {
+			logger->info("[MainWindow::onFindFocusToggled] FindFocus toggled on, bFindFocus set to 1");
+		}
+		
+		// Schedule a timer to transition from find focus to hold focus
+		Glib::signal_timeout().connect_once([this]() {
+			bFindFocus = 0;
+			if (findFocusToggle.get_active()) { // Check if still active
+				bHoldFocus = 1;
+				if (bMainWindowLogFlag) {
+					logger->info("[MainWindow::onFindFocusToggled] Transitioning to hold focus mode");
+				}
+			}
+		}, 800); // 800ms delay, same as in the original code
 	}
-	usleep(800000);
-	bFindFocus = 0;
-	if (bMainWindowLogFlag)
+	else {
+		// When toggled off
+		bFindFocus = 0;
+		bHoldFocus = 0;
+		
+		// Enable other toggles again
+		holdFocusToggle.set_sensitive(true);
+		threedStabToggle.set_sensitive(true);
+		
+		// Disable best focus scale
+		bestFocusScale.set_sensitive(false);
+		
+		if (bMainWindowLogFlag) {
+			logger->info("[MainWindow::onFindFocusToggled] FindFocus toggled off");
+		}
+	}
+	
+	// Emit the signal for the system to handle
+	sigFindFocusClicked.emit();
+}
+
+void MainWindow::whenHoldFocusToggled(bool holdingFocus)
+{
+	if (holdingFocus)
 	{
-		logger->info("[MainWindow::onFindFocusClicked] bFindFocus set to 0");
+		// Make best focus scale active and set value to the desired location of best-focus
+		bestFocusScale.set_sensitive(true);
+		bestFocusScale.setValue(320); // Set default best focus value to 320
+		
+		// Disable the findFocusToggle when holdFocus is active
+		findFocusToggle.set_sensitive(false);
+		
+		// GUI CHANGES WHEN "HOLD FOCUS" IS ENABLED GO HERE
+		if (bMainWindowLogFlag)
+			logger->info("[MainWindow::whenHoldFocusToggled] HoldFocus toggled on");
+	}
+	else
+	{
+		// Enable the findFocusToggle when holdFocus is inactive
+		findFocusToggle.set_sensitive(true);
+		bestFocusScale.set_sensitive(false);
+
+		// GUI CHANGES WHEN "FIND FOCUS" IS DISABLED GO HERE
+		if (bMainWindowLogFlag)
+			logger->info("[MainWindow::whenHoldFocusToggled] HoldFocus toggled off");
+	}
+}
+
+void MainWindow::when3DStabToggled(bool active)
+{
+	if (active)
+	{
+		holdFocusToggle.set_active(true);
+		stabiliseToggle.set_active(true);
+		
+		// Disable findFocusToggle when 3D stabilization is active
+		findFocusToggle.set_sensitive(false);
+		
+		// GUI CHANGES WHEN "3D STABILISER" IS ENABLED GO HERE
+		if (bMainWindowLogFlag)
+			logger->info("[MainWindow::when3DStabToggled] 3DStab toggled on");
+	}
+	else
+	{
+		holdFocusToggle.set_active(false);
+		stabiliseToggle.set_active(false);
+		
+		// Enable findFocusToggle when 3D stabilization is inactive
+		findFocusToggle.set_sensitive(true);
+		
+		// GUI CHANGES WHEN "3D STABILISER" IS DISABLED GOES HERE
+		if (bMainWindowLogFlag)
+			logger->info("[MainWindow::when3DStabToggled] 3DStab toggled off");
 	}
 }
 
@@ -1227,6 +1316,7 @@ void MainWindow::onResetClicked()
 {
 	// GUI CHANGES WHEN "RESET" IS CLICKED
 	holdFocusToggle.set_active(false);
+	findFocusToggle.set_active(false);  // Deactivate find focus toggle
 	threedStabToggle.set_active(false);
 	twodStabToggle.set_active(false);
 	// pause for 100ms
@@ -1250,54 +1340,6 @@ void MainWindow::onRecenterClicked()
 	if (bMainWindowLogFlag)
 	{
 		logger->info("[MainWindow::onRecenterClicked] Recenter clicked");
-	}
-}
-
-void MainWindow::whenHoldFocusToggled(bool holdingFocus)
-{
-	if (holdingFocus)
-	{
-		// Make best focus scale active and set value to the desired location of best-focus
-		bestFocusScale.set_sensitive(true);
-		// bestFocusScale.setValue(desiredLocBestFocus);
-
-		findFocusButton.set_sensitive(false);
-		// threedStabToggle.set_sensitive(false);
-		// GUI CHANGES WHEN "HOLD FOCUS" IS ENABLED GO HERE
-		if (bMainWindowLogFlag)
-			logger->info("[MainWindow::whenHoldFocusToggled] HoldFocus toggled on");
-	}
-	else
-	{
-		findFocusButton.set_sensitive(true);
-		// threedStabToggle.set_sensitive(true);
-		bestFocusScale.set_sensitive(false);
-
-		// GUI CHANGES WHEN "FIND FOCUS" IS DISABLED GO HERE
-		if (bMainWindowLogFlag)
-			logger->info("[MainWindow::whenHoldFocusToggled] HoldFocus toggled off");
-	}
-}
-
-void MainWindow::when3DStabToggled(bool active)
-{
-	if (active)
-	{
-		holdFocusToggle.set_active(true);
-		// makeMapToggle.set_active(true);
-		stabiliseToggle.set_active(true);
-		// GUI CHANGES WHEN "3D STABILISER" IS ENABLED GO HERE
-		if (bMainWindowLogFlag)
-			logger->info("[MainWindow::when3DStabToggled] 3DStab toggled on");
-	}
-	else
-	{
-		holdFocusToggle.set_active(false);
-		// makeMapToggle.set_active(false);
-		stabiliseToggle.set_active(false);
-		// GUI CHANGES WHEN "3D STABILISER" IS DISABLED GO HERE
-		if (bMainWindowLogFlag)
-			logger->info("[MainWindow::when3DStabToggled] 3DStab toggled off");
 	}
 }
 
@@ -1695,4 +1737,20 @@ void MainWindow::showOutOfBoundsWarning()
 void MainWindow::hideOutOfBoundsWarning()
 {
 	outOfBoundsWarningLabel.set_visible(false);
+}
+
+void MainWindow::setFindFocus(bool val)
+{
+	findFocusToggle.set_active(val);
+	if (bMainWindowLogFlag)
+	{
+		logger->info("[MainWindow::setFindFocus] Find focus set to {}", val);
+	}
+}
+
+Condition& MainWindow::getFindFocusActive()
+{
+	// Note: We don't actually have a condition for this, so we'll use holdFocusActive for now
+	// You might want to add a proper findFocusActive condition if needed
+	return holdFocusActive;
 }

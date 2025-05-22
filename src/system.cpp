@@ -1288,14 +1288,7 @@ void System::onRecorderOperationComplete(RecOpRes res)
 		{
 			window.setHoldFocus(false);
 		}
-		// make recorder toggle insensitive
-
-		// window.getShowMapActive().setValue(!success);
-		// window.getStabiliseActive().setValue(!success);
-		// window.getMakeMapActive().setValue(!success);
-		// window.getHoldFocusActive().setValue(!success);
-		// window.get2DStabActive().setValue(!success);
-		// window.get3DStabActive().setValue(!success);
+		window.setFindFocus(false);
 		break;
 	case Recorder::Operation::RECOP_LOAD:
 		if (window.getLoading().getValue())
