@@ -258,3 +258,15 @@ target_link_libraries(new_device_calibration
 
 # Add the test to CTest
 add_test(NAME DeviceCalibrationTest COMMAND new_device_calibration)
+
+# Add the standalone PID tuning application
+add_executable(pid_tuning_standalone 
+    test/pid_tuning_standalone.cpp
+)
+
+# Link with the necessary libraries
+target_link_libraries(pid_tuning_standalone 
+    PRIVATE
+    autofocus_lib
+    pthread
+)
