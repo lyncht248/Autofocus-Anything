@@ -17,6 +17,8 @@
 #include "stabiliser.hpp"
 #include "framefilter.hpp"
 #include "phasecorr_stabiliser.hpp"
+#include "sharpness_analyzer.hpp"
+#include "sharpness_graph.hpp"
 
 namespace Vimba = AVT::VmbAPI;
 
@@ -204,6 +206,17 @@ private:
 
 	// Add a boolean to check if the reference frame is set
 	bool phaseCorrStabiliserReferenceNotSet = true;
+
+	// Sharpness analysis components
+	SharpnessAnalyzer sharpnessAnalyzer;
+	Glib::Dispatcher sigSharpnessUpdated;
+	std::vector<double> currentSharpnessValues;
+	bool sharpnessUpdateEnabled;
+	std::chrono::time_point<std::chrono::steady_clock> lastSharpnessUpdate;
+	SharpnessGraph sharpnessGraph;
+	
+	// Method to update the sharpness graph in the UI
+	void updateSharpnessGraph();
 };
 
 #endif

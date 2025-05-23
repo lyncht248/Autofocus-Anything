@@ -430,7 +430,7 @@ int autofocus::computeBestFocus(cv::Mat image, int imgHeight, int imgWidth)
   // cv::UMat sharpness_image;
   // cv::add(Gx2, Gy2, sharpness_image);
 
-  
+
   // First reduce sharpness_image to 1D by computing the mean of each column
   std::vector<double> columnMeans(imgWidth);
   for (int col = 0; col < imgWidth; col++) {
@@ -448,6 +448,22 @@ int autofocus::computeBestFocus(cv::Mat image, int imgHeight, int imgWidth)
     }
     regionSharpnessScore /= kernel;
     sharpnesscurve.push_back(regionSharpnessScore);
+  }
+
+  // Calculate and print the max amplitude of the sharpness curve
+  double maxVal = *std::max_element(sharpnesscurve.begin(), sharpnesscurve.end());
+  double minVal = *std::min_element(sharpnesscurve.begin(), sharpnesscurve.end());
+  double amplitude = maxVal - minVal;
+  
+  // Check if amplitude is too low
+  if (amplitude < 0.2) {
+    std::cout << "Insufficient sharpness data. Maintaining current focus position." << std::endl;
+    
+    // Store empty curves for visualization
+    lastSharpnessCurve = sharpnesscurve;
+    lastFittedCurve.clear();
+    
+    return desiredLocBestFocus;
   }
 
   // Fitting a normal curve to the sharpness curve, to avoid local peaks in the data around vessel edges
@@ -596,6 +612,8 @@ std::vector<double> autofocus::fitnormalcurve(std::vector<double> sharpnesscurve
 
   double amplitude = (*max_element(begin(sharpnesscurve), end(sharpnesscurve)) - *min_element(begin(sharpnesscurve), end(sharpnesscurve)));
   double offset = *min_element(begin(sharpnesscurve), end(sharpnesscurve));
+
+  std::cout << "amplitude: " << amplitude << "\n";
 
   // Calculates sum_of_elems, a vector showing how well each normal curve with mean j fits grad
   for (int j = 1; j <= sharpnesscurve.size(); j++)

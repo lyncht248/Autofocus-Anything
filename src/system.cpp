@@ -19,6 +19,8 @@
 #include "autofocus.hpp"
 #include "notificationCenter.hpp"
 #include "phasecorr_stabiliser.hpp"
+#include "sharpness_analyzer.hpp"
+#include "sharpness_graph.hpp"
 
 bool bSystemLogFlag = 1;		 // 1 = log, 0 = no log
 bool bSystemQueueLengthFlag = 0; // 1 = log, 0 = no log
@@ -484,6 +486,24 @@ void FrameProcessor::processFrame() // What to do with each frame received from 
 		{
 			logger->info("[FrameProcessor::processFrame] frameQueue is length: {}", system.getFrameQueue().size());
 		}
+
+		if (system.sharpnessUpdateEnabled) {
+			auto now = std::chrono::steady_clock::now();
+			auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+				now - system.lastSharpnessUpdate).count();
+			
+			// Update sharpness graph at 4fps (250ms) instead of 1fps
+			if (elapsed > 250) {
+				system.lastSharpnessUpdate = now;
+				
+				// Analyze the current frame
+				if (vidFrame) {
+					system.currentSharpnessValues = system.sharpnessAnalyzer.analyzeFrame(
+						vidFrame->data(), vidFrame->size().x, vidFrame->size().y);
+					system.sigSharpnessUpdated.emit();
+				}
+			}
+		}
 	}
 }
 void FrameProcessor::releaseFrame()
@@ -643,7 +663,12 @@ System::System(int argc, char **argv) : window(),
 										sRecorderOperationComplete(),
 										stabiliser(),
 										madeMap(false),
-										AF() // Creates an autofocus object
+										AF(), // Creates an autofocus object
+										sharpnessAnalyzer(),
+										sigSharpnessUpdated(),
+										currentSharpnessValues(),
+										sharpnessUpdateEnabled(true),
+										lastSharpnessUpdate(std::chrono::steady_clock::now())
 {
 	if (bSystemLogFlag)
 	{
@@ -776,6 +801,8 @@ System::System(int argc, char **argv) : window(),
 	// In the System constructor, connect the signal
 	window.signalHomePositionChanged().connect(
 		sigc::mem_fun(*this, &System::onWindowHomePositionChanged));
+
+	sigSharpnessUpdated.connect(sigc::mem_fun(*this, &System::updateSharpnessGraph));
 }
 
 bool System::startStreaming()
@@ -1554,4 +1581,8 @@ void System::onWindowHomePositionChanged(double val)
 	}
 	// Update the lens return position
 	AF.getLens().setReturnPosition(val);
+}
+
+void System::updateSharpnessGraph() {
+	window.updateSharpnessGraph(currentSharpnessValues);
 }

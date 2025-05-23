@@ -9,6 +9,7 @@
 #include "gtkmm/drawingarea.h"
 #include "sigc++/connection.h"
 #include "vidframe.hpp"
+#include "sharpness_graph.hpp"
 
 class ScaleWidget : public Gtk::Bin
 {
@@ -151,6 +152,8 @@ public:
 	using SignalHomePositionChanged = sigc::signal<void(double)>;
 	SignalHomePositionChanged signalHomePositionChanged();
 
+	void updateSharpnessGraph(const std::vector<double>& values);
+
 protected:
 	virtual void on_realize() override;
 	virtual void on_show() override;
@@ -252,6 +255,9 @@ private:
 
 	SignalHomePositionChanged sigHomePositionChanged;
 	sigc::connection homePositionScaleConnection;
+
+	Gtk::Label sharpnessLabel;
+	SharpnessGraph sharpnessGraph;
 };
 
 #endif

@@ -39,6 +39,9 @@ struct MainWindow::Private
 	Gtk::HBox mediaBox, fileChooserBox;
 	Gtk::Box displayBox;
 
+	Gtk::Label sharpnessLabel;
+	SharpnessGraph sharpnessGraph;
+
 public:
 	Private();
 };
@@ -70,7 +73,8 @@ MainWindow::Private::Private() : gainLabel("Gain: "),
 								 // verticalLine{Gtk::Label(" | "), Gtk::Label("  |  "), Gtk::Label("  |  "), Gtk::Label("  |  "), Gtk::Label("  |  "), Gtk::Label("  |  "), Gtk::Label("  |  "), Gtk::Label("  |  ")},
 								 mediaBox(Gtk::Orientation::ORIENTATION_HORIZONTAL),
 								 fileChooserBox(),
-								 displayBox()
+								 displayBox(),
+								 sharpnessLabel("Focus Profile")
 {
 	gainLabel.set_justify(Gtk::Justification::JUSTIFY_RIGHT);
 	gainLabel.set_halign(Gtk::Align::ALIGN_END);
@@ -712,17 +716,20 @@ MainWindow::MainWindow() : Gtk::Window(),
 	priv->controlGrid.attach(priv->space4[9], 20, 0);
 	priv->controlGrid.attach(priv->verticalSeparator4, 21, 0, 1, 4);
 	priv->controlGrid.attach(priv->space4[10], 22, 0);
-	priv->controlGrid.attach(loadSaveLabel, 23, 3, 2, 1);
+	priv->controlGrid.attach(loadSaveLabel, 23, 2, 2, 1);
 
 	priv->controlGrid.attach(priv->fileTitle, 23, 4, 2);
-	priv->controlGrid.attach(fileLoadButton, 23, 2);
+	priv->controlGrid.attach(fileLoadButton, 23, 3);
 
-	priv->controlGrid.attach(fileSaveButton, 24, 2);
+	priv->controlGrid.attach(fileSaveButton, 24, 3);
 
 	priv->controlGrid.attach(priv->space4[11], 25, 0);
 
 	// priv->controlGrid.attach(priv->waitLabel, 7, 2);
 	// priv->controlGrid.attach(waitScale, 8, 2);
+
+	priv->controlGrid.attach(priv->sharpnessLabel, 23, 0, 2, 1);
+	priv->controlGrid.attach(priv->sharpnessGraph, 23, 1, 2, 1);
 
 	priv->controlFrame.add(priv->controlGrid);
 
@@ -750,6 +757,10 @@ MainWindow::MainWindow() : Gtk::Window(),
 	homePositionScale.setSpinButtonPrec(1);
 	homePositionScaleConnection = homePositionScale.signalChanged().connect(
 		sigc::mem_fun(*this, &MainWindow::onHomePositionScaleChange));
+
+	priv->sharpnessLabel.set_text("Focus Profile");
+	priv->sharpnessLabel.set_justify(Gtk::Justification::JUSTIFY_CENTER);
+	priv->sharpnessLabel.set_halign(Gtk::Align::ALIGN_CENTER);
 }
 
 // double MainWindow::getFrameRateScaleValue() const
@@ -1216,7 +1227,8 @@ void MainWindow::onFindFocusToggled()
 		
 		// Make best focus scale active
 		bestFocusScale.set_sensitive(true);
-		
+		bestFocusScale.setValue(320); // Set default best focus value to 320
+
 		// Start the find focus process
 		imgcount = 0;
 		bFindFocus = 1;
@@ -1263,7 +1275,6 @@ void MainWindow::whenHoldFocusToggled(bool holdingFocus)
 	{
 		// Make best focus scale active and set value to the desired location of best-focus
 		bestFocusScale.set_sensitive(true);
-		bestFocusScale.setValue(320); // Set default best focus value to 320
 		
 		// Disable the findFocusToggle when holdFocus is active
 		findFocusToggle.set_sensitive(false);
@@ -1717,6 +1728,19 @@ void MainWindow::onHomePositionScaleChange(double val)
 MainWindow::SignalHomePositionChanged MainWindow::signalHomePositionChanged()
 {
 	return sigHomePositionChanged;
+}
+
+void MainWindow::updateSharpnessGraph(const std::vector<double>& values) {
+    // Find maximum value for scaling
+    double maxVal = 1.0;
+    if (!values.empty()) {
+        maxVal = *std::max_element(values.begin(), values.end());
+        if (maxVal <= 0) maxVal = 1.0;
+    }
+    
+    // Update the graph
+    priv->sharpnessGraph.setMaxValue(maxVal * 1.2); // 20% headroom
+    priv->sharpnessGraph.updateValues(values);
 }
 
 MainWindow::~MainWindow()
