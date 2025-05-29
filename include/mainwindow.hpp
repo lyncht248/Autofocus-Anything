@@ -152,6 +152,9 @@ public:
 	using SignalHomePositionChanged = sigc::signal<void(double)>;
 	SignalHomePositionChanged signalHomePositionChanged();
 
+	using SignalPGainChanged = sigc::signal<void(double)>;
+	SignalPGainChanged signalPGainChanged();
+
 	void updateSharpnessGraph(const std::vector<double>& values);
 
 protected:
@@ -220,13 +223,13 @@ private:
 	void onRecordingSizeScaleChange(double val);
 	void onBestFocusScaleChange(double val);
 	void onHomePositionScaleChange(double val);
-
+	void onPGainScaleChange(double val);
 	// Add the missing function declaration for handling findFocusToggle
 	void onFindFocusToggled();
 
 	struct Private *priv;
 
-	ScaleWidget gainScale, exposeScale, gammaScale, frameSlider, waitScale, recordingSizeScale, bestFocusScale, homePositionScale;
+	ScaleWidget gainScale, exposeScale, gammaScale, frameSlider, waitScale, recordingSizeScale, bestFocusScale, homePositionScale, pGainScale;
 	Gtk::Button recordButton, backToStartButton, pauseButton, playButton, fileLoadButton, fileSaveButton, resetButton, enterButton, recenterButton;
 	Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, holdFocusToggle, threedStabToggle, twodStabToggle, findFocusToggle;
 	Gtk::Label fpsLabel, loadSaveLabel, errorLabel, outOfBoundsWarningLabel;
@@ -255,6 +258,9 @@ private:
 
 	SignalHomePositionChanged sigHomePositionChanged;
 	sigc::connection homePositionScaleConnection;
+
+	SignalPGainChanged sigPGainChanged;
+	sigc::connection pGainScaleConnection;
 
 	Gtk::Label sharpnessLabel;
 	SharpnessGraph sharpnessGraph;

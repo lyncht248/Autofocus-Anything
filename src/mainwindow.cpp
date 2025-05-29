@@ -319,9 +319,14 @@ bool MainWindow::_on_state_event(GdkEventWindowState *window_state_event)
 
 MainWindow::MainWindow() : Gtk::Window(),
 						   priv(new Private()),
-						   gainScale(0, 50, 1, 0, 7, 150),
+						   gainScale(0,    // minimum value
+                                    50,   // maximum value 
+                                    1,    // step increment
+                                    0,    // initial value
+                                    7,    // number of decimal places
+                                    150), // width in pixels
 						   exposeScale(100, 16000, 1000, 15000, 7, 150),
-						   gammaScale(0.5, 2.5, 0.01, 1, 7, 150),
+						   gammaScale(0.5, 2.5, 0.1, 1, 7, 150),
 						   // frameRateScale(20, 80, 5, 30, 7, 150),
 						   frameSlider(0, 1799, 1, 0, 5, 200),
 						   // thresScale(0, 1, 0.01, 0.4, 6, 100),
@@ -331,6 +336,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 						   // bestFocusScale(8, 632, 5, 200, 4, 100),
 						   bestFocusScale(130, 510, 5, 240, 4, 100),
 						   homePositionScale(-14.0, 0.0, 0.1, -9.1, 4, 100),
+						   pGainScale(0, 100, 1, 12, 4, 100),
 						   outOfBoundsWarningLabel(""),
 						   recordButton(),
 						   backToStartButton(),
@@ -383,7 +389,8 @@ MainWindow::MainWindow() : Gtk::Window(),
 						   // frameRateScaleConnection(),
 						   frameSliderConnection(),
 						   stateChangeConnection(),
-						   homePositionScaleConnection()
+						   homePositionScaleConnection(),
+						   pGainScaleConnection()
 {
 	// set_default_size(1700,200);
 	set_title("HVI-GTK " HVIGTK_VERSION_STR);
@@ -602,7 +609,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 	errorLabel.set_halign(Gtk::ALIGN_CENTER);
 
 	frameRateEntry.set_width_chars(3);
-	frameRateEntry.set_text("30");
+	frameRateEntry.set_text("60");
 
 	fileLoadButton.set_size_request(125, -1); // Width: 120px, Height: keep default (-1)
 	fileSaveButton.set_size_request(125, -1); // Width: 120px, Height: keep default (-1)
@@ -665,6 +672,8 @@ MainWindow::MainWindow() : Gtk::Window(),
 	priv->controlGrid.attach(bestFocusScale, 3, 1);
 	// priv->controlGrid.attach(homePositionScale, 3, 2);	// Uncomment to give user control of home position
 	//  Add warning label below best focus scale in the grid when lens is out of bounds
+	priv->controlGrid.attach(pGainScale, 3, 2); // Unncomment to give user control of P gain
+
 	priv->controlGrid.attach(outOfBoundsWarningLabel, 3, 2, 2, 2);
 
 	priv->controlGrid.attach(priv->space4[2], 4, 0);
@@ -731,6 +740,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 	priv->controlGrid.attach(priv->sharpnessLabel, 23, 0, 2, 1);
 	priv->controlGrid.attach(priv->sharpnessGraph, 23, 1, 2, 1);
 
+
 	priv->controlFrame.add(priv->controlGrid);
 
 	priv->controlFrame.set_vexpand(false);
@@ -758,9 +768,14 @@ MainWindow::MainWindow() : Gtk::Window(),
 	homePositionScaleConnection = homePositionScale.signalChanged().connect(
 		sigc::mem_fun(*this, &MainWindow::onHomePositionScaleChange));
 
+	pGainScaleConnection = pGainScale.signalChanged().connect(
+		sigc::mem_fun(*this, &MainWindow::onPGainScaleChange));
+
 	priv->sharpnessLabel.set_text("Focus Profile");
 	priv->sharpnessLabel.set_justify(Gtk::Justification::JUSTIFY_CENTER);
 	priv->sharpnessLabel.set_halign(Gtk::Align::ALIGN_CENTER);
+
+	recordingSizeScale.setValue(1200); // Ensure the recording size is set to 1200
 }
 
 // double MainWindow::getFrameRateScaleValue() const
@@ -1728,6 +1743,18 @@ void MainWindow::onHomePositionScaleChange(double val)
 MainWindow::SignalHomePositionChanged MainWindow::signalHomePositionChanged()
 {
 	return sigHomePositionChanged;
+}
+
+void MainWindow::onPGainScaleChange(double val)
+{
+	// Divide by 10000 to convert from 0-100 range to 0.0000-0.0100 range
+	double actualPGain = val / 10000.0;
+	sigPGainChanged.emit(actualPGain);
+}
+
+MainWindow::SignalPGainChanged MainWindow::signalPGainChanged()
+{
+	return sigPGainChanged;
 }
 
 void MainWindow::updateSharpnessGraph(const std::vector<double>& values) {

@@ -184,7 +184,7 @@ void FrameProcessor::stabilise()
 				cv::Mat colorFrame;
 				cv::cvtColor(fullFrame, colorFrame, cv::COLOR_GRAY2BGR);
 
-				// Downscale by factor 0.5 before calling phase correlation
+				// Downscale by factor 0.26 before calling phase correlation
 				cv::Mat halfFrame;
 				cv::resize(colorFrame, halfFrame, cv::Size(), 0.26, 0.26); // for some reason 0.25 causes problems
 
@@ -801,6 +801,8 @@ System::System(int argc, char **argv) : window(),
 	// In the System constructor, connect the signal
 	window.signalHomePositionChanged().connect(
 		sigc::mem_fun(*this, &System::onWindowHomePositionChanged));
+
+	window.signalPGainChanged().connect(sigc::mem_fun(*this, &System::onWindowPGainChanged));
 
 	sigSharpnessUpdated.connect(sigc::mem_fun(*this, &System::updateSharpnessGraph));
 }
@@ -1581,6 +1583,16 @@ void System::onWindowHomePositionChanged(double val)
 	}
 	// Update the lens return position
 	AF.getLens().setReturnPosition(val);
+}
+
+void System::onWindowPGainChanged(double val)
+{
+	if (bSystemLogFlag)
+	{
+		logger->info("[System::onWindowPGainChanged] P gain changed to: {}", val);
+	}
+	// Update the autofocus P gain
+	AF.setPGain(val);
 }
 
 void System::updateSharpnessGraph() {

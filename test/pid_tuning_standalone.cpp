@@ -38,9 +38,6 @@ int main(int argc, char **argv) {
         // Logger already exists
     }
 
-    // Create output directory
-    system("mkdir -p ../output");
-
     // Initialize autofocus system
     autofocus focusController;
     if (!focusController.initialize()) {

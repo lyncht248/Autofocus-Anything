@@ -127,6 +127,7 @@ public:
 	double getFPS(); // see TODO below
 
 	void onWindowHomePositionChanged(double val);
+	void onWindowPGainChanged(double val);
 
 private:
 	void renderFrame();

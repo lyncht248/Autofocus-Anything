@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <thread>
+#include <chrono>
 
 bool bTiltedCamLogFlag = 0; // 1 = log, 0 = don't log
 
@@ -291,44 +292,130 @@ void tiltedcam::setHighSpeedMode(long newHighSpeedMode)
         logger->error("[tiltedcam::setHighSpeedMode()] failed to change setting of tilted camera");
     }
 }
+// PREVIOUSLY USED CODE
+// void tiltedcam::startCaptureThread() {
+//     // Make sure we don't start twice
+//     if (m_threadRunning) {
+//         return;
+//     }
+
+//     // Make sure buffers are allocated
+//     if (!m_captureBuffer) {
+//         int width, height;
+//         ASI_IMG_TYPE type;
+//         int bin;
+        
+//         if (ASIGetROIFormat(0, &width, &height, &bin, &type) != ASI_SUCCESS) {
+//             logger->error("[tiltedcam::startCaptureThread] Failed to get ROI format");
+//             return;
+//         }
+        
+//         m_bufferSize = width * height; // Assuming 8-bit images
+        
+//         try {
+//             m_captureBuffer = (unsigned char*)malloc(m_bufferSize);
+//             if (!m_captureBuffer) {
+//                 logger->error("[tiltedcam::startCaptureThread] Failed to allocate capture buffer");
+//                 return;
+//             }
+            
+//             m_processingBuffer = (unsigned char*)malloc(m_bufferSize);
+//             if (!m_processingBuffer) {
+//                 logger->error("[tiltedcam::startCaptureThread] Failed to allocate processing buffer");
+//                 free(m_captureBuffer);
+//                 m_captureBuffer = nullptr;
+//                 return;
+//             }
+//         } catch (const std::exception& e) {
+//             logger->error("[tiltedcam::startCaptureThread] Exception during buffer allocation: {}", e.what());
+//             return;
+//         }
+//     }
+    
+//     logger->info("[tiltedcam::startCaptureThread] Starting capture thread");
+    
+//     m_stopThread = false;
+//     m_newFrameAvailable = false;
+    
+//     try {
+//         m_captureThread = std::thread(&tiltedcam::captureThreadFunc, this);
+//         m_threadRunning = true;
+//     } catch (const std::exception& e) {
+//         logger->error("[tiltedcam::startCaptureThread] Failed to create thread: {}", e.what());
+//         free(m_captureBuffer);
+//         free(m_processingBuffer);
+//         m_captureBuffer = nullptr;
+//         m_processingBuffer = nullptr;
+//     }
+// }
+
+
 
 void tiltedcam::startCaptureThread() {
-    // Make sure we don't start twice
     if (m_threadRunning) {
+        logger->info("[tiltedcam::startCaptureThread] Thread already running");
         return;
     }
-
-    // Make sure buffers are allocated
-    if (!m_captureBuffer) {
-        int width, height;
-        ASI_IMG_TYPE type;
-        int bin;
-        
-        if (ASIGetROIFormat(0, &width, &height, &bin, &type) != ASI_SUCCESS) {
-            logger->error("[tiltedcam::startCaptureThread] Failed to get ROI format");
+    
+    // Calculate actual buffer size based on current ROI settings
+    int width, height, bins;
+    ASI_IMG_TYPE imageType;
+    ASIGetROIFormat(0, &width, &height, &bins, &imageType);
+    
+    // Calculate buffer size based on image format
+    long calculatedBufferSize;
+    switch(imageType) {
+        case ASI_IMG_RAW8:
+            calculatedBufferSize = width * height;
+            break;
+        case ASI_IMG_RAW16:
+            calculatedBufferSize = width * height * 2;
+            break;
+        case ASI_IMG_RGB24:
+            calculatedBufferSize = width * height * 3;
+            break;
+        default:
+            calculatedBufferSize = width * height; // Default to RAW8
+            break;
+    }
+    
+    m_bufferSize = calculatedBufferSize;
+    logger->info("[tiltedcam::startCaptureThread] Calculated buffer size: {} bytes for {}x{} image", 
+                 m_bufferSize, width, height);
+    
+    // Free existing buffers if they exist
+    if (m_captureBuffer) {
+        free(m_captureBuffer);
+        m_captureBuffer = nullptr;
+    }
+    if (m_processingBuffer) {
+        free(m_processingBuffer);
+        m_processingBuffer = nullptr;
+    }
+    
+    // Allocate buffers with proper size
+    try {
+        m_captureBuffer = (unsigned char*)malloc(m_bufferSize);
+        if (!m_captureBuffer) {
+            logger->error("[tiltedcam::startCaptureThread] Failed to allocate capture buffer");
             return;
         }
         
-        m_bufferSize = width * height; // Assuming 8-bit images
-        
-        try {
-            m_captureBuffer = (unsigned char*)malloc(m_bufferSize);
-            if (!m_captureBuffer) {
-                logger->error("[tiltedcam::startCaptureThread] Failed to allocate capture buffer");
-                return;
-            }
-            
-            m_processingBuffer = (unsigned char*)malloc(m_bufferSize);
-            if (!m_processingBuffer) {
-                logger->error("[tiltedcam::startCaptureThread] Failed to allocate processing buffer");
-                free(m_captureBuffer);
-                m_captureBuffer = nullptr;
-                return;
-            }
-        } catch (const std::exception& e) {
-            logger->error("[tiltedcam::startCaptureThread] Exception during buffer allocation: {}", e.what());
+        m_processingBuffer = (unsigned char*)malloc(m_bufferSize);
+        if (!m_processingBuffer) {
+            logger->error("[tiltedcam::startCaptureThread] Failed to allocate processing buffer");
+            free(m_captureBuffer);
+            m_captureBuffer = nullptr;
             return;
         }
+        
+        // Initialize buffers to zero
+        memset(m_captureBuffer, 0, m_bufferSize);
+        memset(m_processingBuffer, 0, m_bufferSize);
+        
+    } catch (const std::exception& e) {
+        logger->error("[tiltedcam::startCaptureThread] Exception during buffer allocation: {}", e.what());
+        return;
     }
     
     logger->info("[tiltedcam::startCaptureThread] Starting capture thread");
@@ -391,30 +478,74 @@ void tiltedcam::stopCaptureThread() {
     logger->info("[tiltedcam::stopCaptureThread] Cleanup completed");
 }
 
+// PREVIOUSLY USED CODE
+// void tiltedcam::captureThreadFunc() {
+//     logger->info("[tiltedcam::captureThreadFunc] Capture thread started");
+    
+//     while (!m_stopThread) {
+//         // Get the image from the camera
+//         ASI_ERROR_CODE err = ASIGetVideoData(0, m_captureBuffer, m_bufferSize, 200); // Use timeout to avoid hanging
+        
+//         if (err == ASI_SUCCESS) {
+//             // Lock the mutex to safely update the processing buffer
+//             std::lock_guard<std::mutex> lock(m_bufferMutex);
+            
+//             // Copy new frame to processing buffer
+//             memcpy(m_processingBuffer, m_captureBuffer, m_bufferSize);
+            
+//             // Set flag that new frame is available
+//             m_newFrameAvailable = true;
+//         } else {
+//             logger->error("[tiltedcam::captureThreadFunc] Error getting image from camera: {}", err);
+//             // Short sleep to avoid hammering the camera on errors
+//             usleep(10000); // 10ms
+//         }
+//     }
+    
+//     logger->info("[tiltedcam::captureThreadFunc] Capture thread ending");
+// }
+
 void tiltedcam::captureThreadFunc() {
     logger->info("[tiltedcam::captureThreadFunc] Capture thread started");
     
+    int droppedFrameCount = 0;
+    
     while (!m_stopThread) {
-        // Get the image from the camera
-        ASI_ERROR_CODE err = ASIGetVideoData(0, m_captureBuffer, m_bufferSize, 200); // Use timeout to avoid hanging
+        // Use longer timeout as recommended: exposure*2 + 500ms
+        // For typical exposures, use at least 1000ms timeout
+        ASI_ERROR_CODE err = ASIGetVideoData(0, m_captureBuffer, m_bufferSize, 1000);
         
         if (err == ASI_SUCCESS) {
-            // Lock the mutex to safely update the processing buffer
-            std::lock_guard<std::mutex> lock(m_bufferMutex);
+            // Copy the captured image to the processing buffer
+            {
+                std::lock_guard<std::mutex> lock(m_bufferMutex);
+                memcpy(m_processingBuffer, m_captureBuffer, m_bufferSize);
+                m_newFrameAvailable = true;
+            }
             
-            // Copy new frame to processing buffer
-            memcpy(m_processingBuffer, m_captureBuffer, m_bufferSize);
+        } else if (err == ASI_ERROR_TIMEOUT) {
+            // Timeout is normal, just continue
+            continue;
             
-            // Set flag that new frame is available
-            m_newFrameAvailable = true;
         } else {
-            logger->error("[tiltedcam::captureThreadFunc] Error getting image from camera: {}", err);
-            // Short sleep to avoid hammering the camera on errors
-            usleep(10000); // 10ms
+            logger->error("[tiltedcam::captureThreadFunc] Error getting image: {}", err);
+            
+            // Check for dropped frames
+            int currentDroppedFrames = 0;
+            if (ASIGetDroppedFrames(0, &currentDroppedFrames) == ASI_SUCCESS) {
+                if (currentDroppedFrames > droppedFrameCount) {
+                    logger->warn("[tiltedcam::captureThreadFunc] Dropped frames detected: {} total", 
+                                currentDroppedFrames);
+                    droppedFrameCount = currentDroppedFrames;
+                }
+            }
+            
+            // Short delay before retrying
+            usleep(5000); // 5ms
         }
     }
     
-    logger->info("[tiltedcam::captureThreadFunc] Capture thread ending");
+    logger->info("[tiltedcam::captureThreadFunc] Capture thread ended");
 }
 
 bool tiltedcam::getLatestFrame(unsigned char* destination, long size) {

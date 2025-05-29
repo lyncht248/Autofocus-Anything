@@ -2,6 +2,11 @@
 #define AUTOFOCUS_H
 
 #include <opencv2/highgui.hpp>
+#include <opencv2/video.hpp>
+#include <fstream>
+#include <filesystem>
+#include <iomanip>
+#include <sstream>
 #include "mainwindow.hpp"
 #include "lens.hpp"
 #include "tiltedcam.hpp"
@@ -36,7 +41,12 @@ class autofocus { //This class handles autofocusing
 
   //computes the location of best-focus
   int computeBestFocus (cv::Mat image, int imgHeight, int imgWidth);
+  int computeBestFocusReduced(cv::Mat image, int imgHeight, int imgWidth);
+  int computeBestFocusVeryReduced(cv::Mat image, int imgHeight, int imgWidth);
   void adjust_bestFocus(int val);
+
+  void setPGain(double gain);
+  double getPGain() const;
 
   // Add a method to get the lens object
   lens& getLens() { return lens1; }
@@ -57,7 +67,9 @@ class autofocus { //This class handles autofocusing
 
  
   //fits a normal curve to the given curve, which avoids local maxima
-  std::vector<double> fitnormalcurve(std::vector<double> sharpnesscurve, int kernel, double std_dev_factor = 0.12);
+  std::vector<double> fitnormalcurve(std::vector<double> sharpnesscurve, double amplitude, double offset, double std_dev_factor);
+  std::vector<double> fitnormalcurveBruteForce(std::vector<double> sharpnesscurve, double amplitude, double offset, double std_dev_factor);
+  double calculateErrorWithAmplitudeAndOffset(const std::vector<double>& sharpnesscurve, double mean, double amplitude, double offset, double sigma);
   double normpdf(double x, double u, double s); //helper function
 
   std::atomic<bool> stop_thread; //Controls the autofocus, tilted camera, and lens threads
@@ -65,6 +77,24 @@ class autofocus { //This class handles autofocusing
 
   lens lens1;
   tiltedcam tiltedcam1;
+
+  // Pre-allocated matrices for performance optimization
+  cv::Mat blurred_preallocated;
+  cv::Mat img_x_preallocated;
+  cv::Mat img_y_preallocated;
+  cv::Mat img_x_squared_preallocated;
+  cv::Mat img_y_squared_preallocated;
+  cv::Mat sum_xy_preallocated;
+  cv::Mat sharpness_float_preallocated;
+  cv::Mat imageofinterest_preallocated;
+  
+  // Pre-allocated Roberts Cross kernels
+  cv::Mat roberts_kernelx;
+  cv::Mat roberts_kernely;
+
+  // CSV logging
+  std::ofstream csvFile;
+  std::string csvFilename;
 
 };
 

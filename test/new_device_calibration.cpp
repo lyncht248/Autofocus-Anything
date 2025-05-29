@@ -57,9 +57,6 @@ protected:
         } catch (const spdlog::spdlog_ex&) {
             // Logger already exists
         }
-        
-        // Create output directory if it doesn't exist
-        system("mkdir -p ../output");
     }
     
     // Shared resources for tests

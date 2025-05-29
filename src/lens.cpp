@@ -430,7 +430,6 @@ void lens::lens_thread()
         if (bNewMoveRel)
         {
             // if(bLensLogFlag) logger->info("[lens::lens_thread] Moving lens to new position");
-            //mov_rel(mmToMove);
             mov_abs(mmToMove + currentLensLoc);
             // if(bLensLogFlag) logger->info("[lens::lens_thread] Lens moved to new position");
             bNewMoveRel = 0;
