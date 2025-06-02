@@ -22,17 +22,22 @@ void PhaseCorrStabiliser::initReference(const cv::Mat &frame) {
 }
 
 cv::Point2f PhaseCorrStabiliser::computeShift(const cv::Mat &frame) {
-    // Convert to grayscale if input is BGR
+    // Input should already be grayscale, but handle both cases
     cv::Mat grayFrame;
     if (frame.channels() == 3) {
         cv::cvtColor(frame, grayFrame, cv::COLOR_BGR2GRAY);
     } else {
-        grayFrame = frame;
+        grayFrame = frame; // No copy needed if already grayscale
     }
 
     // Convert to floating point (CV_32F)
     cv::Mat currentGray;
     grayFrame.convertTo(currentGray, CV_32F);
+
+    // Ensure the Hanning window matches the current frame size
+    if (hannWindow.rows != currentGray.rows || hannWindow.cols != currentGray.cols) {
+        cv::createHanningWindow(hannWindow, currentGray.size(), CV_32F);
+    }
 
     // Use OpenCV's phaseCorrelate with pre-computed Hanning window
     cv::Point2d shift = cv::phaseCorrelate(currentGray, referenceGray, hannWindow);

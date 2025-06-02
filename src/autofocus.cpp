@@ -67,7 +67,7 @@ std::string csvFilename;
 std::ofstream csvFile;
 
 // Add P gain as a member variable with default value
-double Kp = 0.0015; // Changed from 0.0012 to 0.0014
+double Kp = 0.0012; // Changed from 0.0012 to 0.0014
 
 autofocus::autofocus() : lens1(),
                          tiltedcam1(),
@@ -421,7 +421,7 @@ void autofocus::run()
           }
           else if (bFindFocus)
           {
-            desiredLocBestFocus = 320;
+            desiredLocBestFocus = 400;
             previous = locBestFocus;
             if (bAutofocusLogFlag)
             {

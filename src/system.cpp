@@ -135,9 +135,7 @@ void FrameProcessor::stabilise()
 
 	ThreadStopper::makeStoppable();
 
-	// This counter will be used to skip the phase-correlation calculation
-	// when the user-defined FPS is above 40.
-	static int frameCount = 0;
+	int frameCount = 0;
 
 	while (running)
 	{
@@ -147,7 +145,7 @@ void FrameProcessor::stabilise()
 		while (stabQueue.size() > MAX_ALLOWED_IN_QUEUE)
 		{
 			VidFrame *oldFrame = stabQueue.pop();
-			delete oldFrame; // or recycle if you have a different memory scheme
+			delete oldFrame;
 		}
 
 		VidFrame *vframe = stabQueue.pop();
@@ -158,11 +156,12 @@ void FrameProcessor::stabilise()
 
 		// Check if we should skip this frame's offset calculation
 		bool skipOffsetCalculation = false;
-		if (system.getFPS() > 40.0)
+		double currentFPS = system.getFPS();
+		if (currentFPS > 40.0)
 		{
-			skipOffsetCalculation = ((frameCount % 2) != 0); // Skip every other frame
-			frameCount++;
+			skipOffsetCalculation = ((frameCount % 2) != 0);
 		}
+		frameCount++;
 
 		// If the user wants PhaseCorr, do that
 		if (system.usePhaseCorr)
@@ -170,23 +169,31 @@ void FrameProcessor::stabilise()
 			if (!skipOffsetCalculation)
 			{
 				// Convert VidFrame -> cv::Mat
-				// vframe->data() is pointer to image data
-				// vframe->size().x is width, vframe->size().y is height
 				cv::Mat fullFrame(
 					vframe->size().y,
 					vframe->size().x,
-					CV_8UC1,	   // 8-bit single channel
-					vframe->data() // pointer to raw pixels
+					CV_8UC1,
+					vframe->data()
 				);
 
-				// Convert single-channel grayscale to 3-channel BGR (phaseCorrStabiliser uses COLOR_BGR2GRAY)
-				// If your camera is truly monochrome, you can adapt this to keep single channel as well.
-				cv::Mat colorFrame;
-				cv::cvtColor(fullFrame, colorFrame, cv::COLOR_GRAY2BGR);
+				// Extract center ROI BEFORE downscaling to avoid subpixel issues
+				int roiWidth = fullFrame.cols / 2;
+				int roiHeight = fullFrame.rows / 2;
+				int roiX = (fullFrame.cols - roiWidth) / 2;
+				int roiY = (fullFrame.rows - roiHeight) / 2;
+				
+				// Ensure ROI coordinates are even to avoid subpixel shifts
+				roiX = (roiX / 2) * 2;
+				roiY = (roiY / 2) * 2;
+				roiWidth = (roiWidth / 2) * 2;
+				roiHeight = (roiHeight / 2) * 2;
+				
+				cv::Rect roiRect(roiX, roiY, roiWidth, roiHeight);
+				cv::Mat roiFrame = fullFrame(roiRect);
 
-				// Downscale by factor 0.26 before calling phase correlation
+				// Now downscale the ROI
 				cv::Mat halfFrame;
-				cv::resize(colorFrame, halfFrame, cv::Size(), 0.26, 0.26); // for some reason 0.25 causes problems
+				cv::resize(roiFrame, halfFrame, cv::Size(), 0.5, 0.5);
 
 				cv::Point2f shift(0.0f, 0.0f);
 				// If reference not set, init it
@@ -202,10 +209,9 @@ void FrameProcessor::stabilise()
 				}
 
 				stabMutex.lock();
-				// Use shift to update currentOff. Multiply by factor 2 if needed
-				// (Since we used 0.26 scale, shift is 1/0.26 = 3.8461538461538462)
-				currentOff[0] = shift.x * -3.8461538461538462f;
-				currentOff[1] = shift.y * -3.8461538461538462f;
+				// Scale shift back up by factor of 2.0 (since we used 0.5 scale)
+				currentOff[0] = shift.x * -2.0f;
+				currentOff[1] = shift.y * -2.0f;
 
 				offset += currentOff;
 				_stabComplete = stabQueue.empty();
@@ -215,7 +221,7 @@ void FrameProcessor::stabilise()
 			}
 			else
 			{
-				// If skipping, still set _stabComplete when queue is empty
+				// Skip all processing, just mark as complete
 				stabMutex.lock();
 				_stabComplete = stabQueue.empty();
 				if (_stabComplete)
@@ -362,8 +368,8 @@ void FrameProcessor::processFrame() // What to do with each frame received from 
 				while (!_stabComplete)
 					stabComplete.wait(stabMutex);
 
-			rasterPos[0] -= currentOff[0];
-			rasterPos[1] -= currentOff[1];
+			rasterPos[0] -= currentOff[0]; // x offset
+			rasterPos[1] -= (currentOff[1] + (system.getFPS() > 40.0 ? 0.5 : 1.0)); // y offset
 			currentOff = TooN::Zeros;
 			stabMutex.unlock();
 			SDLWindow::setRaster(childwin, rasterPos[0], rasterPos[1]);

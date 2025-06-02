@@ -672,7 +672,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 	priv->controlGrid.attach(bestFocusScale, 3, 1);
 	// priv->controlGrid.attach(homePositionScale, 3, 2);	// Uncomment to give user control of home position
 	//  Add warning label below best focus scale in the grid when lens is out of bounds
-	priv->controlGrid.attach(pGainScale, 3, 2); // Unncomment to give user control of P gain
+	// priv->controlGrid.attach(pGainScale, 3, 2); // Unncomment to give user control of P gain
 
 	priv->controlGrid.attach(outOfBoundsWarningLabel, 3, 2, 2, 2);
 
@@ -1070,7 +1070,7 @@ double MainWindow::getFrameRateEntryBox() const
 	try
 	{
 		frameRate = std::stod(tempText);
-		std::cout << "Frame Rate: " << frameRate << std::endl;
+		//std::cout << "Frame Rate: " << frameRate << std::endl;
 	}
 	catch (std::invalid_argument &e)
 	{
@@ -1080,7 +1080,7 @@ double MainWindow::getFrameRateEntryBox() const
 	{
 		std::cerr << "Invalid input: std::out_of_range thrown" << '\n';
 	}
-	std::cout << "Frame Rate: " << frameRate << std::endl;
+	//std::cout << "Frame Rate: " << frameRate << std::endl;
 	return frameRate;
 }
 
@@ -1242,7 +1242,7 @@ void MainWindow::onFindFocusToggled()
 		
 		// Make best focus scale active
 		bestFocusScale.set_sensitive(true);
-		bestFocusScale.setValue(320); // Set default best focus value to 320
+		bestFocusScale.setValue(400); // Set default best focus value to 320
 
 		// Start the find focus process
 		imgcount = 0;
