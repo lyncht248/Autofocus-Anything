@@ -41,7 +41,7 @@ class autofocus { //This class handles autofocusing
 
   //computes the location of best-focus
   int computeBestFocus (cv::Mat image, int imgHeight, int imgWidth);
-  int computeBestFocusReduced(cv::Mat image, int imgHeight, int imgWidth);
+  double computeBestFocusReduced(cv::Mat image, int imgHeight, int imgWidth);
   int computeBestFocusVeryReduced(cv::Mat image, int imgHeight, int imgWidth);
   void adjust_bestFocus(int val);
 
@@ -72,6 +72,9 @@ class autofocus { //This class handles autofocusing
   double calculateErrorWithAmplitudeAndOffset(const std::vector<double>& sharpnesscurve, double mean, double amplitude, double offset, double sigma);
   double normpdf(double x, double u, double s); //helper function
 
+  // Center of mass calculation
+  double findCenterOfMass(const std::vector<double>& curve);
+
   std::atomic<bool> stop_thread; //Controls the autofocus, tilted camera, and lens threads
   std::thread tAutofocus;
 
@@ -91,6 +94,9 @@ class autofocus { //This class handles autofocusing
   // Pre-allocated Roberts Cross kernels
   cv::Mat roberts_kernelx;
   cv::Mat roberts_kernely;
+  
+  // For visualization
+  double lastCenterOfMass = -1.0; // Store center of mass for visualization
 
   // CSV logging
   std::ofstream csvFile;

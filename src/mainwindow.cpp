@@ -738,7 +738,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 	// priv->controlGrid.attach(waitScale, 8, 2);
 
 	priv->controlGrid.attach(priv->sharpnessLabel, 23, 0, 2, 1);
-	priv->controlGrid.attach(priv->sharpnessGraph, 23, 1, 2, 1);
+	priv->controlGrid.attach(priv->sharpnessGraph, 23, 1, 2, 2);
 
 
 	priv->controlFrame.add(priv->controlGrid);

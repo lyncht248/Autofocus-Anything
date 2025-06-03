@@ -3,7 +3,11 @@
 SharpnessGraph::SharpnessGraph() : 
     m_maxValue(1.0)
 {
-    set_size_request(250, 35); // Reduce height from 50 to 30 pixels
+    set_size_request(250, 55); // Reduced height for 2-row span
+    set_vexpand(false); // Prevent vertical expansion
+    set_hexpand(false); // Also prevent horizontal expansion
+    set_valign(Gtk::Align::ALIGN_START); // Align to top instead of filling
+    set_halign(Gtk::Align::ALIGN_START); // Align to left instead of filling
     
     // Connect the dispatcher to the redraw function
     m_signalDataChanged.connect(sigc::mem_fun(*this, &SharpnessGraph::onDataChanged));
