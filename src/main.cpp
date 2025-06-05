@@ -29,7 +29,7 @@ std::atomic<bool> bAutofocusing = false; // Flag that controls the autofocusing 
 int gtkAppLocationX = 42;
 int gtkAppLocationY = 10;
 
-int main(int argc, char **argv) 
+int main(int argc, char **argv)
 {
     // // Creates the logger file output and sets the pattern
     // auto now = std::chrono::system_clock::now();
@@ -41,11 +41,12 @@ int main(int argc, char **argv)
     // std::string filename = "/home/hvi/Desktop/HVI-log-report/" + ss.str();
     // logger = spdlog::basic_logger_mt("basic_logger", filename);
     logger = spdlog::stdout_color_mt("console");
-    logger->set_pattern("[%H:%M:%S] [thread %t] %v");    
+    logger->set_pattern("[%H:%M:%S] [thread %t] %v");
 
     // Spawns the SDL window, which is done in a separate process
     childwin = SDLWindow::sdlwin_open();
-    if (!childwin) {
+    if (!childwin)
+    {
         return 1;
     }
 
@@ -68,17 +69,19 @@ int main(int argc, char **argv)
     // }
 
     // Creates a GTK application object
-    auto app = Gtk::Application::create(argc, argv, HVIGTK_APPID); 
+    auto app = Gtk::Application::create(argc, argv, HVIGTK_APPID);
     logger->info("[Main] GTK application object created");
 
     // Sets to dark theme, which is useful for operator to see contrast better
     Glib::RefPtr<Gtk::Settings> settings = Gtk::Settings::get_default();
-    if(settings) {
+    if (settings)
+    {
         settings->property_gtk_application_prefer_dark_theme() = true;
     }
 
     // Initializes the GTK thread system and sets the GTK thread to default (?)
-    if(!Glib::thread_supported()) Glib::thread_init();
+    if (!Glib::thread_supported())
+        Glib::thread_init();
     Glib::MainContext::get_default()->push_thread_default();
     logger->info("[Main] GTK thread system initialized and GTK thread set to default");
 
@@ -86,19 +89,24 @@ int main(int argc, char **argv)
     System system(argc, argv);
     logger->info("[Main] System object finished creating");
 
+    // connect the SDL window to the system
+    if (childwin)
+    {
+        system.setSDLWindow(childwin);
+    }
+
     // Opens the GTK application GUI and stops main() execution. system.getWindow() returns a pointer to the MainWindow object created in system.cc
-    int out = app->run(system.getWindow() );
+    int out = app->run(system.getWindow());
     logger->info("[Main] app->run loop is finished executing");
 
     // Closes the SDL window
     SDLWindow::sdlwin_close(childwin);
     logger->info("[Main] sdlwin_close is closed");
-    
+
     // Flush logger before exit
     logger->flush();
-    
+
     // Returns the exit code of the GTK application
     logger->info("[Main] main.cpp about to complete");
     return 0;
 }
-

@@ -8,6 +8,8 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <iostream>
+#include "system.hpp"
+
 using namespace SDLWindow;
 
 //only meaningful in child process
@@ -56,6 +58,14 @@ SDLWin* SDLWindow::sdlwin_open()
 	out->zoomFactor = 1.0;
 	out->zoomOffsetX = 0.0;
 	out->zoomOffsetY = 0.0;
+	
+	// Initialize ROI parameters
+	out->system = nullptr;
+	out->showROI = false;
+	out->roiCenterX = -1;
+	out->roiCenterY = -1;
+	out->roiWidth = 100;
+	out->roiHeight = 100;
 
 	//Does the fork here. PID is process ID
 	pid_t cpid = fork();
@@ -196,5 +206,108 @@ void SDLWindow::resetZoom(SDLWin *win)
 	win->command = CMD_RESET_ZOOM;
 	pthread_cond_broadcast(&win->hasCommand);
 	waitForResponse(win);
+	unlockcmd(win);
+}
+
+void handleDoubleClick(SDLWin *win, int x, int y) {
+    if (win && win->system) {
+        // Convert screen coordinates to image coordinates
+        // Account for any scaling/offset in the display
+        int imageX = x;  // You may need to adjust this based on your display scaling
+        int imageY = y;  // You may need to adjust this based on your display scaling
+        
+        // Update the ROI center in the system
+        win->system->updateROICenter(imageX, imageY);
+        
+        // Update display parameters
+        win->roiCenterX = imageX;
+        win->roiCenterY = imageY;
+        win->showROI = true;
+        
+        std::cout << "[SDL Window] Double-click at (" << imageX << ", " << imageY << "), ROI updated" << std::endl;
+    }
+}
+
+void updateROIDisplay(SDLWin *win) {
+    if (win && win->system) {
+        win->system->getCurrentROI(win->roiCenterX, win->roiCenterY, win->roiWidth, win->roiHeight);
+        win->showROI = (win->roiCenterX >= 0 && win->roiCenterY >= 0);
+    }
+}
+
+// In your main SDL event loop, add double-click detection:
+void handleSDLEvents(SDLWin *win) {
+    SDL_Event event;
+    static Uint32 lastClickTime = 0;
+    static int lastClickX = 0, lastClickY = 0;
+    
+    while (SDL_PollEvent(&event)) {
+        switch (event.type) {
+            case SDL_QUIT:
+                quit(win);
+                break;
+                
+            case SDL_MOUSEBUTTONDOWN:
+                if (event.button.button == SDL_BUTTON_LEFT) {
+                    Uint32 currentTime = SDL_GetTicks();
+                    int currentX = event.button.x;
+                    int currentY = event.button.y;
+                    
+                    // Check for double-click (within 500ms and 10 pixels)
+                    if (currentTime - lastClickTime < 500 && 
+                        abs(currentX - lastClickX) < 10 && 
+                        abs(currentY - lastClickY) < 10) {
+                        
+                        handleDoubleClick(win, currentX, currentY);
+                    }
+                    
+                    lastClickTime = currentTime;
+                    lastClickX = currentX;
+                    lastClickY = currentY;
+                }
+                break;
+                
+            // existing event handling...
+        }
+    }
+}
+
+// Add ROI overlay rendering to your frame drawing function:
+void drawROIOverlay(SDLWin *win, SDL_Renderer* renderer) {
+    if (!win->showROI) {
+        return;
+    }
+    
+    // Update ROI parameters from system
+    updateROIDisplay(win);
+    
+    if (win->roiCenterX >= 0 && win->roiCenterY >= 0) {
+        // Calculate ROI rectangle
+        int roiX = win->roiCenterX - win->roiWidth / 2;
+        int roiY = win->roiCenterY - win->roiHeight / 2;
+        
+        // Draw ROI rectangle
+        SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255); // Yellow color
+        
+        SDL_Rect roiRect = {roiX, roiY, win->roiWidth, win->roiHeight};
+        SDL_RenderDrawRect(renderer, &roiRect);
+        
+        // Draw thicker border by drawing multiple rectangles
+        for (int i = 1; i < 3; i++) {
+            SDL_Rect thickRect = {roiX - i, roiY - i, win->roiWidth + 2*i, win->roiHeight + 2*i};
+            SDL_RenderDrawRect(renderer, &thickRect);
+        }
+        
+        // Draw center crosshair
+        SDL_RenderDrawLine(renderer, win->roiCenterX - 5, win->roiCenterY, win->roiCenterX + 5, win->roiCenterY);
+        SDL_RenderDrawLine(renderer, win->roiCenterX, win->roiCenterY - 5, win->roiCenterX, win->roiCenterY + 5);
+    }
+}
+
+void SDLWindow::quit(SDLWin *win)
+{
+	lockcmd(win);
+	win->command = CMD_QUIT;
+	pthread_cond_broadcast(&win->hasCommand);
 	unlockcmd(win);
 }

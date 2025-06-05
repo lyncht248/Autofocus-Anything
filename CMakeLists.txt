@@ -106,6 +106,7 @@ set(SOURCES
     ${CMAKE_SOURCE_DIR}/src/phasecorr_stabiliser.cpp
     ${CMAKE_SOURCE_DIR}/src/sharpness_analyzer.cpp
     ${CMAKE_SOURCE_DIR}/src/sharpness_graph.cpp
+    ${CMAKE_SOURCE_DIR}/src/imagingcam.cpp
 )
 
 # Add the executable with source files

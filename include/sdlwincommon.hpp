@@ -7,6 +7,9 @@
 #define MDATASZ 1024
 #define BDATASZ 10485760
 
+// Forward declaration for System class
+class System;
+
 namespace SDLWindow
 {
 	typedef union
@@ -62,6 +65,12 @@ namespace SDLWindow
 		double zoomFactor;
 		double zoomOffsetX;
 		double zoomOffsetY;
+		
+		// Add ROI display parameters
+		System* system;
+		bool showROI;
+		int roiCenterX, roiCenterY;
+		int roiWidth, roiHeight;
 	};
 }
 

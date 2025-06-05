@@ -67,7 +67,7 @@ std::string csvFilename;
 std::ofstream csvFile;
 
 // Add P gain as a member variable with default value
-double Kp = 0.0018; // Changed from 0.0012 to 0.0014
+double Kp = 0.005; // Changed from 0.0012 to 0.0014
 
 autofocus::autofocus() : lens1(),
                          tiltedcam1(),
@@ -91,7 +91,7 @@ bool autofocus::initialize()
   // Initialize reduced resolution benchmark CSV file with headers
   std::ofstream reducedBenchmarkFile("../output/focus_benchmark_reduced.csv");
   if (reducedBenchmarkFile.is_open()) {
-    reducedBenchmarkFile << "timestamp,total_time_us,resize_time_us,clahe_time_us,blur_time_us,roberts_time_us,column_time_us,sliding_time_us,fitting_time_us" << std::endl;
+    reducedBenchmarkFile << "timestamp,total_time_us,resize_time_us,clahe_time_us,blur_time_us,roberts_time_us,column_time_us,sliding_time_us,com_time_us" << std::endl;
     reducedBenchmarkFile.close();
   }
   
@@ -844,14 +844,14 @@ double autofocus::computeBestFocusReduced(cv::Mat image, int imgHeight, int imgW
     auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::system_clock::now().time_since_epoch()).count();
     reducedBenchmarkFile << timestamp << ","
-                         << totalTime.count() << ","
-                         << resizeTime.count() << ","
-                         << claheTime.count() << ","
-                         << blurTime.count() << ","
-                         << robertsTime.count() << ","
-                         << columnTime.count() << ","
-                         << slidingTime.count() << ","
-                         << comTime.count() << std::endl;
+                        << totalTime.count() << ","
+                        << resizeTime.count() << ","
+                        << claheTime.count() << ","
+                        << blurTime.count() << ","
+                        << robertsTime.count() << ","
+                        << columnTime.count() << ","
+                        << slidingTime.count() << ","
+                        << comTime.count() << std::endl;
     reducedBenchmarkFile.close();
   }
 

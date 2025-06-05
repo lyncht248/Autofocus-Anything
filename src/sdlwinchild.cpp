@@ -34,8 +34,9 @@ using namespace SDLWindow;
 
 TTF_Font* font = nullptr;
 
-// Track mouse dragging for image panning
+// Track mouse dragging for image panning and window dragging
 bool isDraggingImage = false;
+bool isDraggingWindow = false;
 int dragStartX = 0;
 int dragStartY = 0;
 
@@ -44,6 +45,14 @@ SDL_Cursor* defaultCursor = nullptr;
 
 static bool debug_print = true;
 static int counter = 0;
+
+// Add near the top with other static variables
+static Uint32 lastClickTime = 0;
+static int lastClickX = 0, lastClickY = 0;
+
+// Forward declarations
+static void handleDoubleClick(int x, int y);
+static void drawROIOverlay(SDL_Renderer* renderer);
 
 void convert_g8_to_rgb888(uint32_t *dst, const uint8_t *src, ssize_t n)
 {
@@ -62,6 +71,60 @@ void interrupt(int signo, siginfo_t *info, void *context)
 	running = false;
 }
 
+// Add this function after the existing functions
+static void handleDoubleClick(int x, int y) {
+    // Convert screen coordinates to image coordinates
+    // For now, we'll store the screen coordinates and let the main process handle conversion
+    if (sdlwin) {
+        // Store the click position in shared memory for the main process to handle
+        pthread_mutex_lock(&sdlwin->mutex);
+        sdlwin->lcmd[10].d_int = x;  // Use some unused slots in lcmd
+        sdlwin->lcmd[11].d_int = y;
+        sdlwin->lcmd[12].d_bool = true; // Flag that we have a new ROI center
+        pthread_mutex_unlock(&sdlwin->mutex);
+        
+        printf("[SDL Child] Double-click detected at (%d, %d)\n", x, y);
+    }
+}
+
+// Add this function to draw the ROI overlay
+static void drawROIOverlay(SDL_Renderer* renderer) {
+    if (!sdlwin || !sdlwin->showROI) {
+        return;
+    }
+    
+    pthread_mutex_lock(&sdlwin->mutex);
+    int centerX = sdlwin->roiCenterX;
+    int centerY = sdlwin->roiCenterY;
+    int width = sdlwin->roiWidth;
+    int height = sdlwin->roiHeight;
+    bool showROI = sdlwin->showROI;
+    pthread_mutex_unlock(&sdlwin->mutex);
+    
+    if (!showROI || centerX < 0 || centerY < 0) {
+        return;
+    }
+    
+    // Calculate ROI rectangle
+    int roiX = centerX - width / 2;
+    int roiY = centerY - height / 2;
+    
+    // Draw ROI rectangle
+    SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255); // Yellow color
+    
+    SDL_Rect roiRect = {roiX, roiY, width, height};
+    SDL_RenderDrawRect(renderer, &roiRect);
+    
+    // Draw thicker border by drawing multiple rectangles
+    for (int i = 1; i < 3; i++) {
+        SDL_Rect thickRect = {roiX - i, roiY - i, width + 2*i, height + 2*i};
+        SDL_RenderDrawRect(renderer, &thickRect);
+    }
+    
+    // Draw center crosshair
+    SDL_RenderDrawLine(renderer, centerX - 5, centerY, centerX + 5, centerY);
+    SDL_RenderDrawLine(renderer, centerX, centerY - 5, centerX, centerY + 5);
+}
 
 static inline void redraw(SDL_Renderer *renderer, SDL_Texture *frame, SDL_Texture *map, int w, int h)
 {
@@ -146,17 +209,16 @@ static inline void redraw(SDL_Renderer *renderer, SDL_Texture *frame, SDL_Textur
 	thickLineColor(renderer, w, 0, w, h, BORDER_THRES, 0xFF15181A);
 	*/
 
+	// Add ROI overlay at the end, just before returning
+	drawROIOverlay(renderer);
 }
 
 static SDL_HitTestResult hit_test(SDL_Window *window, const SDL_Point *pt, void *data)
 {
-	// If we're zoomed in, don't allow window dragging
-	if (sdlwin->zoomFactor > 1.0) {
-		return SDL_HITTEST_NORMAL; // Normal handling, will let our mouse events handle dragging
-	}
-
 	int w, h;
 	SDL_GetWindowSize(window, &w, &h);
+	
+	// Check for border resize areas first
 	if (pt->x < BORDER_THRES)
 	{
 		if (pt->y < BORDER_THRES)
@@ -180,7 +242,9 @@ static SDL_HitTestResult hit_test(SDL_Window *window, const SDL_Point *pt, void 
 	else if (h - pt->y < BORDER_THRES)
 		return SDL_HITTEST_RESIZE_BOTTOM;
 
-	return SDL_HITTEST_DRAGGABLE;
+	// For the main area, return NORMAL to allow our mouse events to be processed
+	// We'll handle window dragging manually when not zoomed in
+	return SDL_HITTEST_NORMAL;
 }
 
 int SDLWindow::child_main()
@@ -439,7 +503,7 @@ int SDLWindow::child_main()
 					}
 				}
 			}
-			else if (e.type == SDL_MOUSEBUTTONDOWN)
+						else if (e.type == SDL_MOUSEBUTTONDOWN)
 			{
 				if (e.button.button == SDL_BUTTON_MIDDLE)  // Middle mouse button
 				{
@@ -449,14 +513,36 @@ int SDLWindow::child_main()
 				}
 				else if (e.button.button == SDL_BUTTON_LEFT) // Left mouse button
 				{
-					// Only start dragging image if we're zoomed in
-					if (sdlwin->zoomFactor > 1.0)
-					{
-						isDraggingImage = true;
-						SDL_GetMouseState(&dragStartX, &dragStartY);
-						SDL_SetCursor(handCursor); // Change to hand cursor
+					Uint32 currentTime = SDL_GetTicks();
+					int currentX = e.button.x;
+					int currentY = e.button.y;
+					
+					// Check for double-click (within 500ms and 10 pixels)
+					if (currentTime - lastClickTime < 500 && 
+						abs(currentX - lastClickX) < 10 && 
+						abs(currentY - lastClickY) < 10) {
+						
+						handleDoubleClick(currentX, currentY);
+					} else {
+						// Start dragging based on zoom level
+						if (sdlwin->zoomFactor > 1.0)
+						{
+							// When zoomed in, drag the image
+							isDraggingImage = true;
+							SDL_GetMouseState(&dragStartX, &dragStartY);
+							SDL_SetCursor(handCursor); // Change to hand cursor
+						}
+						else
+						{
+							// When not zoomed in, drag the window
+							isDraggingWindow = true;
+							SDL_GetMouseState(&dragStartX, &dragStartY);
+						}
 					}
-					// Otherwise the default window dragging behavior will occur
+					
+					lastClickTime = currentTime;
+					lastClickX = currentX;
+					lastClickY = currentY;
 				}
 			}
 			else if (e.type == SDL_MOUSEBUTTONUP)
@@ -467,6 +553,7 @@ int SDLWindow::child_main()
 						SDL_SetCursor(defaultCursor); // Change back to default cursor
 					}
 					isDraggingImage = false;
+					isDraggingWindow = false;
 				}
 			}
 			else if (e.type == SDL_MOUSEMOTION)
@@ -504,6 +591,22 @@ int SDLWindow::child_main()
 							dragStartY = currentY;
 						}
 					}
+				}
+				else if (isDraggingWindow)
+				{
+					int currentX, currentY;
+					SDL_GetMouseState(&currentX, &currentY);
+					
+					// Calculate delta for window movement
+					int deltaX = currentX - dragStartX;
+					int deltaY = currentY - dragStartY;
+					
+					// Move the window
+					int windowX, windowY;
+					SDL_GetWindowPosition(window, &windowX, &windowY);
+					SDL_SetWindowPosition(window, windowX + deltaX, windowY + deltaY);
+					
+					// Don't update dragStart coordinates since window moved
 				}
 			}
 		}

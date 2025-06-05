@@ -21,6 +21,7 @@
 #include "phasecorr_stabiliser.hpp"
 #include "sharpness_analyzer.hpp"
 #include "sharpness_graph.hpp"
+#include "imagingcam.hpp"
 
 bool bSystemLogFlag = 1;		 // 1 = log, 0 = no log
 bool bSystemQueueLengthFlag = 0; // 1 = log, 0 = no log
@@ -173,21 +174,20 @@ void FrameProcessor::stabilise()
 					vframe->size().y,
 					vframe->size().x,
 					CV_8UC1,
-					vframe->data()
-				);
+					vframe->data());
 
 				// Extract center ROI BEFORE downscaling to avoid subpixel issues
 				int roiWidth = fullFrame.cols / 2;
 				int roiHeight = fullFrame.rows / 2;
 				int roiX = (fullFrame.cols - roiWidth) / 2;
 				int roiY = (fullFrame.rows - roiHeight) / 2;
-				
+
 				// Ensure ROI coordinates are even to avoid subpixel shifts
 				roiX = (roiX / 2) * 2;
 				roiY = (roiY / 2) * 2;
 				roiWidth = (roiWidth / 2) * 2;
 				roiHeight = (roiHeight / 2) * 2;
-				
+
 				cv::Rect roiRect(roiX, roiY, roiWidth, roiHeight);
 				cv::Mat roiFrame = fullFrame(roiRect);
 
@@ -368,7 +368,7 @@ void FrameProcessor::processFrame() // What to do with each frame received from 
 				while (!_stabComplete)
 					stabComplete.wait(stabMutex);
 
-			rasterPos[0] -= currentOff[0]; // x offset
+			rasterPos[0] -= currentOff[0];											// x offset
 			rasterPos[1] -= (currentOff[1] + (system.getFPS() > 40.0 ? 0.5 : 1.0)); // y offset
 			currentOff = TooN::Zeros;
 			stabMutex.unlock();
@@ -493,21 +493,70 @@ void FrameProcessor::processFrame() // What to do with each frame received from 
 			logger->info("[FrameProcessor::processFrame] frameQueue is length: {}", system.getFrameQueue().size());
 		}
 
-		if (system.sharpnessUpdateEnabled) {
+		if (system.sharpnessUpdateEnabled)
+		{
 			auto now = std::chrono::steady_clock::now();
 			auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-				now - system.lastSharpnessUpdate).count();
-			
+							   now - system.lastSharpnessUpdate)
+							   .count();
+
 			// Update sharpness graph at 4fps (250ms) instead of 1fps
-			if (elapsed > 250) {
+			if (elapsed > 250)
+			{
 				system.lastSharpnessUpdate = now;
-				
+
 				// Analyze the current frame
-				if (vidFrame) {
+				if (vidFrame)
+				{
 					system.currentSharpnessValues = system.sharpnessAnalyzer.analyzeFrame(
 						vidFrame->data(), vidFrame->size().x, vidFrame->size().y);
 					system.sigSharpnessUpdated.emit();
 				}
+			}
+		}
+
+		// Start imaging camera monitoring if not already started and we have a valid frame
+		static bool imagingCamStarted = false;
+		if (!imagingCamStarted && vidFrame && vidFrame->data() && vidFrame->size().x > 0)
+		{
+			system.imagingCam->start();
+			imagingCamStarted = true;
+		}
+
+		// Check for double-click events from SDL window
+		if (childwin && vidFrame)
+		{
+			pthread_mutex_lock(&childwin->mutex);
+			if (childwin->lcmd[12].d_bool)
+			{ // Check if we have a new ROI center
+				int clickX = childwin->lcmd[10].d_int;
+				int clickY = childwin->lcmd[11].d_int;
+				childwin->lcmd[12].d_bool = false; // Clear the flag
+
+				// Convert SDL window coordinates to image coordinates
+				// This is a simplified conversion - we may need to account for borders, zoom, etc.
+				CVD::ImageRef frameSize = vidFrame->size();
+				int imageX = (clickX * frameSize.x) / childwin->raster.w;
+				int imageY = (clickY * frameSize.y) / childwin->raster.h;
+
+				// Clamp to image bounds
+				imageX = std::max(0, std::min(imageX, frameSize.x - 1));
+				imageY = std::max(0, std::min(imageY, frameSize.y - 1));
+
+				pthread_mutex_unlock(&childwin->mutex);
+
+				system.updateROICenter(imageX, imageY);
+
+				// Start ROI-based focus search
+				if (bSystemLogFlag)
+				{
+					logger->info("[FrameProcessor::processFrame] Starting imaging camera focus search at ({}, {})", imageX, imageY);
+				}
+				system.imagingCam->startROIFocusSearch();
+			}
+			else
+			{
+				pthread_mutex_unlock(&childwin->mutex);
 			}
 		}
 	}
@@ -533,7 +582,8 @@ void FrameProcessor::resetRaster()
 void FrameProcessor::resetZoom()
 {
 	// Access the childwin member which is private to this class
-	if (childwin) {
+	if (childwin)
+	{
 		SDLWindow::resetZoom(childwin);
 	}
 }
@@ -665,16 +715,17 @@ System::System(int argc, char **argv) : window(),
 										frameQueue(100),
 										frameProcessor(*this),
 										thread(),
-										recorder(thread.createObject<Recorder, System &>(*this)), // Creates a recorder object in a separate thread, passing it a thread pointer
+										recorder(thread.createObject<Recorder, System &>(*this)),
 										sRecorderOperationComplete(),
 										stabiliser(),
 										madeMap(false),
-										AF(), // Creates an autofocus object
+										AF(),
 										sharpnessAnalyzer(),
 										sigSharpnessUpdated(),
 										currentSharpnessValues(),
 										sharpnessUpdateEnabled(true),
-										lastSharpnessUpdate(std::chrono::steady_clock::now())
+										lastSharpnessUpdate(std::chrono::steady_clock::now()),
+										imagingCam(std::make_unique<ImagingCam>(*this))
 {
 	if (bSystemLogFlag)
 	{
@@ -701,7 +752,7 @@ System::System(int argc, char **argv) : window(),
 		lensDisconnected = true;
 		handleDisconnection(); });
 
-	AF.initialize(); // Initialises the autofocus object. This was the constructor, but need to be able to catch errors
+	AF.initialize();
 
 	recorder->connectTo(&sRecorderOperationComplete);
 	sRecorderOperationComplete.connect(sigc::mem_fun(*this, &System::onRecorderOperationComplete));
@@ -811,6 +862,26 @@ System::System(int argc, char **argv) : window(),
 	window.signalPGainChanged().connect(sigc::mem_fun(*this, &System::onWindowPGainChanged));
 
 	sigSharpnessUpdated.connect(sigc::mem_fun(*this, &System::updateSharpnessGraph));
+
+	// Set up imaging camera callbacks for GUI integration
+	if (imagingCam)
+	{
+		imagingCam->setHoldFocusCallback([this](bool enabled)
+										 {
+			// Use a dispatcher to safely update GUI from another thread
+			Glib::signal_idle().connect_once([this, enabled]() {
+				window.setHoldFocus(enabled);
+			}); });
+
+		imagingCam->setBestFocusCallback([this](int position)
+										 {
+			// Use a dispatcher to safely update GUI from another thread
+			Glib::signal_idle().connect_once([this, position]() {
+				window.setBestFocusScaleValue(static_cast<double>(position));
+			}); });
+	}
+
+	// Imaging camera monitoring will be started after first frame is received
 }
 
 bool System::startStreaming()
@@ -1134,10 +1205,10 @@ void System::onRecenterClicked()
 	{
 		logger->info("[System::onRecenterClicked] Recenter clicked");
 	}
-	
+
 	// Reset the zoom using the FrameProcessor method
 	frameProcessor.resetZoom();
-	
+
 	// Recenter the rendered video frames
 	frameProcessor.resetRaster();
 }
@@ -1166,6 +1237,9 @@ void System::whenHoldFocusToggled(bool holdingFocus)
 		}
 		// CODE TO BE EXECUTED WHEN "HOLD FOCUS" IS DISABLED GOES HERE
 		bHoldFocus = 0;
+
+		// Clear the ROI display from SDL window
+		clearROIDisplay();
 	}
 }
 
@@ -1291,7 +1365,7 @@ void System::whenRecordingToggled(bool recording)
 	if (recording)
 	{
 		recorder->clearFrames(); // When a new recording is started, clear the previous frames
-		// frameQueue.clear(); //When a new recording is started, clear the previous frames
+								 // frameQueue.clear(); //When a new recording is started, clear the previous frames
 	}
 }
 
@@ -1529,6 +1603,13 @@ System::~System()
 	{
 		logger->info("[System::~System] destructor ran");
 	}
+
+	// Stop imaging camera before other cleanup
+	if (imagingCam)
+	{
+		imagingCam->stop();
+		imagingCam.reset();
+	}
 }
 
 MainWindow &System::getWindow()
@@ -1601,6 +1682,90 @@ void System::onWindowPGainChanged(double val)
 	AF.setPGain(val);
 }
 
-void System::updateSharpnessGraph() {
+void System::updateSharpnessGraph()
+{
 	window.updateSharpnessGraph(currentSharpnessValues);
+}
+
+void System::updateROICenter(int x, int y)
+{
+	if (imagingCam)
+	{
+		imagingCam->setROICenter(x, y);
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::updateROICenter] ROI center updated to ({}, {})", x, y);
+		}
+	}
+
+	// Update SDL window display parameters
+	if (childwin)
+	{
+		pthread_mutex_lock(&childwin->mutex);
+		childwin->roiCenterX = x;
+		childwin->roiCenterY = y;
+		childwin->showROI = true;
+		pthread_mutex_unlock(&childwin->mutex);
+	}
+}
+
+void System::clearROIDisplay()
+{
+	// Clear the SDL window ROI display
+	if (childwin)
+	{
+		pthread_mutex_lock(&childwin->mutex);
+		childwin->showROI = false;
+		childwin->roiCenterX = -1;
+		childwin->roiCenterY = -1;
+		pthread_mutex_unlock(&childwin->mutex);
+
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::clearROIDisplay] ROI display cleared from SDL window");
+		}
+	}
+}
+
+void System::getCurrentROI(int &centerX, int &centerY, int &width, int &height) const
+{
+	if (imagingCam)
+	{
+		imagingCam->getCurrentROI(centerX, centerY, width, height);
+	}
+	else
+	{
+		centerX = centerY = -1;
+		width = height = 100;
+	}
+
+	// Also update SDL window with current ROI info
+	if (childwin && centerX >= 0 && centerY >= 0)
+	{
+		pthread_mutex_lock(&childwin->mutex);
+		childwin->roiCenterX = centerX;
+		childwin->roiCenterY = centerY;
+		childwin->roiWidth = width;
+		childwin->roiHeight = height;
+		childwin->showROI = true;
+		pthread_mutex_unlock(&childwin->mutex);
+	}
+}
+
+void System::setSDLWindow(SDLWindow::SDLWin *win)
+{
+	if (win)
+	{
+		win->system = this;
+		win->roiWidth = 100; // Default ROI size
+		win->roiHeight = 100;
+		win->showROI = false;
+		win->roiCenterX = -1;
+		win->roiCenterY = -1;
+
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::setSDLWindow] SDL window connected to system");
+		}
+	}
 }

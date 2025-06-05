@@ -19,6 +19,8 @@
 #include "phasecorr_stabiliser.hpp"
 #include "sharpness_analyzer.hpp"
 #include "sharpness_graph.hpp"
+#include "imagingcam.hpp"
+#include "sdlwincommon.hpp"
 
 namespace Vimba = AVT::VmbAPI;
 
@@ -129,6 +131,21 @@ public:
 	void onWindowHomePositionChanged(double val);
 	void onWindowPGainChanged(double val);
 
+	// Method to update ROI center from SDL window
+	void updateROICenter(int x, int y);
+
+	// Method to clear ROI display from SDL window
+	void clearROIDisplay();
+
+	// Get current ROI info for display
+	void getCurrentROI(int &centerX, int &centerY, int &width, int &height) const;
+
+	// Method to set SDL window reference for ROI updates
+	void setSDLWindow(SDLWindow::SDLWin *win);
+
+	// Get access to imaging camera
+	ImagingCam *getImagingCam() { return imagingCam.get(); }
+
 private:
 	void renderFrame();
 	void releaseFrame();
@@ -215,9 +232,12 @@ private:
 	bool sharpnessUpdateEnabled;
 	std::chrono::time_point<std::chrono::steady_clock> lastSharpnessUpdate;
 	SharpnessGraph sharpnessGraph;
-	
+
 	// Method to update the sharpness graph in the UI
 	void updateSharpnessGraph();
+
+	// Imaging camera for ROI-based autofocus
+	std::unique_ptr<ImagingCam> imagingCam;
 };
 
 #endif
