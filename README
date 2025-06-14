@@ -1,0 +1,39 @@
+---------
+Building
+---------
+
+Requirements
+-------------
+Package dependencies: cmake pkg-config libgtkmm-3.0-dev libtoon-dev libcvd-dev libsdl2-dev libusb-1.0-0-dev liblapack-dev
+
+Other libraries 
+Vimba: Copy the .so files in Vimba_6_0/VimbaCPP/DynamicLib/x86_64bit to your system's library path (e.g. /usr/lib/)
+
+Build Commands
+---------------
+
+$ cmake
+This command will ensure all requirements are present and accounted for and generate an appropriate Makefile
+
+$ make
+Build the binary
+
+Important
+----------
+
+If moving the app to another location, ensure you have read-write privileges there and make sure the VimbaGigETL.cti file is present alongside the hvi-gtk executable.
+
+
+Development
+-----------
+
+Most files have unit tests attached (see test/ directory).
+
+To run the tests: 
+
+$ sudo make <filename>_test
+
+$ ./<filename>_test
+
+
+
