@@ -657,9 +657,9 @@ int SDLWindow::child_main()
 						}
 						else
 						{
-							// When not zoomed in, drag the window
+							// When not zoomed in, drag the window - use global coordinates
 							isDraggingWindow = true;
-							SDL_GetMouseState(&dragStartX, &dragStartY);
+							SDL_GetGlobalMouseState(&dragStartX, &dragStartY);
 						}
 					}
 
@@ -723,7 +723,7 @@ int SDLWindow::child_main()
 				else if (isDraggingWindow)
 				{
 					int currentX, currentY;
-					SDL_GetMouseState(&currentX, &currentY);
+					SDL_GetGlobalMouseState(&currentX, &currentY);
 
 					// Calculate delta for window movement
 					int deltaX = currentX - dragStartX;
@@ -734,7 +734,9 @@ int SDLWindow::child_main()
 					SDL_GetWindowPosition(window, &windowX, &windowY);
 					SDL_SetWindowPosition(window, windowX + deltaX, windowY + deltaY);
 
-					// Don't update dragStart coordinates since window moved
+					// Update dragStart coordinates to current position
+					dragStartX = currentX;
+					dragStartY = currentY;
 				}
 			}
 		}
