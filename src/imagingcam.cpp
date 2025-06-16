@@ -167,18 +167,30 @@ void ImagingCam::monitorThreadFunction()
                                 // Calculate sharpness
                                 double sharpness = calculateSharpness(roi);
 
-                                // Print to console with timestamp and ROI info
+                                // Print to console with timestamp and ACTUAL analyzed ROI coordinates
                                 auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                                                      std::chrono::system_clock::now().time_since_epoch())
                                                      .count();
 
-                                int centerX, centerY, width, height;
-                                getCurrentROI(centerX, centerY, width, height);
+                                // Get the original ROI coordinates
+                                int origCenterX, origCenterY, width, height;
+                                getCurrentROI(origCenterX, origCenterY, width, height);
+
+                                // Calculate the actual analyzed coordinates (same logic as extractROI)
+                                int actualCenterX = origCenterX;
+                                int actualCenterY = origCenterY;
+                                double stabOffsetX, stabOffsetY;
+                                bool stabActive = m_system.getStabilizationOffset(stabOffsetX, stabOffsetY);
+                                if (stabActive)
+                                {
+                                    actualCenterX = static_cast<int>(origCenterX - stabOffsetX);
+                                    actualCenterY = static_cast<int>(origCenterY - stabOffsetY);
+                                }
 
                                 std::string searchStatus = m_focusSearchActive.load() ? " [SEARCHING]" : "";
 
                                 std::cout << "[Imaging Cam] Time: " << timestamp
-                                          << "ms, ROI(" << centerX << "," << centerY << "," << width << "x" << height
+                                          << "ms, ROI(" << actualCenterX << "," << actualCenterY << "," << width << "x" << height
                                           << "), Sharpness: " << std::fixed << std::setprecision(2)
                                           << sharpness << searchStatus << std::endl;
                             }
@@ -600,6 +612,17 @@ cv::Mat ImagingCam::extractROI(const cv::Mat &frame)
     {
         centerX = m_roiCenterX.load();
         centerY = m_roiCenterY.load();
+
+        // Apply stabilization offset to track the same feature when stabilization is active
+        double stabOffsetX, stabOffsetY;
+        if (m_system.getStabilizationOffset(stabOffsetX, stabOffsetY))
+        {
+            int originalX = centerX, originalY = centerY;
+            // Adjust ROI coordinates OPPOSITE to stabilization offset to track the same feature
+            // (if frame rendering moves down, ROI analysis should move up to stay on same feature)
+            centerX = static_cast<int>(centerX - stabOffsetX);
+            centerY = static_cast<int>(centerY - stabOffsetY);
+        }
     }
     else
     {

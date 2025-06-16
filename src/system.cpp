@@ -422,10 +422,31 @@ void FrameProcessor::processFrame() // What to do with each frame received from 
 			currentOff = TooN::Zeros;
 			stabMutex.unlock();
 			SDLWindow::setRaster(childwin, rasterPos[0], rasterPos[1]);
+
+			// Update stabilization offset in shared memory for ROI display
+			if (childwin)
+			{
+				pthread_mutex_lock(&childwin->mutex);
+				childwin->stabOffsetX = rasterPos[0];
+				childwin->stabOffsetY = rasterPos[1];
+				childwin->stabActive = true;
+				pthread_mutex_unlock(&childwin->mutex);
+			}
 		}
 		else
 		{
 			SDLWindow::setRaster(childwin);
+
+			// Clear stabilization offset when not stabilizing
+			if (childwin)
+			{
+				pthread_mutex_lock(&childwin->mutex);
+				childwin->stabOffsetX = 0.0;
+				childwin->stabOffsetY = 0.0;
+				childwin->stabActive = false;
+				pthread_mutex_unlock(&childwin->mutex);
+			}
+
 			if (bSystemFramesFlag)
 			{
 				logger->info("[FrameProcessor::processFrame] SDLWindow::setRaster called");
@@ -1897,5 +1918,46 @@ void System::setSDLWindow(SDLWindow::SDLWin *win)
 		{
 			logger->info("[System::setSDLWindow] SDL window connected to system");
 		}
+	}
+}
+
+bool System::getStabilizationOffset(double &offsetX, double &offsetY)
+{
+	bool stabilising = window.getStabiliseActive().getValue();
+	if (stabilising)
+	{
+		// Use try_lock to avoid deadlock if stabMutex is already held by current thread
+		if (frameProcessor.stabMutex.trylock())
+		{
+			offsetX = frameProcessor.rasterPos[0];
+			offsetY = frameProcessor.rasterPos[1];
+			frameProcessor.stabMutex.unlock();
+			return true;
+		}
+		else
+		{
+			// If we can't get the lock, use the last known values from SDL shared memory
+			// This avoids deadlock when called from within stabilization thread
+			if (childwin)
+			{
+				if (pthread_mutex_trylock(&childwin->mutex) == 0)
+				{
+					offsetX = childwin->stabOffsetX;
+					offsetY = childwin->stabOffsetY;
+					pthread_mutex_unlock(&childwin->mutex);
+					return true;
+				}
+			}
+			// Fallback to no offset if all locks fail
+			offsetX = 0.0;
+			offsetY = 0.0;
+			return false;
+		}
+	}
+	else
+	{
+		offsetX = 0.0;
+		offsetY = 0.0;
+		return false;
 	}
 }

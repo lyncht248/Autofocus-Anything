@@ -67,6 +67,11 @@ SDLWin *SDLWindow::sdlwin_open()
 	out->roiWidth = 150;
 	out->roiHeight = 150;
 
+	// Initialize stabilization parameters
+	out->stabOffsetX = 0.0;
+	out->stabOffsetY = 0.0;
+	out->stabActive = false;
+
 	// Does the fork here. PID is process ID
 	pid_t cpid = fork();
 	if (cpid > 0)

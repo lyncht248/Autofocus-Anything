@@ -72,6 +72,10 @@ namespace SDLWindow
 		int roiCenterX, roiCenterY;
 		int roiWidth, roiHeight;
 		bool searchComplete;
+
+		// Stabilization offset for ROI display
+		double stabOffsetX, stabOffsetY;
+		bool stabActive;
 	};
 }
 

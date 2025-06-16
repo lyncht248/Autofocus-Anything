@@ -118,12 +118,13 @@ static void handleDoubleClickWithRenderer(int x, int y, SDL_Renderer *renderer)
 	if (centerY < BORDER_THRES)
 		centerY = BORDER_THRES;
 
-	// Account for raster position and zoom offsets (same as in redraw function)
-	double adjustedCenterX = centerX + zoomedScale * (sdlwin->raster.x + sdlwin->zoomOffsetX);
-	double adjustedCenterY = centerY + zoomedScale * (sdlwin->raster.y + sdlwin->zoomOffsetY);
+	// Account for zoom offsets but NOT stabilization offsets (raster.x/y) for ROI placement
+	// We want to set ROI at original image coordinates, then let stabilization track from there
+	double adjustedCenterX = centerX + zoomedScale * sdlwin->zoomOffsetX;
+	double adjustedCenterY = centerY + zoomedScale * sdlwin->zoomOffsetY;
 
-	// Convert screen coordinates to image coordinates
-	// This reverses the transformation done in redraw function
+	// Convert screen coordinates to image coordinates (ignoring stabilization offset)
+	// This gives us the original image coordinates as if there was no stabilization
 	double imageX = (x - adjustedCenterX) / zoomedScale;
 	double imageY = (y - adjustedCenterY) / zoomedScale;
 
@@ -192,9 +193,22 @@ static void drawROIOverlay(SDL_Renderer *renderer)
 	double adjustedCenterX = centerX + zoomedScale * (sdlwin->raster.x + sdlwin->zoomOffsetX);
 	double adjustedCenterY = centerY + zoomedScale * (sdlwin->raster.y + sdlwin->zoomOffsetY);
 
+	// Get stabilization offset from shared memory and apply to ROI display
+	double roiDisplayX = imageCenterX;
+	double roiDisplayY = imageCenterY;
+
+	// Use stabilization offset from shared memory (updated by main process)
+	if (sdlwin->stabActive)
+	{
+		// For display, the ROI should show where the analysis is happening (opposite to stab offset)
+		// This matches the logic in imagingcam.cpp where analysis moves opposite to stabilization
+		roiDisplayX = imageCenterX - sdlwin->stabOffsetX;
+		roiDisplayY = imageCenterY - sdlwin->stabOffsetY;
+	}
+
 	// Convert image coordinates to screen coordinates
-	int screenCenterX = (int)(adjustedCenterX + imageCenterX * zoomedScale);
-	int screenCenterY = (int)(adjustedCenterY + imageCenterY * zoomedScale);
+	int screenCenterX = (int)(adjustedCenterX + roiDisplayX * zoomedScale);
+	int screenCenterY = (int)(adjustedCenterY + roiDisplayY * zoomedScale);
 	int screenWidth = (int)(imageWidth * zoomedScale);
 	int screenHeight = (int)(imageHeight * zoomedScale);
 

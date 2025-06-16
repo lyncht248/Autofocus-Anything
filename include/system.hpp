@@ -152,6 +152,9 @@ public:
 	// Get access to imaging camera
 	ImagingCam *getImagingCam() { return imagingCam.get(); }
 
+	// Get current stabilization offset (returns true if stabilization is active)
+	bool getStabilizationOffset(double &offsetX, double &offsetY);
+
 private:
 	void renderFrame();
 	void releaseFrame();
