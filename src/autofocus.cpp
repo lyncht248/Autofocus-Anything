@@ -69,6 +69,8 @@ std::ofstream csvFile;
 // Add P gain as a member variable with default value
 double Kp = 0.005; // Changed from 0.0012 to 0.0014
 
+std::atomic<double> currentMeasuredFocus{0.0}; // Current actual measured focus position
+
 autofocus::autofocus() : lens1(),
                          tiltedcam1(),
                          stop_thread(false)
@@ -284,6 +286,9 @@ void autofocus::run()
         cv::Mat image(imHeight, imWidth, CV_8UC1, img_calc_buf);
 
         double locBestFocusDouble = computeBestFocusReduced(image, imHeight, imWidth); //  returns double
+
+        // Store the current measured focus position globally
+        currentMeasuredFocus.store(locBestFocusDouble);
 
         static auto lastTime = std::chrono::high_resolution_clock::now();
         auto currentTime = std::chrono::high_resolution_clock::now();

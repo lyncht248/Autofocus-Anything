@@ -1,30 +1,41 @@
 #include "imagingcam.hpp"
 #include "system.hpp"
 #include "vidframe.hpp"
+#include "main.hpp"
+#include "sdlwindow.hpp"
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
 #include <cmath>
+#include <glibmm.h>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
 
 // External global variables from autofocus.cpp
 extern int desiredLocBestFocus;
 extern bool bHoldFocus;
 extern bool bFindFocus;
+extern std::atomic<double> currentMeasuredFocus;
 
 ImagingCam::ImagingCam(System &system)
     : m_system(system), m_running(false), m_roiWidth(150), m_roiHeight(150),
       m_roiCenterX(-1), m_roiCenterY(-1), m_useCustomCenter(false),
       m_lastProcessTime(std::chrono::steady_clock::now()),
-      m_focusSearchActive(false), m_focusSearchRequested(false)
+      m_focusSearchActive(false), m_focusSearchRequested(false),
+      m_depthMappingActive(false), m_depthMappingRequested(false)
 {
     std::cout << "[Imaging Cam] Ready. Double-click on video to set ROI and start sharpness analysis." << std::endl;
     // Remove any automatic thread start - it will be started on double-click
 }
 ImagingCam::~ImagingCam()
 {
-    // Stop any active focus search first
+    // Stop any active focus search and depth mapping first
     m_focusSearchActive = false;
     m_focusSearchRequested = false;
+    m_depthMappingActive = false;
+    m_depthMappingRequested = false;
 
     // Wait a bit for any search threads to finish
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -112,6 +123,33 @@ void ImagingCam::startROIFocusSearch()
     m_focusSearchRequested = true;
 }
 
+void ImagingCam::startDepthMapping()
+{
+    if (m_depthMappingActive.load())
+    {
+        std::cout << "[Imaging Cam] Depth mapping already in progress" << std::endl;
+        return;
+    }
+
+    // Ensure we have a valid frame before starting depth mapping
+    VidFrame *testFrame = m_system.getFrame();
+    if (!testFrame || !testFrame->data() || testFrame->size().x <= 0 || testFrame->size().y <= 0)
+    {
+        std::cout << "[Imaging Cam] No valid frame available, cannot start depth mapping" << std::endl;
+        return;
+    }
+
+    // Start the monitoring thread if it's not already running
+    if (!m_running.load())
+    {
+        start();
+        std::cout << "[Imaging Cam] Started monitoring thread for depth mapping" << std::endl;
+    }
+
+    std::cout << "[Imaging Cam] Starting depth mapping..." << std::endl;
+    m_depthMappingRequested = true;
+}
+
 void ImagingCam::monitorThreadFunction()
 {
     while (m_running.load())
@@ -135,6 +173,25 @@ void ImagingCam::monitorThreadFunction()
             {
                 std::cerr << "[Imaging Cam] Error starting focus search thread: " << e.what() << std::endl;
                 m_focusSearchActive = false;
+            }
+        }
+
+        // Check if depth mapping is requested
+        if (m_depthMappingRequested.load() && !m_depthMappingActive.load())
+        {
+            m_depthMappingRequested = false;
+            m_depthMappingActive = true;
+
+            try
+            {
+                // Perform depth mapping in a separate thread to avoid blocking monitoring
+                std::thread depthThread(&ImagingCam::performDepthMapping, this);
+                depthThread.detach();
+            }
+            catch (const std::exception &e)
+            {
+                std::cerr << "[Imaging Cam] Error starting depth mapping thread: " << e.what() << std::endl;
+                m_depthMappingActive = false;
             }
         }
 
@@ -225,6 +282,17 @@ void ImagingCam::performFocusSearch()
 
     // Small delay to ensure Hold Focus is properly activated
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    // Try to use depth map for instant focus first
+    if (tryDepthMapFocus())
+    {
+        // Depth map focus was successful, we're done!
+        m_focusSearchActive = false;
+        return;
+    }
+
+    // No depth map available or no valid data in ROI, proceed with hill-climbing search
+    std::cout << "[Focus Search] No depth map available, proceeding with hill-climbing search..." << std::endl;
 
     // Determine the best starting position for the search
     int searchStartPosition;
@@ -674,4 +742,727 @@ double ImagingCam::calculateSharpness(const cv::Mat &region)
     // Return the mean of the Tenengrad values as sharpness score
     cv::Scalar meanSharpness = cv::mean(tenengrad);
     return meanSharpness[0];
+}
+
+void ImagingCam::performLocalMaxSuppression(std::vector<std::vector<std::pair<double, double>>> &depthImage,
+                                            int width, int height)
+{
+    const int REGION_SIZE = 8;                // 8x8 pixel regions - fairly fine grid as requested
+    const double FOCUS_TOLERANCE = 10.0;      // ±5.0 focus positions as requested
+    const double MIN_FOCUS_SEPARATION = 30.0; // Minimum separation to consider as different peak
+    const double SECOND_PEAK_THRESHOLD = 0.7; // Second peak must be at least 70% of max sharpness
+
+    int regionsProcessed = 0;
+    int pixelsSuppressed = 0;
+    int totalValidPixelsBefore = 0;
+
+    // Count initial valid pixels
+    for (int y = 0; y < height; y++)
+    {
+        for (int x = 0; x < width; x++)
+        {
+            if (depthImage[y][x].first > 0)
+            {
+                totalValidPixelsBefore++;
+            }
+        }
+    }
+
+    std::cout << "[Depth Mapping] Starting local max suppression on "
+              << totalValidPixelsBefore << " valid pixels..." << std::endl;
+
+    // Process each region
+    for (int regionY = 0; regionY < height; regionY += REGION_SIZE)
+    {
+        for (int regionX = 0; regionX < width; regionX += REGION_SIZE)
+        {
+            regionsProcessed++;
+
+            // Define region boundaries
+            int endX = std::min(regionX + REGION_SIZE, width);
+            int endY = std::min(regionY + REGION_SIZE, height);
+
+            // Find all valid pixels in this region
+            std::vector<std::tuple<int, int, double, double>> validPixels; // x, y, sharpness, focus
+
+            for (int y = regionY; y < endY; y++)
+            {
+                for (int x = regionX; x < endX; x++)
+                {
+                    const auto &pixel = depthImage[y][x];
+                    if (pixel.first > 0) // Valid pixel with depth data
+                    {
+                        validPixels.push_back({x, y, pixel.first, pixel.second});
+                    }
+                }
+            }
+
+            if (validPixels.empty())
+                continue;
+
+            // Find pixel with maximum sharpness (primary peak)
+            auto maxIt = std::max_element(validPixels.begin(), validPixels.end(),
+                                          [](const auto &a, const auto &b)
+                                          {
+                                              return std::get<2>(a) < std::get<2>(b); // Compare sharpness values
+                                          });
+
+            double maxSharpness = std::get<2>(*maxIt);
+            double primaryFocus = std::get<3>(*maxIt);
+
+            // Look for potential second peak (different depth layer in same region)
+            double secondaryFocus = -1.0;
+            double secondarySharpness = 0.0;
+
+            for (const auto &pixel : validPixels)
+            {
+                double focus = std::get<3>(pixel);
+                double sharpness = std::get<2>(pixel);
+
+                // Check if this could be a second peak
+                if (std::abs(focus - primaryFocus) >= MIN_FOCUS_SEPARATION &&
+                    sharpness >= maxSharpness * SECOND_PEAK_THRESHOLD &&
+                    sharpness > secondarySharpness)
+                {
+                    secondaryFocus = focus;
+                    secondarySharpness = sharpness;
+                }
+            }
+
+            // Now suppress pixels that don't match either peak
+            for (int y = regionY; y < endY; y++)
+            {
+                for (int x = regionX; x < endX; x++)
+                {
+                    auto &pixel = depthImage[y][x];
+                    if (pixel.first > 0) // Valid pixel
+                    {
+                        double focusPos = pixel.second;
+                        bool keepPixel = (std::abs(focusPos - primaryFocus) <= FOCUS_TOLERANCE);
+
+                        // Also keep pixels that match secondary peak if it exists
+                        if (secondaryFocus > 0)
+                        {
+                            keepPixel = keepPixel || (std::abs(focusPos - secondaryFocus) <= FOCUS_TOLERANCE);
+                        }
+
+                        if (!keepPixel)
+                        {
+                            pixel.first = -1.0; // Suppress this pixel
+                            pixel.second = -1.0;
+                            pixelsSuppressed++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    int totalValidPixelsAfter = totalValidPixelsBefore - pixelsSuppressed;
+    double suppressionRate = (double)pixelsSuppressed / totalValidPixelsBefore * 100.0;
+
+    std::cout << "[Depth Mapping] Local max suppression complete: processed "
+              << regionsProcessed << " regions (" << REGION_SIZE << "x" << REGION_SIZE << " pixels each)" << std::endl;
+    std::cout << "[Depth Mapping] Suppressed " << pixelsSuppressed << " pixels ("
+              << std::fixed << std::setprecision(1) << suppressionRate << "%), "
+              << totalValidPixelsAfter << " pixels remaining" << std::endl;
+}
+
+void ImagingCam::performDepthMapping()
+{
+    std::cout << "\n[Depth Mapping] Starting depth mapping process..." << std::endl;
+
+    // Note: Clearing and setup is now done in System::onGetDepthsClicked()
+    // Just ensure other focus modes are disabled for this process
+    bFindFocus = false;
+
+    // Step 1: Set focus to leftmost position (Hold Focus already enabled in onGetDepthsClicked)
+    std::cout << "[Depth Mapping] Setting focus to position " << FOCUS_MIN << "..." << std::endl;
+
+    // Set focus position to minimum
+    desiredLocBestFocus = FOCUS_MIN;
+
+    // Update GUI with starting focus position
+    if (m_bestFocusCallback)
+    {
+        m_bestFocusCallback(FOCUS_MIN);
+    }
+
+    // Wait for lens to settle (300ms)
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    // XY stabilization is already enabled in System::onGetDepthsClicked()
+    std::cout << "[Depth Mapping] XY stabilization already enabled" << std::endl;
+
+    // Small delay to ensure stabilization is active
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    // Get frame dimensions from first frame
+    VidFrame *firstFrame = m_system.getFrame();
+    if (!firstFrame || !firstFrame->data())
+    {
+        std::cout << "[Depth Mapping] Failed to get initial frame, aborting" << std::endl;
+        m_depthMappingActive = false;
+        return;
+    }
+
+    int originalWidth = firstFrame->size().x;
+    int originalHeight = firstFrame->size().y;
+
+    // Calculate reduced dimensions (1/4 in each dim = 1/16 of original size)
+    int reducedWidth = originalWidth / 4;
+    int reducedHeight = originalHeight / 4;
+
+    // Initialize depth image with reduced dimensions
+    std::vector<std::vector<std::pair<double, double>>> depthImage(
+        reducedHeight, std::vector<std::pair<double, double>>(reducedWidth, {-1.0, -1.0}));
+
+    // Store all sharpness values for adaptive thresholding
+    std::vector<std::tuple<int, int, double, double>> allPixelData; // x, y, sharpness, focus_position
+
+    // Constants for depth mapping
+    const int FOCUS_START = FOCUS_MIN;
+    const int FOCUS_END = FOCUS_MAX;
+    const int FOCUS_STEP = 5;
+
+    // Reserve space for all pixel data (estimate)
+    allPixelData.reserve(reducedWidth * reducedHeight * ((FOCUS_END - FOCUS_START) / FOCUS_STEP + 1));
+
+    // Process each focus position
+    for (int focusPos = FOCUS_START; focusPos <= FOCUS_END; focusPos += FOCUS_STEP)
+    {
+        if (!m_running.load() || !m_depthMappingActive.load())
+        {
+            std::cout << "[Depth Mapping] Stopped early at focus position " << focusPos << std::endl;
+            break;
+        }
+
+        std::cout << "[Depth Mapping] Processing focus position " << focusPos << " ("
+                  << (focusPos - FOCUS_START) / FOCUS_STEP + 1 << "/"
+                  << (FOCUS_END - FOCUS_START) / FOCUS_STEP + 1 << ")" << std::endl;
+
+        // Set new focus position
+        desiredLocBestFocus = focusPos;
+        if (m_bestFocusCallback)
+        {
+            m_bestFocusCallback(focusPos);
+        }
+
+        // Wait for lens to settle (40ms for subsequent positions)
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        // Get current frame and stabilization offset
+        VidFrame *currentFrame = m_system.getFrame();
+        if (!currentFrame || !currentFrame->data())
+        {
+            std::cout << "[Depth Mapping] Failed to get frame at position " << focusPos << ", skipping" << std::endl;
+            continue;
+        }
+
+        double stabOffsetX, stabOffsetY;
+        bool hasStabOffset = m_system.getStabilizationOffset(stabOffsetX, stabOffsetY);
+
+        // Convert frame to OpenCV Mat
+        cv::Mat originalFrame(originalHeight, originalWidth, CV_8UC1, currentFrame->data());
+
+        // Create a stabilized frame by cropping and padding to maintain original dimensions
+        cv::Mat stabilizedFrame = cv::Mat::zeros(originalHeight, originalWidth, CV_8UC1);
+
+        // Create a mask to track valid (non-padded) regions
+        cv::Mat validMask = cv::Mat::zeros(originalHeight, originalWidth, CV_8UC1);
+
+        if (hasStabOffset)
+        {
+            // Calculate the region to extract to get the same physical content
+            // If camera moved right by offsetX, extract from left by offsetX to get same content
+            int extractX = static_cast<int>(-stabOffsetX);
+            int extractY = static_cast<int>(-stabOffsetY);
+
+            // Calculate valid source region in original frame
+            int srcStartX = std::max(0, extractX);
+            int srcStartY = std::max(0, extractY);
+            int srcEndX = std::min(originalWidth, extractX + originalWidth);
+            int srcEndY = std::min(originalHeight, extractY + originalHeight);
+
+            // Calculate corresponding destination region in stabilized frame
+            int dstStartX = srcStartX - extractX;
+            int dstStartY = srcStartY - extractY;
+
+            int validWidth = srcEndX - srcStartX;
+            int validHeight = srcEndY - srcStartY;
+
+            if (validWidth > 0 && validHeight > 0)
+            {
+                // Extract valid region from original frame
+                cv::Rect srcRect(srcStartX, srcStartY, validWidth, validHeight);
+                cv::Mat validRegion = originalFrame(srcRect);
+
+                // Copy to appropriate position in stabilized frame (rest remains zeros)
+                cv::Rect dstRect(dstStartX, dstStartY, validWidth, validHeight);
+                validRegion.copyTo(stabilizedFrame(dstRect));
+
+                // Mark this region as valid in the mask
+                validMask(dstRect).setTo(255);
+            }
+            // If no valid region, stabilizedFrame and validMask remain all zeros
+        }
+        else
+        {
+            // No stabilization offset, copy full frame and mark all as valid
+            originalFrame.copyTo(stabilizedFrame);
+            validMask.setTo(255);
+        }
+
+        // Resize both the stabilized frame and valid mask to reduced dimensions
+        cv::Mat resizedFrame, resizedMask;
+        cv::resize(stabilizedFrame, resizedFrame, cv::Size(reducedWidth, reducedHeight));
+        cv::resize(validMask, resizedMask, cv::Size(reducedWidth, reducedHeight));
+
+        // Apply sophisticated padding to eliminate edge artifacts
+        cv::Mat maskedFrame = createSmoothedPaddedFrame(resizedFrame, resizedMask);
+
+        // Calculate sharpness image using RobertsCross operator on the masked frame
+        cv::Mat sharpnessImage = calculateSharpnessImage(maskedFrame);
+
+        // Get actual measured focus position from autofocus system
+        double actualMeasuredFocus = currentMeasuredFocus.load();
+
+        // Process each pixel in the sharpness image
+        for (int y = 0; y < reducedHeight; y++)
+        {
+            for (int x = 0; x < reducedWidth; x++)
+            {
+                // Only process pixels that are in valid (non-padded) regions
+                if (resizedMask.at<uchar>(y, x) > 128) // Valid region
+                {
+                    double sharpness = sharpnessImage.at<float>(y, x);
+
+                    // Store all pixel data for later adaptive thresholding
+                    if (sharpness > 0) // Only store non-zero sharpness values
+                    {
+                        allPixelData.push_back({x, y, sharpness, actualMeasuredFocus});
+                    }
+                }
+            }
+        }
+    }
+
+    std::cout << "[Depth Mapping] Focus scanning complete! Applying adaptive thresholding..." << std::endl;
+
+    // Apply adaptive thresholding using 80th percentile
+    if (!allPixelData.empty())
+    {
+        // Create a vector of just the sharpness values for percentile calculation
+        std::vector<double> sharpnessValues;
+        sharpnessValues.reserve(allPixelData.size());
+        for (const auto &pixel : allPixelData)
+        {
+            sharpnessValues.push_back(std::get<2>(pixel)); // Extract sharpness value
+        }
+
+        // Find 80th percentile using nth_element (O(n) average case, much faster than sorting)
+        const double PERCENTILE = 0.8; // 80th percentile
+        size_t percentileIndex = static_cast<size_t>(sharpnessValues.size() * PERCENTILE);
+        if (percentileIndex >= sharpnessValues.size())
+            percentileIndex = sharpnessValues.size() - 1;
+
+        std::nth_element(sharpnessValues.begin(),
+                         sharpnessValues.begin() + percentileIndex,
+                         sharpnessValues.end());
+        double adaptiveThreshold = sharpnessValues[percentileIndex];
+
+        std::cout << "[Depth Mapping] Adaptive threshold (80th percentile): " << adaptiveThreshold
+                  << " (from " << allPixelData.size() << " candidate pixels)" << std::endl;
+
+        // Now apply the adaptive threshold and populate the depth image
+        int pixelsAboveThreshold = 0;
+        for (const auto &pixelData : allPixelData)
+        {
+            int x = std::get<0>(pixelData);
+            int y = std::get<1>(pixelData);
+            double sharpness = std::get<2>(pixelData);
+            double focusPosition = std::get<3>(pixelData);
+
+            if (sharpness >= adaptiveThreshold)
+            {
+                auto &currentPixel = depthImage[y][x];
+                if (currentPixel.first < 0 || sharpness > currentPixel.first)
+                {
+                    currentPixel.first = sharpness;
+                    currentPixel.second = focusPosition;
+                }
+                pixelsAboveThreshold++;
+            }
+        }
+
+        std::cout << "[Depth Mapping] Kept " << pixelsAboveThreshold << " pixels above adaptive threshold ("
+                  << (100.0 * pixelsAboveThreshold / allPixelData.size()) << "% of candidates)" << std::endl;
+    }
+
+    // Clear pixel data to free memory
+    allPixelData.clear();
+    allPixelData.shrink_to_fit();
+
+    std::cout << "[Depth Mapping] Depth mapping complete! Generated " << reducedWidth << "x"
+              << reducedHeight << " depth map" << std::endl;
+
+    // Perform local max suppression to clean up artifacts
+    performLocalMaxSuppression(depthImage, reducedWidth, reducedHeight);
+
+    // Count valid pixels and export to CSV BEFORE moving data to avoid segfault
+    int totalValidPixels = 0;
+
+    // Export depth map to CSV file first (before moving the data)
+    try
+    {
+        // Create output directory if it doesn't exist
+        std::string outputDir = "../output";
+
+        std::cout << "[Depth Mapping] Creating output directory: " << outputDir << std::endl;
+        std::filesystem::create_directories(outputDir);
+
+        if (std::filesystem::exists(outputDir))
+        {
+            std::cout << "[Depth Mapping] Output directory exists/created successfully" << std::endl;
+        }
+        else
+        {
+            std::cout << "[Depth Mapping] ERROR: Failed to create output directory" << std::endl;
+            m_depthMappingActive = false;
+            return;
+        }
+
+        // Use specific filename as requested
+        std::string filename = outputDir + "/depth_map.csv";
+
+        std::cout << "[Depth Mapping] Attempting to create CSV file: " << filename << std::endl;
+
+        std::ofstream csvFile(filename);
+        if (csvFile.is_open())
+        {
+            // Write header
+            csvFile << "x,y,sharpness,focus_position\n";
+
+            // Write data and count valid pixels in one pass
+            for (int y = 0; y < reducedHeight; y++)
+            {
+                for (int x = 0; x < reducedWidth; x++)
+                {
+                    const auto &pixel = depthImage[y][x];
+                    if (pixel.first > 0) // Valid pixel with depth data
+                    {
+                        totalValidPixels++;
+                        // Use the actual measured focus position stored in the depth map
+                        double actualFocusPosition = pixel.second;
+
+                        csvFile << x << "," << y << "," << pixel.first << ","
+                                << actualFocusPosition << "\n";
+                    }
+                }
+            }
+            csvFile.flush(); // Ensure data is written
+            csvFile.close();
+
+            std::cout << "[Depth Mapping] Successfully exported " << totalValidPixels << " depth points to: " << filename << std::endl;
+        }
+        else
+        {
+            std::cout << "[Depth Mapping] ERROR: Could not create CSV file: " << filename << std::endl;
+            std::cout << "[Depth Mapping] Check directory permissions and disk space" << std::endl;
+        }
+    }
+    catch (const std::exception &e)
+    {
+        std::cout << "[Depth Mapping] ERROR: Exception during CSV export: " << e.what() << std::endl;
+    }
+
+    std::cout << "[Depth Mapping] Total valid pixels with depth data: " << totalValidPixels << std::endl;
+
+    // Transfer depth map data to SDL window for visualization BEFORE moving to system storage
+    extern SDLWindow::SDLWin *childwin;
+    if (childwin)
+    {
+        try
+        {
+            SDLWindow::transferDepthMapData(childwin, depthImage, reducedWidth, reducedHeight);
+            std::cout << "[Depth Mapping] Depth map data transferred to SDL window for visualization" << std::endl;
+        }
+        catch (const std::exception &e)
+        {
+            std::cout << "[Depth Mapping] ERROR: Exception during SDL transfer: " << e.what() << std::endl;
+        }
+    }
+    else
+    {
+        std::cout << "[Depth Mapping] SDL window not available for depth map transfer" << std::endl;
+    }
+
+    // Now safely store depth map in system (after CSV export and SDL transfer)
+    System::DepthMapData &depthData = m_system.currentDepthMap;
+    depthData.depthImage = std::move(depthImage); // Safe to move now
+    depthData.width = reducedWidth;
+    depthData.height = reducedHeight;
+    depthData.isValid = true;
+
+    // pause 100ms
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // return desiredLocBestFocus to the 'Find Focus' position (max sharpness)
+    desiredLocBestFocus = 350;
+    if (m_bestFocusCallback)
+    {
+        m_bestFocusCallback(350);
+    }
+
+    std::cout << "[Depth Mapping] Depth map data stored in system successfully" << std::endl;
+
+    m_depthMappingActive = false;
+}
+
+cv::Mat ImagingCam::createSmoothedPaddedFrame(const cv::Mat &frame, const cv::Mat &validMask)
+{
+    if (frame.empty() || validMask.empty())
+    {
+        return frame.clone();
+    }
+
+    cv::Mat result = frame.clone();
+
+    // Method 1: Use inpainting for sophisticated filling of invalid regions
+    cv::Mat invalidMask = ~validMask; // Invert mask to mark regions to fill
+
+    // Dilate the invalid mask slightly to ensure we catch edge pixels
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
+    cv::Mat dilatedInvalidMask;
+    cv::dilate(invalidMask, dilatedInvalidMask, kernel);
+
+    // Use Navier-Stokes based inpainting for natural-looking fill
+    cv::Mat inpaintedFrame;
+    cv::inpaint(result, dilatedInvalidMask, inpaintedFrame, 3, cv::INPAINT_NS);
+
+    // Method 2: Create distance-based blending for smooth transitions
+    cv::Mat distanceTransform;
+    cv::distanceTransform(validMask, distanceTransform, cv::DIST_L2, 3);
+
+    // Normalize distance transform to create blending weights
+    cv::Mat blendWeights;
+    cv::normalize(distanceTransform, blendWeights, 0.0, 1.0, cv::NORM_MINMAX);
+
+    // Create transition zone near boundaries (within 5 pixels of edge)
+    cv::Mat transitionZone;
+    cv::threshold(blendWeights, transitionZone, 0.0, 1.0, cv::THRESH_BINARY);
+    cv::threshold(blendWeights, transitionZone, 5.0, 1.0, cv::THRESH_BINARY_INV);
+
+    // Apply Gaussian blur to transition zones only
+    cv::Mat blurredFrame;
+    cv::GaussianBlur(inpaintedFrame, blurredFrame, cv::Size(5, 5), 1.5);
+
+    // Blend original and blurred versions based on distance from edge
+    cv::Mat finalFrame;
+    blendWeights.convertTo(blendWeights, CV_32F);
+
+    // Convert frames to float for blending
+    cv::Mat inpaintedFloat, blurredFloat;
+    inpaintedFrame.convertTo(inpaintedFloat, CV_32F);
+    blurredFrame.convertTo(blurredFloat, CV_32F);
+
+    // Create smooth blend: use original far from edges, blurred near edges
+    cv::Mat blendWeights3;
+    cv::normalize(blendWeights, blendWeights3, 0.3, 1.0, cv::NORM_MINMAX); // Minimum 30% original
+
+    finalFrame = blendWeights3.mul(inpaintedFloat) + (1.0 - blendWeights3).mul(blurredFloat);
+
+    // Convert back to original type
+    finalFrame.convertTo(result, frame.type());
+
+    // Final step: Apply very light additional smoothing only at the boundary regions
+    cv::Mat boundary;
+    cv::erode(validMask, boundary, kernel);
+    boundary = validMask - boundary; // Get boundary pixels only
+
+    if (cv::countNonZero(boundary) > 0)
+    {
+        cv::Mat lightlyBlurred;
+        cv::GaussianBlur(result, lightlyBlurred, cv::Size(3, 3), 0.8);
+        lightlyBlurred.copyTo(result, boundary);
+    }
+
+    return result;
+}
+
+cv::Mat ImagingCam::calculateSharpnessImage(const cv::Mat &frame)
+{
+    if (frame.empty())
+    {
+        return cv::Mat();
+    }
+
+    // Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+    cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
+    clahe->setClipLimit(2.0);
+    clahe->setTilesGridSize(cv::Size(4, 4));
+    cv::Mat clahe_enhanced;
+    clahe->apply(frame, clahe_enhanced);
+
+    // Gaussian Blur
+    cv::Mat blurred;
+    cv::GaussianBlur(clahe_enhanced, blurred, cv::Size(3, 3), 1, 1, cv::BORDER_DEFAULT);
+
+    // Compute sharpness using Roberts Cross operator
+    cv::Mat roberts_kernelx = (cv::Mat_<double>(2, 2) << 1, 0, 0, -1);
+    cv::Mat roberts_kernely = (cv::Mat_<double>(2, 2) << 0, 1, -1, 0);
+
+    cv::Mat img_x, img_y;
+    cv::filter2D(blurred, img_x, CV_16S, roberts_kernelx);
+    cv::filter2D(blurred, img_y, CV_16S, roberts_kernely);
+
+    // Square the gradients and sum them
+    cv::Mat img_x_squared, img_y_squared;
+    cv::multiply(img_x, img_x, img_x_squared);
+    cv::multiply(img_y, img_y, img_y_squared);
+
+    cv::Mat sum_xy;
+    cv::add(img_x_squared, img_y_squared, sum_xy);
+
+    // Convert to float for precision
+    cv::Mat sharpnessFloat;
+    sum_xy.convertTo(sharpnessFloat, CV_32F);
+
+    return sharpnessFloat;
+}
+
+cv::Mat ImagingCam::calculateSharpnessImageTenengrad(const cv::Mat &frame)
+{
+    if (frame.empty())
+    {
+        return cv::Mat();
+    }
+
+    // Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+    cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
+    clahe->setClipLimit(2.0);
+    clahe->setTilesGridSize(cv::Size(4, 4));
+    cv::Mat clahe_enhanced;
+    clahe->apply(frame, clahe_enhanced);
+
+    // Gaussian Blur
+    cv::Mat blurred;
+    cv::GaussianBlur(clahe_enhanced, blurred, cv::Size(3, 3), 1, 1, cv::BORDER_DEFAULT);
+
+    // Compute sharpness using Tenengrad method (Sobel operators)
+    cv::Mat gradX, gradY;
+    cv::Sobel(blurred, gradX, CV_16S, 1, 0, 3); // 3x3 Sobel for X direction
+    cv::Sobel(blurred, gradY, CV_16S, 0, 1, 3); // 3x3 Sobel for Y direction
+
+    // Square the gradients and sum them (Tenengrad formula: Gx² + Gy²)
+    cv::Mat gradX_squared, gradY_squared;
+    cv::multiply(gradX, gradX, gradX_squared);
+    cv::multiply(gradY, gradY, gradY_squared);
+
+    cv::Mat tenengrad;
+    cv::add(gradX_squared, gradY_squared, tenengrad);
+
+    // Convert to float for precision
+    cv::Mat sharpnessFloat;
+    tenengrad.convertTo(sharpnessFloat, CV_32F);
+
+    return sharpnessFloat;
+}
+
+bool ImagingCam::tryDepthMapFocus()
+{
+    // Check if depth map is available in the system
+    const auto &depthData = m_system.currentDepthMap;
+    if (!depthData.isValid || depthData.depthImage.empty())
+    {
+        return false; // No depth map available
+    }
+
+    // Get current ROI parameters
+    int roiCenterX, roiCenterY, roiWidth, roiHeight;
+    getCurrentROI(roiCenterX, roiCenterY, roiWidth, roiHeight);
+
+    if (roiCenterX < 0 || roiCenterY < 0)
+    {
+        return false; // No valid ROI set
+    }
+
+    // Map ROI coordinates to depth map coordinates (depth map is 1/4 resolution)
+    int depthCenterX = roiCenterX / 4;
+    int depthCenterY = roiCenterY / 4;
+    int depthRoiWidth = std::max(1, roiWidth / 4);
+    int depthRoiHeight = std::max(1, roiHeight / 4);
+
+    // Calculate depth map ROI bounds
+    int depthStartX = std::max(0, depthCenterX - depthRoiWidth / 2);
+    int depthStartY = std::max(0, depthCenterY - depthRoiHeight / 2);
+    int depthEndX = std::min(depthData.width, depthStartX + depthRoiWidth);
+    int depthEndY = std::min(depthData.height, depthStartY + depthRoiHeight);
+
+    // Find pixel with maximum sharpness in the ROI
+    double maxSharpness = -1.0;
+    double bestFocusPosition = -1.0;
+    int validPixelsInROI = 0;
+
+    for (int y = depthStartY; y < depthEndY; y++)
+    {
+        for (int x = depthStartX; x < depthEndX; x++)
+        {
+            const auto &pixel = depthData.depthImage[y][x];
+            if (pixel.first > 0) // Valid pixel with depth data
+            {
+                validPixelsInROI++;
+                if (pixel.first > maxSharpness)
+                {
+                    maxSharpness = pixel.first;
+                    bestFocusPosition = pixel.second;
+                }
+            }
+        }
+    }
+
+    if (validPixelsInROI == 0 || bestFocusPosition < 0)
+    {
+        std::cout << "[Imaging Cam] No valid depth data in ROI region, falling back to search" << std::endl;
+        return false; // No valid depth data in ROI
+    }
+
+    // Clamp focus position to valid range
+    int targetFocus = static_cast<int>(std::round(bestFocusPosition));
+    targetFocus = std::max(FOCUS_MIN, std::min(targetFocus, FOCUS_MAX));
+
+    std::cout << "[Imaging Cam] Using depth map: found " << validPixelsInROI
+              << " valid pixels in ROI, max sharpness: " << maxSharpness
+              << " at focus position: " << targetFocus << std::endl;
+
+    // Set focus position using depth map data
+    desiredLocBestFocus = targetFocus;
+
+    // Update GUI with the new focus position
+    if (m_bestFocusCallback)
+    {
+        m_bestFocusCallback(targetFocus);
+    }
+
+    // Wait for lens to settle
+    std::this_thread::sleep_for(std::chrono::milliseconds(SETTLE_TIME_MS));
+
+    // Enable hold focus mode at the optimal position
+    bHoldFocus = true;
+
+    // Notify GUI that Hold Focus is enabled
+    if (m_holdFocusCallback)
+    {
+        m_holdFocusCallback(true);
+    }
+
+    // Notify GUI that search is complete (always successful when using depth map)
+    if (m_searchCompleteCallback)
+    {
+        m_searchCompleteCallback(true);
+    }
+
+    std::cout << "[Imaging Cam] Instant focus complete using depth map at position "
+              << targetFocus << std::endl;
+
+    return true; // Success
 }

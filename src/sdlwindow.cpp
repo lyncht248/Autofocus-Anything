@@ -72,6 +72,21 @@ SDLWin *SDLWindow::sdlwin_open()
 	out->stabOffsetY = 0.0;
 	out->stabActive = false;
 
+	// Initialize depth map parameters
+	out->showDepthMap = false;
+	out->hasDepthMap = false;
+	out->depthMapWidth = 0;
+	out->depthMapHeight = 0;
+	out->depthMapReady = false;
+	out->depthDataVersion = 0;
+	for (int y = 0; y < SDLWin::MAX_DEPTH_HEIGHT; y++)
+	{
+		for (int x = 0; x < SDLWin::MAX_DEPTH_WIDTH; x++)
+		{
+			out->focusPositions[y][x] = -1.0f; // Negative indicates no data
+		}
+	}
+
 	// Does the fork here. PID is process ID
 	pid_t cpid = fork();
 	if (cpid > 0)
@@ -330,6 +345,88 @@ void drawROIOverlay(SDLWin *win, SDL_Renderer *renderer)
 		SDL_RenderDrawLine(renderer, win->roiCenterX - 5, win->roiCenterY, win->roiCenterX + 5, win->roiCenterY);
 		SDL_RenderDrawLine(renderer, win->roiCenterX, win->roiCenterY - 5, win->roiCenterX, win->roiCenterY + 5);
 	}
+}
+
+void SDLWindow::transferDepthMapData(SDLWin *win, const std::vector<std::vector<std::pair<double, double>>> &depthImage, int width, int height)
+{
+	std::cout << "[Debug] transferDepthMapData() called with " << width << "x" << height << " depth image" << std::endl;
+
+	if (!win || width <= 0 || height <= 0)
+		return;
+
+	pthread_mutex_lock(&win->mutex);
+
+	// Clear previous depth map data (set to negative values indicating no data)
+	for (int y = 0; y < SDLWin::MAX_DEPTH_HEIGHT; y++)
+	{
+		for (int x = 0; x < SDLWin::MAX_DEPTH_WIDTH; x++)
+		{
+			win->focusPositions[y][x] = -1.0f; // Negative indicates no data
+		}
+	}
+
+	// Check if dimensions fit in our fixed-size array
+	if (width <= SDLWin::MAX_DEPTH_WIDTH && height <= SDLWin::MAX_DEPTH_HEIGHT)
+	{
+		win->depthMapWidth = width;
+		win->depthMapHeight = height;
+
+		// Transfer actual focus positions
+		for (int y = 0; y < height; y++)
+		{
+			for (int x = 0; x < width; x++)
+			{
+				const auto &pixel = depthImage[y][x];
+				if (pixel.first > 0) // Valid pixel with depth data
+				{
+					win->focusPositions[y][x] = static_cast<float>(pixel.second); // Store actual focus position
+				}
+				else
+				{
+					win->focusPositions[y][x] = -1.0f; // No data
+				}
+			}
+		}
+
+		win->depthMapReady = true;
+		win->hasDepthMap = true;
+		win->depthDataVersion++; // Increment version to indicate new data
+
+		// Force texture update since we have new data
+		forceDepthMapTextureUpdate();
+	}
+	else
+	{
+		std::cout << "[SDL Window] Depth map dimensions too large: " << width << "x" << height
+				  << " (max: " << SDLWin::MAX_DEPTH_WIDTH << "x" << SDLWin::MAX_DEPTH_HEIGHT << ")" << std::endl;
+		win->depthMapReady = false;
+	}
+
+	pthread_mutex_unlock(&win->mutex);
+}
+
+void SDLWindow::clearDepthMapData(SDLWin *win)
+{
+	if (!win)
+		return;
+
+	pthread_mutex_lock(&win->mutex);
+	for (int y = 0; y < SDLWin::MAX_DEPTH_HEIGHT; y++)
+	{
+		for (int x = 0; x < SDLWin::MAX_DEPTH_WIDTH; x++)
+		{
+			win->focusPositions[y][x] = -1.0f; // Negative indicates no data
+		}
+	}
+	win->depthMapReady = false;
+	win->hasDepthMap = false;
+	win->depthMapWidth = 0;
+	win->depthMapHeight = 0;
+	win->depthDataVersion++; // Increment version to indicate data cleared
+	pthread_mutex_unlock(&win->mutex);
+
+	// Force texture update to clear the old texture
+	forceDepthMapTextureUpdate();
 }
 
 void SDLWindow::quit(SDLWin *win)

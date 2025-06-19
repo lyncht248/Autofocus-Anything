@@ -155,6 +155,23 @@ public:
 	// Get current stabilization offset (returns true if stabilization is active)
 	bool getStabilizationOffset(double &offsetX, double &offsetY);
 
+	void onGetDepthsClicked();
+	void whenGetDepthsToggled(bool gettingDepths);
+	void whenViewDepthsToggled(bool viewingDepths);
+
+	// Depth mapping data structures
+	struct DepthMapData
+	{
+		std::vector<std::vector<std::pair<double, double>>> depthImage; // max_sharpness, actual_focus_position pairs
+		int width;
+		int height;
+		bool isValid;
+
+		DepthMapData() : width(0), height(0), isValid(false) {}
+	};
+
+	DepthMapData currentDepthMap;
+
 private:
 	void renderFrame();
 	void releaseFrame();

@@ -860,8 +860,11 @@ System::System(int argc, char **argv) : window(),
 
 	window.signalResetClicked().connect(sigc::mem_fun(*this, &System::onResetClicked));
 	window.signalRecenterClicked().connect(sigc::mem_fun(*this, &System::onRecenterClicked));
+	window.signalGetDepthsClicked().connect(sigc::mem_fun(*this, &System::onGetDepthsClicked));
+	window.getGetDepthsActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenGetDepthsToggled));
 
 	window.getHoldFocusActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenHoldFocusToggled));
+	window.getViewDepthsActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenViewDepthsToggled));
 	window.get3DStabActive().signalToggled().connect(sigc::mem_fun(*this, &System::when3DStabToggled));
 	window.get2DStabActive().signalToggled().connect(sigc::mem_fun(*this, &System::when2DStabToggled));
 
@@ -1284,10 +1287,64 @@ void System::onResetClicked()
 {
 	if (bSystemLogFlag)
 	{
-		logger->info("[System::onResetClicked] Lens reset button clicked");
+		logger->info("[System::onResetClicked] Reset All button clicked - performing comprehensive system reset");
 	}
-	// Hide the out of bounds warning when reset is clicked
+
+	// 1. Stop all focus modes and clear global variables
+	bFindFocus = false;
+	bHoldFocus = false;
+
+	// 2. Stop and clear ROI tracking and imaging camera monitoring
+	if (getImagingCam())
+	{
+		getImagingCam()->stop(); // Stop all monitoring threads and focus search
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::onResetClicked] Stopped imaging camera monitoring and focus search");
+		}
+	}
+
+	// Clear ROI display from SDL window
+	clearROIDisplay();
+
+	// 3. Reset stabilization and clear offsets
+	frameProcessor.stabMutex.lock();
+	while (!frameProcessor._stabComplete)
+		frameProcessor.stabComplete.wait(frameProcessor.stabMutex);
+
+	// Reset stabilization offsets
+	frameProcessor.resetRaster();
+
+	// Reset phase correlation stabilizer
+	if (usePhaseCorr)
+	{
+		phaseCorrStabiliser.reset();
+		phaseCorrStabiliserReferenceNotSet = true;
+	}
+	frameProcessor.stabMutex.unlock();
+
+	// 4. Clear depth mapping data and reset SDL depth map
+	currentDepthMap.isValid = false;
+	currentDepthMap.depthImage.clear();
+	currentDepthMap.width = 0;
+	currentDepthMap.height = 0;
+
+	// Clear SDL depth map data and force texture update
+	if (childwin)
+	{
+		SDLWindow::clearDepthMapData(childwin);
+	}
+
+	// 5. Reset zoom and offsets in SDL window
+	frameProcessor.resetZoom();
+
+	// Hide out-of-bounds warning
 	window.hideOutOfBoundsWarning();
+
+	if (bSystemLogFlag)
+	{
+		logger->info("[System::onResetClicked] Reset All complete - all systems cleared and reset to defaults");
+	}
 }
 
 void System::onRecenterClicked()
@@ -1806,6 +1863,141 @@ void System::updateSharpnessGraph()
 	window.updateSharpnessGraph(currentSharpnessValues);
 }
 
+void System::onGetDepthsClicked()
+{
+	if (bSystemLogFlag)
+	{
+		logger->info("[System::onGetDepthsClicked] Get Depths toggle clicked");
+	}
+
+	// Check toggle state to determine action
+	bool gettingDepths = window.getGetDepthsActive().getValue();
+
+	if (gettingDepths)
+	{
+		// Toggle ON - Start depth mapping
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::onGetDepthsClicked] Starting depth mapping");
+		}
+
+		// Only run if viewing live feed
+		if (!window.getLiveView().getValue())
+		{
+			window.displayMessageError("Depth mapping only available in live view mode");
+			window.getGetDepthsActive().setValue(false); // Turn off toggle if invalid
+			return;
+		}
+
+		// Step 1: Clear stabilization and reset offsets
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::onGetDepthsClicked] Clearing stabilization and resetting offsets");
+		}
+
+		// Turn off stabilization to reset offsets
+		window.setStabiliseActive(false);
+
+		// Reset the stabilization offsets in frame processor
+		frameProcessor.resetRaster();
+
+		// Small delay to ensure stabilization is properly reset
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+		// Turn stabilization back on with fresh start
+		window.setStabiliseActive(true);
+
+		// Step 2: Clear any existing depth map data
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::onGetDepthsClicked] Clearing existing depth map data");
+		}
+
+		// Clear system depth map data
+		currentDepthMap.isValid = false;
+		currentDepthMap.depthImage.clear();
+		currentDepthMap.width = 0;
+		currentDepthMap.height = 0;
+
+		// Clear SDL depth map data
+		if (childwin)
+		{
+			SDLWindow::clearDepthMapData(childwin);
+		}
+
+		// Turn off 'View Depths' toggle
+		window.setViewDepths(false);
+
+		// Step 3: Enable Hold Focus
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::onGetDepthsClicked] Enabling Hold Focus");
+		}
+
+		// Enable Hold Focus mode
+		bHoldFocus = true;
+		window.setHoldFocus(true);
+
+		// Start the depth mapping process
+		if (getImagingCam())
+		{
+			getImagingCam()->startDepthMapping();
+		}
+	}
+	else
+	{
+		// Toggle OFF - Clear depth mapping
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::onGetDepthsClicked] Clearing depth mapping");
+		}
+
+		// Clear system depth map data
+		currentDepthMap.isValid = false;
+		currentDepthMap.depthImage.clear();
+		currentDepthMap.width = 0;
+		currentDepthMap.height = 0;
+
+		// Clear SDL depth map data and force texture update
+		if (childwin)
+		{
+			SDLWindow::clearDepthMapData(childwin);
+		}
+
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::onGetDepthsClicked] Depth mapping cleared");
+		}
+	}
+}
+
+void System::whenGetDepthsToggled(bool gettingDepths)
+{
+	// This method is called when the toggle state changes
+	// The actual logic is handled in onGetDepthsClicked()
+	if (bSystemLogFlag)
+	{
+		logger->info("[System::whenGetDepthsToggled] Get Depths toggle state changed to: {}", gettingDepths);
+	}
+}
+
+void System::whenViewDepthsToggled(bool viewingDepths)
+{
+	if (bSystemLogFlag)
+	{
+		logger->info("[System::whenViewDepthsToggled] View Depths toggled: {}", viewingDepths);
+	}
+
+	// Update SDL window to show/hide depth map overlay
+	if (childwin)
+	{
+		pthread_mutex_lock(&childwin->mutex);
+		childwin->showDepthMap = viewingDepths;
+
+		pthread_mutex_unlock(&childwin->mutex);
+	}
+}
+
 void System::updateROICenter(int x, int y)
 {
 	// Only update ROI if we're in live view mode
@@ -1913,6 +2105,18 @@ void System::setSDLWindow(SDLWindow::SDLWin *win)
 		win->showROI = false;
 		win->roiCenterX = -1;
 		win->roiCenterY = -1;
+		win->showDepthMap = false;
+		win->hasDepthMap = false;
+		win->depthMapReady = false;
+		win->depthMapWidth = 0;
+		win->depthMapHeight = 0;
+		for (int y = 0; y < SDLWindow::SDLWin::MAX_DEPTH_HEIGHT; y++)
+		{
+			for (int x = 0; x < SDLWindow::SDLWin::MAX_DEPTH_WIDTH; x++)
+			{
+				win->focusPositions[y][x] = -1.0f; // Negative indicates no data
+			}
+		}
 
 		if (bSystemLogFlag)
 		{

@@ -319,12 +319,12 @@ bool MainWindow::_on_state_event(GdkEventWindowState *window_state_event)
 
 MainWindow::MainWindow() : Gtk::Window(),
 						   priv(new Private()),
-						   gainScale(0,    // minimum value
-                                    50,   // maximum value 
-                                    1,    // step increment
-                                    0,    // initial value
-                                    7,    // number of decimal places
-                                    150), // width in pixels
+						   gainScale(0,	   // minimum value
+									 50,   // maximum value
+									 1,	   // step increment
+									 0,	   // initial value
+									 7,	   // number of decimal places
+									 150), // width in pixels
 						   exposeScale(100, 16000, 1000, 15000, 7, 150),
 						   gammaScale(0.5, 2.5, 0.1, 1, 7, 150),
 						   // frameRateScale(20, 80, 5, 30, 7, 150),
@@ -334,7 +334,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 						   waitScale(0, HVIGTK_STAB_LIM, 100, 0, 6, 100),
 						   recordingSizeScale(100, 1800, 10, 900, 6, 100),
 						   // bestFocusScale(8, 632, 5, 200, 4, 100),
-						   bestFocusScale(130, 510, 5, 240, 4, 100),
+						   bestFocusScale(190, 450, 5, 240, 4, 100),
 						   homePositionScale(-14.0, 0.0, 0.1, -9.1, 4, 100),
 						   pGainScale(0, 100, 1, 12, 4, 100),
 						   outOfBoundsWarningLabel(""),
@@ -342,7 +342,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 						   backToStartButton(),
 						   pauseButton(),
 						   playButton(),
-						   resetButton("Reset Lens"),
+						   resetButton("Reset All"),
 						   recenterButton("Recenter"),
 						   fileLoadButton("Load"),
 						   fileSaveButton("Save"),
@@ -390,7 +390,11 @@ MainWindow::MainWindow() : Gtk::Window(),
 						   frameSliderConnection(),
 						   stateChangeConnection(),
 						   homePositionScaleConnection(),
-						   pGainScaleConnection()
+						   pGainScaleConnection(),
+						   getDepthsToggle(),
+						   viewDepthsToggle(),
+						   viewDepthsActive(),
+						   getDepthsActive()
 {
 	// set_default_size(1700,200);
 	set_title("HVI-GTK " HVIGTK_VERSION_STR);
@@ -570,13 +574,26 @@ MainWindow::MainWindow() : Gtk::Window(),
 	findFocusToggle.signal_toggled().connect(sigc::mem_fun(*this, &MainWindow::onFindFocusToggled));
 
 	resetButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onResetClicked));
-	resetButton.set_tooltip_text("Resets the lens to home position");
+	resetButton.set_tooltip_text("Reset all: lens, focus modes, stabilization, depth mapping, and ROI tracking");
 
 	recenterButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onRecenterClicked));
 	recenterButton.set_tooltip_text("Recenter the rendered video frames");
 
+	getDepthsToggle.set_label("Get Depths");
+	getDepthsToggle.set_tooltip_text("Generate depth map by scanning focus positions");
+
+	viewDepthsToggle.set_label("View Depths");
+	viewDepthsToggle.set_tooltip_text("Toggle display of depth map overlay");
+	viewDepthsToggle.set_sensitive(false); // Initially insensitive
+
 	holdFocusActive.toggleOnSignal(holdFocusToggle.signal_toggled());
 	holdFocusActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenHoldFocusToggled));
+
+	getDepthsActive.toggleOnSignal(getDepthsToggle.signal_toggled());
+	getDepthsActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenGetDepthsToggled));
+
+	viewDepthsActive.toggleOnSignal(viewDepthsToggle.signal_toggled());
+	viewDepthsActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::whenViewDepthsToggled));
 
 	threedStabActive.toggleOnSignal(threedStabToggle.signal_toggled());
 	threedStabActive.signalToggled().connect(sigc::mem_fun(*this, &MainWindow::when3DStabToggled));
@@ -684,6 +701,8 @@ MainWindow::MainWindow() : Gtk::Window(),
 	// priv->controlGrid.attach(makeMapToggle, 7, 0); DEPRECATED
 	priv->controlGrid.attach(stabiliseToggle, 7, 0);
 	priv->controlGrid.attach(recenterButton, 7, 1);
+	priv->controlGrid.attach(getDepthsToggle, 7, 2);
+	priv->controlGrid.attach(viewDepthsToggle, 7, 3);
 	// priv->controlGrid.attach(showMapToggle, 7, 2); DEPRECATED
 	// priv->controlGrid.attach(twodStabToggle, 7, 3); Retired functionality
 
@@ -739,7 +758,6 @@ MainWindow::MainWindow() : Gtk::Window(),
 
 	priv->controlGrid.attach(priv->sharpnessLabel, 23, 0, 2, 1);
 	priv->controlGrid.attach(priv->sharpnessGraph, 23, 1, 2, 2);
-
 
 	priv->controlFrame.add(priv->controlGrid);
 
@@ -916,6 +934,11 @@ MainWindow::SignalRecenterClicked MainWindow::signalRecenterClicked()
 	return sigRecenterClicked;
 }
 
+MainWindow::SignalGetDepthsClicked MainWindow::signalGetDepthsClicked()
+{
+	return sigGetDepthsClicked;
+}
+
 void MainWindow::setHasBuffer(bool val)
 {
 	hasBuffer.setValue(val);
@@ -934,7 +957,7 @@ Condition &MainWindow::getSaving()
 void MainWindow::setLiveView(bool val)
 {
 	liveToggle.set_active(val); // also sets condition
-	// liveView.setValue(val);
+								// liveView.setValue(val);
 }
 
 void MainWindow::setLoading(bool val)
@@ -1070,7 +1093,7 @@ double MainWindow::getFrameRateEntryBox() const
 	try
 	{
 		frameRate = std::stod(tempText);
-		//std::cout << "Frame Rate: " << frameRate << std::endl;
+		// std::cout << "Frame Rate: " << frameRate << std::endl;
 	}
 	catch (std::invalid_argument &e)
 	{
@@ -1080,7 +1103,7 @@ double MainWindow::getFrameRateEntryBox() const
 	{
 		std::cerr << "Invalid input: std::out_of_range thrown" << '\n';
 	}
-	//std::cout << "Frame Rate: " << frameRate << std::endl;
+	// std::cout << "Frame Rate: " << frameRate << std::endl;
 	return frameRate;
 }
 
@@ -1235,11 +1258,12 @@ void MainWindow::whenStabiliseToggled(bool stabilising)
 
 void MainWindow::onFindFocusToggled()
 {
-	if (findFocusToggle.get_active()) {
+	if (findFocusToggle.get_active())
+	{
 		// When toggled on, disable other related toggles
 		holdFocusToggle.set_sensitive(false);
 		threedStabToggle.set_sensitive(false);
-		
+
 		// Make best focus scale active
 		bestFocusScale.set_sensitive(true);
 		bestFocusScale.setValue(400); // Set default best focus value to 320
@@ -1247,39 +1271,42 @@ void MainWindow::onFindFocusToggled()
 		// Start the find focus process
 		imgcount = 0;
 		bFindFocus = 1;
-		
-		if (bMainWindowLogFlag) {
+
+		if (bMainWindowLogFlag)
+		{
 			logger->info("[MainWindow::onFindFocusToggled] FindFocus toggled on, bFindFocus set to 1");
 		}
-		
+
 		// Schedule a timer to transition from find focus to hold focus
-		Glib::signal_timeout().connect_once([this]() {
+		Glib::signal_timeout().connect_once([this]()
+											{
 			bFindFocus = 0;
 			if (findFocusToggle.get_active()) { // Check if still active
 				bHoldFocus = 1;
 				if (bMainWindowLogFlag) {
 					logger->info("[MainWindow::onFindFocusToggled] Transitioning to hold focus mode");
 				}
-			}
-		}, 800); // 800ms delay, same as in the original code
+			} }, 800); // 800ms delay, same as in the original code
 	}
-	else {
+	else
+	{
 		// When toggled off
 		bFindFocus = 0;
 		bHoldFocus = 0;
-		
+
 		// Enable other toggles again
 		holdFocusToggle.set_sensitive(true);
 		threedStabToggle.set_sensitive(true);
-		
+
 		// Disable best focus scale
 		bestFocusScale.set_sensitive(false);
-		
-		if (bMainWindowLogFlag) {
+
+		if (bMainWindowLogFlag)
+		{
 			logger->info("[MainWindow::onFindFocusToggled] FindFocus toggled off");
 		}
 	}
-	
+
 	// Emit the signal for the system to handle
 	sigFindFocusClicked.emit();
 }
@@ -1290,10 +1317,10 @@ void MainWindow::whenHoldFocusToggled(bool holdingFocus)
 	{
 		// Make best focus scale active and set value to the desired location of best-focus
 		bestFocusScale.set_sensitive(true);
-		
+
 		// Disable the findFocusToggle when holdFocus is active
 		findFocusToggle.set_sensitive(false);
-		
+
 		// GUI CHANGES WHEN "HOLD FOCUS" IS ENABLED GO HERE
 		if (bMainWindowLogFlag)
 			logger->info("[MainWindow::whenHoldFocusToggled] HoldFocus toggled on");
@@ -1316,10 +1343,10 @@ void MainWindow::when3DStabToggled(bool active)
 	{
 		holdFocusToggle.set_active(true);
 		stabiliseToggle.set_active(true);
-		
+
 		// Disable findFocusToggle when 3D stabilization is active
 		findFocusToggle.set_sensitive(false);
-		
+
 		// GUI CHANGES WHEN "3D STABILISER" IS ENABLED GO HERE
 		if (bMainWindowLogFlag)
 			logger->info("[MainWindow::when3DStabToggled] 3DStab toggled on");
@@ -1328,10 +1355,10 @@ void MainWindow::when3DStabToggled(bool active)
 	{
 		holdFocusToggle.set_active(false);
 		stabiliseToggle.set_active(false);
-		
+
 		// Enable findFocusToggle when 3D stabilization is inactive
 		findFocusToggle.set_sensitive(true);
-		
+
 		// GUI CHANGES WHEN "3D STABILISER" IS DISABLED GOES HERE
 		if (bMainWindowLogFlag)
 			logger->info("[MainWindow::when3DStabToggled] 3DStab toggled off");
@@ -1340,22 +1367,37 @@ void MainWindow::when3DStabToggled(bool active)
 
 void MainWindow::onResetClicked()
 {
-	// GUI CHANGES WHEN "RESET" IS CLICKED
+	// COMPREHENSIVE RESET ALL - GUI CHANGES
+	if (bMainWindowLogFlag)
+	{
+		logger->info("[MainWindow::onResetClicked] Reset All clicked - performing comprehensive reset");
+	}
+
+	// 1. Reset all focus modes
 	holdFocusToggle.set_active(false);
-	findFocusToggle.set_active(false);  // Deactivate find focus toggle
+	findFocusToggle.set_active(false);
 	threedStabToggle.set_active(false);
 	twodStabToggle.set_active(false);
-	// pause for 100ms
-	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+	// 2. Reset stabilization
+	stabiliseToggle.set_active(false);
+
+	// 3. Reset depth mapping
+	getDepthsToggle.set_active(false); // This will trigger clearing via whenGetDepthsToggled
+	viewDepthsToggle.set_active(false);
+
+	// 4. Reset lens position
 	bResetLens = 1;
 
 	// Hide out-of-bounds label
 	hideOutOfBoundsWarning();
 
-	// GUI CHANGES WHEN "RESET" IS CLICKED
+	// Small pause to allow GUI state changes to propagate
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
 	if (bMainWindowLogFlag)
 	{
-		logger->info("[MainWindow::onResetClicked] Reset clicked, so bResetLens set to 1");
+		logger->info("[MainWindow::onResetClicked] Reset All complete - all systems reset");
 	}
 }
 
@@ -1757,17 +1799,20 @@ MainWindow::SignalPGainChanged MainWindow::signalPGainChanged()
 	return sigPGainChanged;
 }
 
-void MainWindow::updateSharpnessGraph(const std::vector<double>& values) {
-    // Find maximum value for scaling
-    double maxVal = 1.0;
-    if (!values.empty()) {
-        maxVal = *std::max_element(values.begin(), values.end());
-        if (maxVal <= 0) maxVal = 1.0;
-    }
-    
-    // Update the graph
-    priv->sharpnessGraph.setMaxValue(maxVal * 1.2); // 20% headroom
-    priv->sharpnessGraph.updateValues(values);
+void MainWindow::updateSharpnessGraph(const std::vector<double> &values)
+{
+	// Find maximum value for scaling
+	double maxVal = 1.0;
+	if (!values.empty())
+	{
+		maxVal = *std::max_element(values.begin(), values.end());
+		if (maxVal <= 0)
+			maxVal = 1.0;
+	}
+
+	// Update the graph
+	priv->sharpnessGraph.setMaxValue(maxVal * 1.2); // 20% headroom
+	priv->sharpnessGraph.updateValues(values);
 }
 
 MainWindow::~MainWindow()
@@ -1799,9 +1844,82 @@ void MainWindow::setFindFocus(bool val)
 	}
 }
 
-Condition& MainWindow::getFindFocusActive()
+void MainWindow::setStabiliseActive(bool val)
+{
+	stabiliseToggle.set_active(val);
+	if (bMainWindowLogFlag)
+	{
+		logger->info("[MainWindow::setStabiliseActive] Stabilise active set to {}", val);
+	}
+}
+
+void MainWindow::setViewDepths(bool val)
+{
+	viewDepthsToggle.set_active(val);
+}
+
+Condition &MainWindow::getFindFocusActive()
 {
 	// Note: We don't actually have a condition for this, so we'll use holdFocusActive for now
 	// You might want to add a proper findFocusActive condition if needed
 	return holdFocusActive;
+}
+
+Condition &MainWindow::getViewDepthsActive()
+{
+	return viewDepthsActive;
+}
+
+Condition &MainWindow::getGetDepthsActive()
+{
+	return getDepthsActive;
+}
+
+void MainWindow::onGetDepthsClicked()
+{
+	sigGetDepthsClicked.emit();
+	if (bMainWindowLogFlag)
+	{
+		logger->info("[MainWindow::onGetDepthsClicked] Get Depths button clicked");
+	}
+}
+
+void MainWindow::whenGetDepthsToggled(bool gettingDepths)
+{
+	if (gettingDepths)
+	{
+		// Enable View Depths when Get Depths is active
+		viewDepthsToggle.set_sensitive(true);
+
+		// Signal to start depth mapping
+		sigGetDepthsClicked.emit();
+
+		if (bMainWindowLogFlag)
+		{
+			logger->info("[MainWindow::whenGetDepthsToggled] Get Depths toggled on - starting depth mapping");
+		}
+	}
+	else
+	{
+		// Turn off View Depths first
+		viewDepthsToggle.set_active(false);
+		viewDepthsToggle.set_sensitive(false);
+
+		// Signal to clear depth mapping
+		sigGetDepthsClicked.emit();
+
+		if (bMainWindowLogFlag)
+		{
+			logger->info("[MainWindow::whenGetDepthsToggled] Get Depths toggled off - clearing depth mapping");
+		}
+	}
+}
+
+void MainWindow::whenViewDepthsToggled(bool viewingDepths)
+{
+	// Implementation of whenViewDepthsToggled
+	if (bMainWindowLogFlag)
+	{
+		logger->info("[MainWindow::whenViewDepthsToggled] View Depths toggled to {}", viewingDepths);
+	}
 }

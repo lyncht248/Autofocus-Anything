@@ -5,11 +5,14 @@
 #include <stdint.h>
 #include <signal.h>
 #include <iostream>
+#include <cmath>
+#include <algorithm>
 #include "logfile.hpp"
 #include "SDL_render.h"
 #include "SDL_video.h"
 #include "sdlwinchild.hpp"
 #include "main.hpp"
+#include "system.hpp"
 #include <SDL_ttf.h>
 #include <SDL.h>
 
@@ -52,6 +55,7 @@ static int lastClickX = 0, lastClickY = 0;
 // Forward declarations
 static void handleDoubleClick(int x, int y);
 static void drawROIOverlay(SDL_Renderer *renderer);
+static void drawDepthMapOverlay(SDL_Renderer *renderer);
 static void handleDoubleClickWithRenderer(int x, int y, SDL_Renderer *renderer);
 
 void convert_g8_to_rgb888(uint32_t *dst, const uint8_t *src, ssize_t n)
@@ -241,6 +245,207 @@ static void drawROIOverlay(SDL_Renderer *renderer)
 	SDL_RenderDrawLine(renderer, screenCenterX, screenCenterY - 5, screenCenterX, screenCenterY + 5);
 }
 
+// Function to convert focus position to RGB color
+static void focusPositionToColor(float focusPosition, unsigned char &r, unsigned char &g, unsigned char &b, unsigned char &a)
+{
+	if (focusPosition < 0)
+	{
+		// No depth data - transparent
+		r = g = b = a = 0; // a is alpha which is 0 for transparent
+		return;
+	}
+
+	// Map focus positions (typically 190-450) to color
+	const float FOCUS_MIN = 190.0f;
+	const float FOCUS_MAX = 450.0f;
+	float normalizedPosition = (focusPosition - FOCUS_MIN) / (FOCUS_MAX - FOCUS_MIN);
+	normalizedPosition = std::max(0.0f, std::min(1.0f, normalizedPosition)); // Clamp to [0,1]
+
+	// Simplified color mapping
+	// 190 = 0.0 = red (RGB = 255, 0, 0), 245 = 0.5 = yellow (RGB = 255, 255, 0), 450 = 1.0 = blue (RGB = 0, 0, 255)
+	if (normalizedPosition <= 0.5)
+	{
+		// from (255, 0, 0) to (255, 255, 0)
+		r = 255;
+		g = 255 * normalizedPosition * 2;
+		b = 0;
+		a = 255;
+	}
+	else if (normalizedPosition > 0.5)
+	{
+		// from (255, 255, 0) to (0, 0, 255)
+		r = 255 - 255 * (normalizedPosition - 0.5) * 2;
+		g = 255 - 255 * (normalizedPosition - 0.5) * 2;
+		b = 255 * (normalizedPosition - 0.5) * 2;
+		a = 255;
+	}
+
+	// Debug output every 1000th call to avoid spam
+	static int colorCallCount = 0;
+	if (++colorCallCount % 1000 == 0)
+	{
+		std::cout << "[Debug] Focus: " << focusPosition << ", RGB: " << (int)r << ", " << (int)g << ", " << (int)b << ", " << (int)a << std::endl;
+	}
+}
+
+// Static texture for efficient depth map rendering
+static SDL_Texture *depthMapTexture = nullptr;
+static int cachedDepthWidth = 0;
+static int cachedDepthHeight = 0;
+static bool forceTextureUpdate = false;
+static int lastDataVersion = 0; // Track data version changes
+
+// Function to force depth map texture update from outside
+void SDLWindow::forceDepthMapTextureUpdate()
+{
+	std::cout << "[Debug] forceDepthMapTextureUpdate() called - setting flag to true" << std::endl;
+	forceTextureUpdate = true;
+}
+
+// Add this function to draw the depth map overlay
+static void drawDepthMapOverlay(SDL_Renderer *renderer)
+{
+	if (!sdlwin || !sdlwin->showDepthMap || !sdlwin->hasDepthMap || !sdlwin->depthMapReady)
+	{
+		return;
+	}
+
+	// Get current window dimensions
+	int windowWidth, windowHeight;
+	SDL_GetRendererOutputSize(renderer, &windowWidth, &windowHeight);
+
+	pthread_mutex_lock(&sdlwin->mutex);
+	int depthWidth = sdlwin->depthMapWidth;
+	int depthHeight = sdlwin->depthMapHeight;
+	int currentDataVersion = sdlwin->depthDataVersion;
+
+	// Check if we need to recreate the texture (new data, first time, or data cleared)
+	bool needsTextureUpdate = (depthMapTexture == nullptr ||
+							   depthWidth != cachedDepthWidth ||
+							   depthHeight != cachedDepthHeight ||
+							   currentDataVersion != lastDataVersion ||
+							   forceTextureUpdate);
+
+	if (needsTextureUpdate)
+	{
+		std::cout << "[Debug] Texture update needed - texture=" << (depthMapTexture ? "exists" : "null")
+				  << ", dims: " << depthWidth << "x" << depthHeight
+				  << " vs cached: " << cachedDepthWidth << "x" << cachedDepthHeight
+				  << ", version: " << currentDataVersion << " vs cached: " << lastDataVersion
+				  << ", force=" << forceTextureUpdate << std::endl;
+		// Destroy old texture if it exists
+		if (depthMapTexture)
+		{
+			SDL_DestroyTexture(depthMapTexture);
+			depthMapTexture = nullptr;
+		}
+
+		// If data was cleared (width/height = 0), just destroy texture and return
+		if (depthWidth <= 0 || depthHeight <= 0)
+		{
+			cachedDepthWidth = depthWidth;
+			cachedDepthHeight = depthHeight;
+			pthread_mutex_unlock(&sdlwin->mutex);
+			return;
+		}
+
+		// Create new texture for the depth map
+		depthMapTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
+											SDL_TEXTUREACCESS_STREAMING, depthWidth, depthHeight);
+
+		if (depthMapTexture)
+		{
+			SDL_SetTextureBlendMode(depthMapTexture, SDL_BLENDMODE_BLEND);
+
+			// Lock texture and populate with depth data
+			void *pixels;
+			int pitch;
+			if (SDL_LockTexture(depthMapTexture, NULL, &pixels, &pitch) == 0)
+			{
+				Uint32 *pixelData = (Uint32 *)pixels;
+				int validPixelCount = 0;
+				float sampleFocus = -1.0f;
+
+				for (int y = 0; y < depthHeight; y++)
+				{
+					for (int x = 0; x < depthWidth; x++)
+					{
+						float focusPosition = sdlwin->focusPositions[y][x];
+						if (focusPosition > 0 && sampleFocus < 0)
+						{
+							sampleFocus = focusPosition; // Get first valid focus value as sample
+						}
+						if (focusPosition > 0)
+							validPixelCount++;
+
+						unsigned char r, g, b, a;
+						focusPositionToColor(focusPosition, r, g, b, a);
+
+						// Pack RGBA into a single Uint32 for SDL_PIXELFORMAT_RGBA8888
+						pixelData[y * (pitch / 4) + x] = (r << 24) | (g << 16) | (b << 8) | a;
+					}
+				}
+
+				std::cout << "[Debug] Texture populated with " << validPixelCount << " valid pixels, sample focus: " << sampleFocus << std::endl;
+				SDL_UnlockTexture(depthMapTexture);
+			}
+		}
+
+		// Always update cached dimensions and version after texture creation/destruction
+		cachedDepthWidth = depthWidth;
+		cachedDepthHeight = depthHeight;
+		lastDataVersion = currentDataVersion;
+		forceTextureUpdate = false; // Reset the force flag after update
+	}
+
+	pthread_mutex_unlock(&sdlwin->mutex);
+
+	if (!depthMapTexture || depthWidth <= 0 || depthHeight <= 0)
+	{
+		return;
+	}
+
+	// Calculate scaling to match current frame display
+	double xscale = ((double)windowWidth - BORDER_THRES * 2) / sdlwin->raster.w;
+	double yscale = ((double)windowHeight - BORDER_THRES * 2) / sdlwin->raster.h;
+	double arscale = xscale > yscale ? yscale : xscale;
+
+	// Apply zoom factor
+	double zoomedScale = arscale * sdlwin->zoomFactor;
+	double swidth = zoomedScale * sdlwin->raster.w;
+	double sheight = zoomedScale * sdlwin->raster.h;
+
+	// Calculate center position
+	double centerX = (windowWidth - swidth) / 2.0;
+	double centerY = (windowHeight - sheight) / 2.0;
+
+	if (centerX < BORDER_THRES)
+		centerX = BORDER_THRES;
+	if (centerY < BORDER_THRES)
+		centerY = BORDER_THRES;
+
+	// Account for zoom offsets only - do NOT apply raster offsets to keep depth map stationary
+	double adjustedCenterX = centerX + zoomedScale * sdlwin->zoomOffsetX;
+	double adjustedCenterY = centerY + zoomedScale * sdlwin->zoomOffsetY;
+
+	// Calculate scaling from depth map to display
+	// Depth map is 1/4 resolution of original frame
+	double depthScaleX = zoomedScale * 4.0;
+	double depthScaleY = zoomedScale * 4.0;
+
+	// Render the entire depth map as a single texture (much more efficient!)
+	SDL_Rect destRect = {
+		(int)adjustedCenterX,
+		(int)adjustedCenterY,
+		(int)(depthWidth * depthScaleX),
+		(int)(depthHeight * depthScaleY)};
+
+	SDL_RenderCopy(renderer, depthMapTexture, NULL, &destRect);
+
+	// Reset blend mode
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
 static inline void redraw(SDL_Renderer *renderer, SDL_Texture *frame, SDL_Texture *map, int w, int h)
 {
 	if (frame)
@@ -327,6 +532,9 @@ static inline void redraw(SDL_Renderer *renderer, SDL_Texture *frame, SDL_Textur
 
 	// Add ROI overlay at the end, just before returning
 	drawROIOverlay(renderer);
+
+	// Add depth map overlay
+	drawDepthMapOverlay(renderer);
 }
 
 static SDL_HitTestResult hit_test(SDL_Window *window, const SDL_Point *pt, void *data)
@@ -769,6 +977,8 @@ int SDLWindow::child_main()
 quit:;
 	if (frame)
 		SDL_DestroyTexture(frame);
+	if (depthMapTexture)
+		SDL_DestroyTexture(depthMapTexture);
 	if (handCursor)
 		SDL_FreeCursor(handCursor);
 	if (defaultCursor)
