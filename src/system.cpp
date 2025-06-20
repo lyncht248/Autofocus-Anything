@@ -4,6 +4,7 @@
 #include <chrono>
 #include <ctime>
 #include <cvd/image_ref.h>
+#include <cvd/convolution.h>
 #include <set>
 #include <gtkmm.h>
 #include <cstring>
@@ -143,7 +144,7 @@ void FrameProcessor::stabilise()
 	ThreadStopper::makeStoppable();
 
 	// Stabilization logic:
-	// - Caps analysis at 30fps for performance at high frame rates
+	// - Caps analysis at 30fps for performance at high frame rates (ONLY for phase correlation)
 	// - Distributes calculated offsets smoothly across frames
 	// - Example: At 60fps, calculates every 2nd frame and applies half the offset to each frame
 
@@ -166,22 +167,28 @@ void FrameProcessor::stabilise()
 		if (vframe == nullptr)
 			continue;
 
-		// Improved frame skipping logic - cap analysis at 30fps and distribute offset
-		// This smooths stabilization at high frame rates by:
-		// 1. Calculating offset at most every 30fps (e.g., every 2nd frame at 60fps)
-		// 2. Distributing the calculated offset across all frames in the skip period
-		// 3. Applying equal portions to maintain smooth motion
-		double currentFPS = system.getFPS();
+		// Frame skipping logic - only applied to phase correlation, not old stabilizer
 		bool skipOffsetCalculation = false;
 
-		// Calculate skip factor to cap analysis at 30fps
-		skipFactor = std::max(1, static_cast<int>(std::ceil(currentFPS / 30.0)));
-
-		// Only calculate offset every skipFactor frames
-		if (currentFPS > 30.0)
+		if (system.usePhaseCorr)
 		{
-			skipOffsetCalculation = (frameCount % skipFactor != 0);
+			// Improved frame skipping logic - cap analysis at 30fps and distribute offset
+			// This smooths stabilization at high frame rates by:
+			// 1. Calculating offset at most every 30fps (e.g., every 2nd frame at 60fps)
+			// 2. Distributing the calculated offset across all frames in the skip period
+			// 3. Applying equal portions to maintain smooth motion
+			double currentFPS = system.getFPS();
+
+			// Calculate skip factor to cap analysis at 30fps
+			skipFactor = std::max(1, static_cast<int>(std::ceil(currentFPS / 30.0)));
+
+			// Only calculate offset every skipFactor frames
+			if (currentFPS > 30.0)
+			{
+				skipOffsetCalculation = (frameCount % skipFactor != 0);
+			}
 		}
+		// For old stabilizer: always process every frame (no skipping)
 
 		frameCount++;
 
@@ -248,9 +255,9 @@ void FrameProcessor::stabilise()
 					stabComplete.broadcast();
 				stabMutex.unlock();
 			}
-			else
+			else if (system.usePhaseCorr)
 			{
-				// Apply the distributed portion of the last calculated offset
+				// Apply the distributed portion of the last calculated offset (phase correlation only)
 				stabMutex.lock();
 				framesSinceLastCalculation++;
 
@@ -266,42 +273,19 @@ void FrameProcessor::stabilise()
 		}
 		else
 		{
-			// Original stabiliser method
+			// Original stabiliser method - runs on every frame (no skipping)
 			if (system.stabiliser.is_valid())
 			{
-				if (!skipOffsetCalculation)
-				{
-					TooN::Vector<2> calculatedOffset = system.stabiliser.stabilise(*vframe, offset);
-					stabMutex.lock();
+				TooN::Vector<2> calculatedOffset = system.stabiliser.stabilise(*vframe, offset);
+				stabMutex.lock();
 
-					// Store the full calculated offset and distribute it
-					lastCalculatedOffset = calculatedOffset;
-					distributedOffset = lastCalculatedOffset / static_cast<double>(skipFactor);
-					framesSinceLastCalculation = 0;
-
-					// Apply the distributed portion
-					currentOff = distributedOffset;
-					offset += currentOff;
-					_stabComplete = stabQueue.empty();
-					if (_stabComplete)
-						stabComplete.broadcast();
-					stabMutex.unlock();
-				}
-				else
-				{
-					// Apply the distributed portion of the last calculated offset
-					stabMutex.lock();
-					framesSinceLastCalculation++;
-
-					// Apply the distributed offset to smooth motion
-					currentOff = distributedOffset;
-					offset += currentOff;
-
-					_stabComplete = stabQueue.empty();
-					if (_stabComplete)
-						stabComplete.broadcast();
-					stabMutex.unlock();
-				}
+				// Apply the offset directly without distribution (every frame processing)
+				currentOff = calculatedOffset;
+				offset += currentOff;
+				_stabComplete = stabQueue.empty();
+				if (_stabComplete)
+					stabComplete.broadcast();
+				stabMutex.unlock();
 			}
 			else
 			{
@@ -417,8 +401,18 @@ void FrameProcessor::processFrame() // What to do with each frame received from 
 				while (!_stabComplete)
 					stabComplete.wait(stabMutex);
 
-			rasterPos[0] -= currentOff[0];											// x offset
-			rasterPos[1] -= (currentOff[1] + (system.getFPS() > 30.0 ? 0.5 : 1.0)); // y offset
+			rasterPos[0] -= currentOff[0]; // x offset
+
+			// Apply correcting factor only for phase correlation, not for old stabilizer
+			if (system.usePhaseCorr)
+			{
+				rasterPos[1] -= (currentOff[1] + (system.getFPS() > 30.0 ? 0.5 : 1.0)); // y offset with correction
+			}
+			else
+			{
+				rasterPos[1] -= currentOff[1]; // y offset without correction for old stabilizer
+			}
+
 			currentOff = TooN::Zeros;
 			stabMutex.unlock();
 			SDLWindow::setRaster(childwin, rasterPos[0], rasterPos[1]);
@@ -1234,12 +1228,29 @@ void System::whenStabiliseToggled(bool stabilising)
 		if (bSystemLogFlag)
 			logger->info("[System::whenStabiliseToggled] Stabilise toggled on");
 
-		// If user wants the old stabiliser, we do nothing special here
-		// If user wants the new phase correlation, ensure it is reset so it starts fresh
 		if (usePhaseCorr)
 		{
+			// Phase correlation stabilizer setup
 			phaseCorrStabiliser.reset();			   // clear reference frame
 			phaseCorrStabiliserReferenceNotSet = true; // Important: Set this to true!
+		}
+		else
+		{
+			// Old stabilizer setup - automatically create map with good defaults
+			if (window.getLiveView().getValue() && frameProcessor.vidFrame)
+			{
+				// Use current live frame to create map
+				createStabiliserMapWithDefaults(*frameProcessor.vidFrame);
+			}
+			else if (!window.getLiveView().getValue() && recorder->countFrames() > 0)
+			{
+				// Use current frame from recording
+				VidFrame *vframe = recorder->getFrame(window.getFrameSliderValue());
+				if (vframe)
+				{
+					createStabiliserMapWithDefaults(*vframe);
+				}
+			}
 		}
 	}
 	else
@@ -1247,9 +1258,19 @@ void System::whenStabiliseToggled(bool stabilising)
 		if (bSystemLogFlag)
 			logger->info("[System::whenStabiliseToggled] Stabilise toggled off");
 
-		// Also reset the PhaseCorrStabiliser reference
-		phaseCorrStabiliser.reset();
-		phaseCorrStabiliserReferenceNotSet = true; // Important: Set this to true!
+		if (usePhaseCorr)
+		{
+			// Reset the PhaseCorrStabiliser reference
+			phaseCorrStabiliser.reset();
+			phaseCorrStabiliserReferenceNotSet = true;
+		}
+		else
+		{
+			// Hide map and invalidate old stabilizer
+			frameProcessor.filters.erase("map");
+			SDLWindow::setShowingMap(childwin, false);
+			stabiliser.invalidate();
+		}
 	}
 	frameProcessor.stabMutex.unlock();
 }
@@ -2164,4 +2185,133 @@ bool System::getStabilizationOffset(double &offsetX, double &offsetY)
 		offsetY = 0.0;
 		return false;
 	}
+}
+
+void System::createStabiliserMapWithDefaults(const VidFrame &frame)
+{
+	if (bSystemLogFlag)
+	{
+		logger->info("[System::createStabiliserMapWithDefaults] Creating stabilizer map with automatic parameters");
+	}
+
+	// Convert VidFrame to the format expected by stabilizer
+	CVD::ImageRef frameSize = frame.size();
+	CVD::Image<unsigned char> stab_image(frameSize);
+
+	// Copy frame data
+	CVD::ImageRef scan;
+	scan.home();
+	do
+	{
+		stab_image[scan] = frame[scan];
+	} while (scan.next(frameSize));
+
+	// Use reasonable default scale (vessel size)
+	double defaultScale = 2.0;
+
+	// Calculate threshold for approximately 10% pixel selection
+	double threshold = calculateThresholdForPercentage(stab_image, defaultScale, 0.10);
+
+	if (bSystemLogFlag)
+	{
+		logger->info("[System::createStabiliserMapWithDefaults] Using scale: {}, threshold: {}", defaultScale, threshold);
+	}
+
+	// Set the stabilizer parameters
+	stabiliser.adjust_scale(defaultScale);
+	stabiliser.adjust_thresh(threshold);
+
+	// Create the map
+	stabiliser.make_map(stab_image, DEFAULT_NUM_TRACKERS);
+
+	// Show the map if stabilizer is valid
+	if (stabiliser.is_valid())
+	{
+		stabiliser.predraw();
+		frameProcessor.filters["map"] = &stabiliser;
+		SDLWindow::setShowingMap(childwin, true);
+
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::createStabiliserMapWithDefaults] Map created and displayed successfully");
+		}
+	}
+	else
+	{
+		if (bSystemLogFlag)
+		{
+			logger->warn("[System::createStabiliserMapWithDefaults] Failed to create valid stabilizer map");
+		}
+	}
+}
+
+double System::calculateThresholdForPercentage(const CVD::Image<unsigned char> &image, double vesselSize, double targetPercentage)
+{
+	CVD::ImageRef size = image.size();
+	if (size.x <= 0 || size.y <= 0)
+		return 0.4; // Default fallback
+
+	// Apply same processing as stabilizer: Gaussian blur then eigenvalue calculation
+	CVD::Image<double> dim(size);
+	CVD::Image<double> blurred(size);
+
+	// Convert to double and copy
+	CVD::ImageRef scan;
+	scan.home();
+	do
+	{
+		dim[scan] = static_cast<double>(image[scan]);
+	} while (scan.next(size));
+
+	// Apply Gaussian blur (same as in stabilizer)
+	CVD::convolveGaussian(dim, blurred, vesselSize, 3.0);
+
+	// Calculate eigenvalues (simplified version of get_large_eig)
+	std::vector<double> eigenvalues;
+	eigenvalues.reserve(size.x * size.y);
+
+	CVD::ImageRef border(20, 20); // Use reasonable border
+	CVD::ImageRef maxScan(size - border);
+
+	scan = border;
+	do
+	{
+		// Calculate Hessian eigenvalues (same as in stabilizer)
+		const CVD::ImageRef dx(1, 0);
+		const CVD::ImageRef dy(0, 1);
+
+		double a = blurred[scan - dx] + blurred[scan + dx] - 2 * blurred[scan];
+		double c = blurred[scan - dy] + blurred[scan + dy] - 2 * blurred[scan];
+		double b = 0.25 * (blurred[scan - dx - dy] + blurred[scan + dx + dy] - blurred[scan - dx + dy] - blurred[scan + dx - dy]);
+
+		double det = a * c - b * b;
+		double trace2 = 0.5 * (a + c);
+
+		double large_eigenval = trace2 + sqrt(std::max(0.0, trace2 * trace2 - det));
+		eigenvalues.push_back(large_eigenval);
+
+	} while (scan.next(border, maxScan));
+
+	if (eigenvalues.empty())
+		return 0.4; // Default fallback
+
+	// Sort eigenvalues to find threshold for target percentage
+	std::sort(eigenvalues.begin(), eigenvalues.end(), std::greater<double>());
+
+	// Find threshold that gives us approximately the target percentage
+	size_t targetIndex = static_cast<size_t>(eigenvalues.size() * targetPercentage);
+	targetIndex = std::min(targetIndex, eigenvalues.size() - 1);
+
+	double calculatedThreshold = eigenvalues[targetIndex];
+
+	// Ensure threshold is within reasonable bounds
+	calculatedThreshold = std::max(0.1, std::min(calculatedThreshold, 2.0));
+
+	if (bSystemLogFlag)
+	{
+		logger->info("[System::calculateThresholdForPercentage] Calculated threshold {} for {}% pixel selection from {} eigenvalues",
+					 calculatedThreshold, targetPercentage * 100, eigenvalues.size());
+	}
+
+	return calculatedThreshold;
 }

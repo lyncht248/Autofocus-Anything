@@ -793,7 +793,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 	priv->sharpnessLabel.set_justify(Gtk::Justification::JUSTIFY_CENTER);
 	priv->sharpnessLabel.set_halign(Gtk::Align::ALIGN_CENTER);
 
-	recordingSizeScale.setValue(1200); // Ensure the recording size is set to 1200
+	recordingSizeScale.setValue(600); // Ensure the recording size is set to 1200
 }
 
 // double MainWindow::getFrameRateScaleValue() const

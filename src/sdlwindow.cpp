@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <iostream>
+#include <limits>
 #include "system.hpp"
 
 using namespace SDLWindow;
@@ -79,6 +80,8 @@ SDLWin *SDLWindow::sdlwin_open()
 	out->depthMapHeight = 0;
 	out->depthMapReady = false;
 	out->depthDataVersion = 0;
+	out->focusMin = 190.0f; // Default values, will be updated with actual data
+	out->focusMax = 450.0f;
 	for (int y = 0; y < SDLWin::MAX_DEPTH_HEIGHT; y++)
 	{
 		for (int x = 0; x < SDLWin::MAX_DEPTH_WIDTH; x++)
@@ -371,7 +374,12 @@ void SDLWindow::transferDepthMapData(SDLWin *win, const std::vector<std::vector<
 		win->depthMapWidth = width;
 		win->depthMapHeight = height;
 
-		// Transfer actual focus positions
+		// Calculate dynamic min/max focus values from actual depth map data
+		float minFocus = std::numeric_limits<float>::max();
+		float maxFocus = std::numeric_limits<float>::lowest();
+		bool hasValidData = false;
+
+		// Transfer actual focus positions and find min/max
 		for (int y = 0; y < height; y++)
 		{
 			for (int x = 0; x < width; x++)
@@ -379,13 +387,36 @@ void SDLWindow::transferDepthMapData(SDLWin *win, const std::vector<std::vector<
 				const auto &pixel = depthImage[y][x];
 				if (pixel.first > 0) // Valid pixel with depth data
 				{
-					win->focusPositions[y][x] = static_cast<float>(pixel.second); // Store actual focus position
+					float focusPosition = static_cast<float>(pixel.second);
+					win->focusPositions[y][x] = focusPosition;
+
+					// Update min/max focus values
+					if (focusPosition < minFocus)
+						minFocus = focusPosition;
+					if (focusPosition > maxFocus)
+						maxFocus = focusPosition;
+					hasValidData = true;
 				}
 				else
 				{
 					win->focusPositions[y][x] = -1.0f; // No data
 				}
 			}
+		}
+
+		// Store the calculated min/max focus values
+		if (hasValidData)
+		{
+			win->focusMin = minFocus;
+			win->focusMax = maxFocus;
+			std::cout << "[Debug] Calculated dynamic focus range: " << minFocus << " - " << maxFocus << std::endl;
+		}
+		else
+		{
+			// Fallback to default values if no valid data
+			win->focusMin = 190.0f;
+			win->focusMax = 450.0f;
+			std::cout << "[Debug] No valid focus data found, using default range: " << win->focusMin << " - " << win->focusMax << std::endl;
 		}
 
 		win->depthMapReady = true;
@@ -422,6 +453,9 @@ void SDLWindow::clearDepthMapData(SDLWin *win)
 	win->hasDepthMap = false;
 	win->depthMapWidth = 0;
 	win->depthMapHeight = 0;
+	// Reset focus range to defaults
+	win->focusMin = 190.0f;
+	win->focusMax = 450.0f;
 	win->depthDataVersion++; // Increment version to indicate data cleared
 	pthread_mutex_unlock(&win->mutex);
 

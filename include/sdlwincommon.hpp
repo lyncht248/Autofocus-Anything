@@ -85,6 +85,10 @@ namespace SDLWindow
 		int depthMapWidth;
 		int depthMapHeight;
 
+		// Dynamic focus range from actual depth map data
+		float focusMin;
+		float focusMax;
+
 		// The size of the depth image - increased to accommodate typical camera resolutions
 		// Store actual focus positions for each pixel, negative values = no data
 		static constexpr int MAX_DEPTH_WIDTH = 512;	 // Max supported width (was 256)

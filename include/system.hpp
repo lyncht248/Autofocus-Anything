@@ -173,6 +173,12 @@ public:
 	DepthMapData currentDepthMap;
 
 private:
+	// Helper method to create stabilizer map with default parameters
+	void createStabiliserMapWithDefaults(const VidFrame &frame);
+
+	// Helper method to calculate threshold for target percentage of pixels
+	double calculateThresholdForPercentage(const CVD::Image<unsigned char> &image, double vesselSize, double targetPercentage);
+
 	void renderFrame();
 	void releaseFrame();
 
@@ -243,7 +249,7 @@ private:
 	bool lensDisconnected = false;
 
 	// Add a boolean to enable or disable PhaseCorr usage.
-	bool usePhaseCorr = true;
+	bool usePhaseCorr = false;
 
 	// Add a PhaseCorrStabiliser object
 	PhaseCorrStabiliser phaseCorrStabiliser;

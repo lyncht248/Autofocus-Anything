@@ -255,14 +255,26 @@ static void focusPositionToColor(float focusPosition, unsigned char &r, unsigned
 		return;
 	}
 
-	// Map focus positions (typically 190-450) to color
-	const float FOCUS_MIN = 190.0f;
-	const float FOCUS_MAX = 450.0f;
+	// Use dynamic focus range from actual depth map data
+	float FOCUS_MIN = sdlwin->focusMin;
+	float FOCUS_MAX = sdlwin->focusMax;
+
+	// Ensure we have a valid range (avoid division by zero)
+	if (FOCUS_MAX <= FOCUS_MIN)
+	{
+		// Fallback to single color if no valid range
+		r = 255;
+		g = 255;
+		b = 0;
+		a = 255; // Yellow
+		return;
+	}
+
 	float normalizedPosition = (focusPosition - FOCUS_MIN) / (FOCUS_MAX - FOCUS_MIN);
 	normalizedPosition = std::max(0.0f, std::min(1.0f, normalizedPosition)); // Clamp to [0,1]
 
-	// Simplified color mapping
-	// 190 = 0.0 = red (RGB = 255, 0, 0), 245 = 0.5 = yellow (RGB = 255, 255, 0), 450 = 1.0 = blue (RGB = 0, 0, 255)
+	// Color mapping based on normalized position
+	// 0.0 = red (RGB = 255, 0, 0), 0.5 = yellow (RGB = 255, 255, 0), 1.0 = blue (RGB = 0, 0, 255)
 	if (normalizedPosition <= 0.5)
 	{
 		// from (255, 0, 0) to (255, 255, 0)
@@ -284,7 +296,8 @@ static void focusPositionToColor(float focusPosition, unsigned char &r, unsigned
 	static int colorCallCount = 0;
 	if (++colorCallCount % 1000 == 0)
 	{
-		std::cout << "[Debug] Focus: " << focusPosition << ", RGB: " << (int)r << ", " << (int)g << ", " << (int)b << ", " << (int)a << std::endl;
+		std::cout << "[Debug] Focus: " << focusPosition << " (range: " << FOCUS_MIN << "-" << FOCUS_MAX
+				  << "), normalized: " << normalizedPosition << ", RGB: " << (int)r << ", " << (int)g << ", " << (int)b << std::endl;
 	}
 }
 

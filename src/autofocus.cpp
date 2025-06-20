@@ -67,7 +67,7 @@ std::string csvFilename;
 std::ofstream csvFile;
 
 // Add P gain as a member variable with default value
-double Kp = 0.005; // Changed from 0.0012 to 0.0014
+double Kp = 0.005; // HAS BEEN 0.005 FOR A LONG TIME
 
 std::atomic<double> currentMeasuredFocus{0.0}; // Current actual measured focus position
 
@@ -256,8 +256,8 @@ void autofocus::run()
   double min = -3;
   // double Kp = 0.0012;   this has to be set as a member variable now
   double Ki = 0.0;
-  // double Kd = 0.00008;
-  double Kd = 0.00005; // Changed from 0.0 to add a small derivative term
+  double Kd = 0.00005;
+  // double Kd = 0.00000; // Changed from 0.0 to add a small derivative term
 
   // PD variables for manual calculation and logging
   double filteredPreviousError = 0.0;
@@ -445,7 +445,7 @@ void autofocus::run()
           }
           else if (bFindFocus)
           {
-            desiredLocBestFocus = 400;
+            desiredLocBestFocus = 375;
             previous = static_cast<int>(std::round(locBestFocusDouble));
             if (bAutofocusLogFlag)
             {
@@ -485,14 +485,14 @@ void autofocus::run()
           pScaleFactor = 0.1 + (errorMagnitude - 3.0) * (1.0 - 0.1) / (100.0 - 3.0);
         }
 
-        // Apply directional multiplier for negative errors (locBestFocus < desired)
+        // // Apply directional multiplier for negative errors (locBestFocus < desired)
         double effectiveKp = Kp;
-        if (currentError > 0)
-        {
-          effectiveKp *= 1.3; // 30% more aggressive when moving in positive direction
-        }
+        // if (currentError > 0)
+        // {
+        //   effectiveKp *= 1.3; // 30% more aggressive when moving in positive direction
+        // }
 
-        double pSignal = effectiveKp * currentError * pScaleFactor;
+        double pSignal = Kp * currentError * pScaleFactor;
 
         // Calculate derivative using filtered measurement
         double filteredCurrentError = desiredLocBestFocus - filteredLocBestFocus;
@@ -544,6 +544,7 @@ void autofocus::run()
           // Blink starts
           if (bAutofocusLogFlag)
             logger->info("[autofocus::run] Frame ignored; blink detected");
+          std::cout << "Blink detected" << std::endl;
           blink = 1;
         }
         else if (blink == 1)
