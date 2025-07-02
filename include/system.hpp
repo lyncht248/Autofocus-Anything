@@ -16,7 +16,7 @@
 #include "logfile.hpp"
 #include "stabiliser.hpp"
 #include "framefilter.hpp"
-#include "phasecorr_stabiliser.hpp"
+#include "phasecorr2_stabiliser.hpp"
 #include "sharpness_analyzer.hpp"
 #include "sharpness_graph.hpp"
 #include "imagingcam.hpp"
@@ -58,12 +58,6 @@ protected: // Only available to derived and friend classes
 
 	TooN::Vector<2> offset, currentOff, rasterPos;
 	TSQueue<VidFrame *> stabQueue, released;
-
-	// Variables for improved stabilization frame distribution
-	TooN::Vector<2> lastCalculatedOffset;
-	TooN::Vector<2> distributedOffset;
-	int skipFactor;
-	int framesSinceLastCalculation;
 
 	Glib::Threads::Thread *processorThread, *stabThread;
 };
@@ -249,11 +243,10 @@ private:
 	bool lensDisconnected = false;
 
 	// Add a boolean to enable or disable PhaseCorr usage.
-	bool usePhaseCorr = false;
+	bool usePhaseCorr = true;
 
-	// Add a PhaseCorrStabiliser object
-	PhaseCorrStabiliser phaseCorrStabiliser;
-
+	// Add a PhaseCorrStabiliser2 object
+	PhaseCorrStabiliser2 phaseCorrStabiliser{8, 1.0}; // 1.0 = complete replacement like old stabilizer
 	// Add a boolean to check if the reference frame is set
 	bool phaseCorrStabiliserReferenceNotSet = true;
 

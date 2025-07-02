@@ -21,7 +21,7 @@
 #include "main.hpp"
 #include "autofocus.hpp"
 #include "notificationCenter.hpp"
-#include "phasecorr_stabiliser.hpp"
+#include "phasecorr2_stabiliser.hpp"
 #include "sharpness_analyzer.hpp"
 #include "sharpness_graph.hpp"
 #include "imagingcam.hpp"
@@ -96,11 +96,7 @@ FrameProcessor::FrameProcessor(System &sys) : processed(nullptr),
 											  currentOff(TooN::Zeros),
 											  rasterPos(TooN::Zeros),
 											  stabQueue(4),
-											  released(),
-											  lastCalculatedOffset(TooN::Zeros),
-											  distributedOffset(TooN::Zeros),
-											  skipFactor(1),
-											  framesSinceLastCalculation(0)
+											  released()
 {
 	processorThread = Glib::Threads::Thread::create(sigc::mem_fun(*this, &FrameProcessor::processFrame));
 	stabThread = Glib::Threads::Thread::create(sigc::mem_fun(*this, &FrameProcessor::stabilise));
@@ -143,12 +139,9 @@ void FrameProcessor::stabilise()
 
 	ThreadStopper::makeStoppable();
 
-	// Stabilization logic:
-	// - Caps analysis at 30fps for performance at high frame rates (ONLY for phase correlation)
-	// - Distributes calculated offsets smoothly across frames
-	// - Example: At 60fps, calculates every 2nd frame and applies half the offset to each frame
-
-	int frameCount = 0;
+	// Stabilization logic using new fast and accurate phase correlation method:
+	// - Processes every frame for maximum accuracy
+	// - Uses center ROI with 0.5x downscaling for optimal speed/accuracy tradeoff
 
 	while (running)
 	{
@@ -167,116 +160,118 @@ void FrameProcessor::stabilise()
 		if (vframe == nullptr)
 			continue;
 
-		// Frame skipping logic - only applied to phase correlation, not old stabilizer
-		bool skipOffsetCalculation = false;
-
+		// Process every frame with the new faster and more accurate phase correlation method
 		if (system.usePhaseCorr)
 		{
-			// Improved frame skipping logic - cap analysis at 30fps and distribute offset
-			// This smooths stabilization at high frame rates by:
-			// 1. Calculating offset at most every 30fps (e.g., every 2nd frame at 60fps)
-			// 2. Distributing the calculated offset across all frames in the skip period
-			// 3. Applying equal portions to maintain smooth motion
-			double currentFPS = system.getFPS();
+			// Start timing for performance benchmarking
+			auto startTime = std::chrono::high_resolution_clock::now();
 
-			// Calculate skip factor to cap analysis at 30fps
-			skipFactor = std::max(1, static_cast<int>(std::ceil(currentFPS / 30.0)));
+			// Convert VidFrame -> cv::Mat
+			cv::Mat fullFrame(
+				vframe->size().y,
+				vframe->size().x,
+				CV_8UC1,
+				vframe->data());
 
-			// Only calculate offset every skipFactor frames
-			if (currentFPS > 30.0)
+			// Extract center ROI BEFORE downscaling to avoid subpixel issues
+			int roiWidth = fullFrame.cols / 2;
+			int roiHeight = fullFrame.rows / 2;
+			int roiX = (fullFrame.cols - roiWidth) / 2;
+			int roiY = (fullFrame.rows - roiHeight) / 2;
+
+			// Ensure ROI coordinates are even to avoid subpixel shifts
+			roiX = (roiX / 2) * 2;
+			roiY = (roiY / 2) * 2;
+			roiWidth = (roiWidth / 2) * 2;
+			roiHeight = (roiHeight / 2) * 2;
+
+			cv::Rect roiRect(roiX, roiY, roiWidth, roiHeight);
+			cv::Mat roiFrame = fullFrame(roiRect);
+
+			// Now downscale the ROI by 0.5x for optimal speed/accuracy tradeoff
+			cv::Mat halfFrame;
+			cv::resize(roiFrame, halfFrame, cv::Size(), 0.5, 0.5);
+
+			cv::Point2f shift(0.0f, 0.0f);
+			// If reference not set, init it
+			if (system.phaseCorrStabiliserReferenceNotSet)
 			{
-				skipOffsetCalculation = (frameCount % skipFactor != 0);
+				system.phaseCorrStabiliser.initReference(halfFrame);
+				system.phaseCorrStabiliserReferenceNotSet = false;
 			}
-		}
-		// For old stabilizer: always process every frame (no skipping)
-
-		frameCount++;
-
-		// If the user wants PhaseCorr, do that
-		if (system.usePhaseCorr)
-		{
-			if (!skipOffsetCalculation)
+			else
 			{
-				// Convert VidFrame -> cv::Mat
-				cv::Mat fullFrame(
-					vframe->size().y,
-					vframe->size().x,
-					CV_8UC1,
-					vframe->data());
+				// Compute offset using the new more accurate stabilizer
+				shift = system.phaseCorrStabiliser.computeShift(halfFrame);
+			}
 
-				// Extract center ROI BEFORE downscaling to avoid subpixel issues
-				int roiWidth = fullFrame.cols / 2;
-				int roiHeight = fullFrame.rows / 2;
-				int roiX = (fullFrame.cols - roiWidth) / 2;
-				int roiY = (fullFrame.rows - roiHeight) / 2;
+			// End timing and log performance
+			auto endTime = std::chrono::high_resolution_clock::now();
+			auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
 
-				// Ensure ROI coordinates are even to avoid subpixel shifts
-				roiX = (roiX / 2) * 2;
-				roiY = (roiY / 2) * 2;
-				roiWidth = (roiWidth / 2) * 2;
-				roiHeight = (roiHeight / 2) * 2;
+			static int frameCount = 0;
+			static long totalTime = 0;
+			frameCount++;
+			totalTime += duration.count();
 
-				cv::Rect roiRect(roiX, roiY, roiWidth, roiHeight);
-				cv::Mat roiFrame = fullFrame(roiRect);
-
-				// Now downscale the ROI
-				cv::Mat halfFrame;
-				cv::resize(roiFrame, halfFrame, cv::Size(), 0.5, 0.5);
-
-				cv::Point2f shift(0.0f, 0.0f);
-				// If reference not set, init it
-				if (system.phaseCorrStabiliserReferenceNotSet)
+			// Log performance every 30 frames
+			if (frameCount % 30 == 0)
+			{
+				double avgTime = totalTime / 30.0;
+				if (bSystemLogFlag)
 				{
-					system.phaseCorrStabiliser.initReference(halfFrame);
-					system.phaseCorrStabiliserReferenceNotSet = false;
+					logger->info("[PhaseCorrStabiliser2] Avg time per frame: {:.2f}μs ({:.2f}ms), Frame size: {}x{}, Raw shift: ({:.3f}, {:.3f})",
+								 avgTime, avgTime / 1000.0, halfFrame.cols, halfFrame.rows, shift.x, shift.y);
 				}
-				else
-				{
-					// Compute offset
-					shift = system.phaseCorrStabiliser.computeShift(halfFrame);
-				}
-
-				stabMutex.lock();
-				// Scale shift back up by factor of 2.0 (since we used 0.5 scale)
-				TooN::Vector<2> calculatedOffset;
-				calculatedOffset[0] = shift.x * -2.0f;
-				calculatedOffset[1] = shift.y * -2.0f;
-
-				// Store the full calculated offset and distribute it
-				lastCalculatedOffset = calculatedOffset;
-				distributedOffset = lastCalculatedOffset / static_cast<double>(skipFactor);
-				framesSinceLastCalculation = 0;
-
-				// Apply the distributed portion
-				currentOff = distributedOffset;
-				offset += currentOff;
-				_stabComplete = stabQueue.empty();
-				if (_stabComplete)
-					stabComplete.broadcast();
-				stabMutex.unlock();
+				totalTime = 0;
 			}
-			else if (system.usePhaseCorr)
-			{
-				// Apply the distributed portion of the last calculated offset (phase correlation only)
-				stabMutex.lock();
-				framesSinceLastCalculation++;
 
-				// Apply the distributed offset to smooth motion
-				currentOff = distributedOffset;
-				offset += currentOff;
+			stabMutex.lock();
+			// Scale shift back up by factor of 2.0 (only for 0.5x downscaling - ROI extraction doesn't affect coordinate scaling)
+			// Positive shift means frame moved right/down, so we need to move display left/up to compensate
+			TooN::Vector<2> calculatedOffset;
+			calculatedOffset[0] = shift.x * 2.0f; // 2x scaling to account for 0.5x downscaling
+			calculatedOffset[1] = shift.y * 2.0f; // 2x scaling to account for 0.5x downscaling
 
-				_stabComplete = stabQueue.empty();
-				if (_stabComplete)
-					stabComplete.broadcast();
-				stabMutex.unlock();
-			}
+			// Apply the offset directly (no distribution needed with faster stabilizer)
+			currentOff = calculatedOffset;
+			offset += currentOff;
+			_stabComplete = stabQueue.empty();
+			if (_stabComplete)
+				stabComplete.broadcast();
+			stabMutex.unlock();
 		}
 		else
 		{
 			// Original stabiliser method - runs on every frame (no skipping)
 			if (system.stabiliser.is_valid())
 			{
+				// Start timing for performance comparison
+				auto startTime = std::chrono::high_resolution_clock::now();
+
 				TooN::Vector<2> calculatedOffset = system.stabiliser.stabilise(*vframe, offset);
+
+				// End timing and log performance
+				auto endTime = std::chrono::high_resolution_clock::now();
+				auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+
+				static int oldFrameCount = 0;
+				static long oldTotalTime = 0;
+				oldFrameCount++;
+				oldTotalTime += duration.count();
+
+				// Log performance every 30 frames
+				if (oldFrameCount % 30 == 0)
+				{
+					double avgTime = oldTotalTime / 30.0;
+					if (bSystemLogFlag)
+					{
+						logger->info("[OldStabiliser] Avg time per frame: {:.2f}μs ({:.2f}ms), Frame size: {}x{}",
+									 avgTime, avgTime / 1000.0, vframe->size().x, vframe->size().y);
+					}
+					oldTotalTime = 0;
+				}
+
 				stabMutex.lock();
 
 				// Apply the offset directly without distribution (every frame processing)
@@ -402,16 +397,7 @@ void FrameProcessor::processFrame() // What to do with each frame received from 
 					stabComplete.wait(stabMutex);
 
 			rasterPos[0] -= currentOff[0]; // x offset
-
-			// Apply correcting factor only for phase correlation, not for old stabilizer
-			if (system.usePhaseCorr)
-			{
-				rasterPos[1] -= (currentOff[1] + (system.getFPS() > 30.0 ? 0.5 : 1.0)); // y offset with correction
-			}
-			else
-			{
-				rasterPos[1] -= currentOff[1]; // y offset without correction for old stabilizer
-			}
+			rasterPos[1] -= currentOff[1]; // y offset (no correction needed with new stabilizer)
 
 			currentOff = TooN::Zeros;
 			stabMutex.unlock();
@@ -640,9 +626,6 @@ void FrameProcessor::releaseFrame()
 void FrameProcessor::resetRaster()
 {
 	rasterPos = offset = currentOff = TooN::Zeros;
-	lastCalculatedOffset = distributedOffset = TooN::Zeros;
-	skipFactor = 1;
-	framesSinceLastCalculation = 0;
 	SDLWindow::setRaster(childwin);
 	if (bSystemLogFlag)
 	{
@@ -1260,7 +1243,7 @@ void System::whenStabiliseToggled(bool stabilising)
 
 		if (usePhaseCorr)
 		{
-			// Reset the PhaseCorrStabiliser reference
+			// Reset the PhaseCorrStabiliser2 reference
 			phaseCorrStabiliser.reset();
 			phaseCorrStabiliserReferenceNotSet = true;
 		}

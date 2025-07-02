@@ -17,6 +17,7 @@
 #include <atomic>
 #include <unistd.h>
 #include <thread>
+#include <mutex>
 #include <sched.h>
 #include <filesystem>
 #include <sstream>
@@ -149,25 +150,50 @@ bool autofocus::initialize()
       logger->info("[autofocus::autofocus] autofocus::run thread started");
     }
 
-    // Initialize CSV logging
+    // Initialize CSV logging with better error handling
     std::string outputDir = "../output";
-    std::filesystem::create_directories(outputDir);
-
-    auto now = std::chrono::system_clock::now();
-    auto time_t = std::chrono::system_clock::to_time_t(now);
-    csvFilename = outputDir + "/autofocus_data.csv";
-    csvFile.open(csvFilename);
-
-    if (csvFile.is_open())
+    try
     {
-      // Write CSV header using actual variable names
-      csvFile << "timestamp_ms,imgcountfile,desiredLocBestFocus,locBestFocus,pSignal,filteredLocBestFocus,dSignal,totalPdSignal,Kp\n";
-      csvFile.flush();
-      logger->info("[autofocus::initialize] CSV logging started: " + csvFilename);
+      if (!std::filesystem::create_directories(outputDir) && !std::filesystem::exists(outputDir))
+      {
+        logger->error("[autofocus::initialize] Failed to create output directory: " + outputDir);
+        return false;
+      }
+
+      csvFilename = outputDir + "/autofocus_data.csv";
+      csvFile.open(csvFilename, std::ios::out | std::ios::trunc);
+
+      if (csvFile.is_open() && csvFile.good())
+      {
+        // Always write CSV header since we're overwriting the file
+        csvFile << "timestamp_ms,imgcountfile,desiredLocBestFocus,locBestFocus,pSignal,filteredLocBestFocus,dSignal,totalPdSignal,Kp\n";
+
+        csvFile.flush();
+
+        if (csvFile.fail())
+        {
+          logger->error("[autofocus::initialize] Failed to write CSV header: " + csvFilename);
+          csvFile.close();
+          return false;
+        }
+
+        logger->info("[autofocus::initialize] CSV logging started: " + csvFilename);
+      }
+      else
+      {
+        logger->error("[autofocus::initialize] Failed to open CSV file: " + csvFilename);
+        return false;
+      }
     }
-    else
+    catch (const std::filesystem::filesystem_error &ex)
     {
-      logger->error("[autofocus::initialize] Failed to open CSV file: " + csvFilename);
+      logger->error("[autofocus::initialize] Filesystem error: " + std::string(ex.what()));
+      return false;
+    }
+    catch (const std::exception &ex)
+    {
+      logger->error("[autofocus::initialize] Error setting up CSV logging: " + std::string(ex.what()));
+      return false;
     }
 
     return true;
@@ -215,11 +241,15 @@ autofocus::~autofocus()
     logger->info("[autofocus::~autofocus] destructor completed");
   }
 
-  // Close CSV file
-  if (csvFile.is_open())
+  // Close CSV file with proper synchronization
   {
-    csvFile.close();
-    logger->info("[autofocus::~autofocus] CSV file closed: " + csvFilename);
+    std::lock_guard<std::mutex> lock(csvMutex);
+    if (csvFile.is_open())
+    {
+      csvFile.flush(); // Ensure all data is written before closing
+      csvFile.close();
+      logger->info("[autofocus::~autofocus] CSV file closed: " + csvFilename);
+    }
   }
 }
 
@@ -256,8 +286,8 @@ void autofocus::run()
   double min = -3;
   // double Kp = 0.0012;   this has to be set as a member variable now
   double Ki = 0.0;
-  double Kd = 0.00005;
-  // double Kd = 0.00000; // Changed from 0.0 to add a small derivative term
+  // double Kd = 0.00005;
+  double Kd = 0.00005; // Changed from 0.0 to add a small derivative term
 
   // PD variables for manual calculation and logging
   double filteredPreviousError = 0.0;
@@ -298,9 +328,9 @@ void autofocus::run()
         double fps = timeDiff > 0 ? 1000.0 / timeDiff : 0.0;
 
         // // Output to console for every frame
-        // std::cout << "locBestFocus: " << locBestFocusDouble
-        //           << ", desiredLocBestFocus: " << desiredLocBestFocus
-        //           << ", FPS: " << std::fixed << std::setprecision(1) << fps << std::endl;
+        std::cout << "locBestFocus: " << locBestFocusDouble
+                  << ", desiredLocBestFocus: " << desiredLocBestFocus
+                  << ", FPS: " << std::fixed << std::setprecision(1) << fps << std::endl;
 
         lastTime = currentTime;
 
@@ -473,7 +503,7 @@ void autofocus::run()
         double pScaleFactor;
         if (errorMagnitude <= 3.0)
         {
-          pScaleFactor = 0.1;
+          pScaleFactor = 0.15;
         }
         else if (errorMagnitude >= 100.0)
         {
@@ -482,7 +512,7 @@ void autofocus::run()
         else
         {
           // Linear interpolation between 3 pixels (0.1x) and 100 pixels (1.0x)
-          pScaleFactor = 0.1 + (errorMagnitude - 3.0) * (1.0 - 0.1) / (100.0 - 3.0);
+          pScaleFactor = 0.15 + (errorMagnitude - 3.0) * (1.0 - 0.15) / (100.0 - 3.0);
         }
 
         // // Apply directional multiplier for negative errors (locBestFocus < desired)
@@ -514,27 +544,67 @@ void autofocus::run()
         // previousError = currentError; not actually used
         filteredPreviousError = filteredCurrentError;
 
-        // Log data to CSV
-        if (csvFile.is_open())
+        // Log data to CSV with improved error handling and thread safety
         {
-          auto currentTime = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                 std::chrono::system_clock::now().time_since_epoch())
-                                 .count();
-
-          csvFile << currentTime << ","
-                  << imgcountfile << ","
-                  << desiredLocBestFocus << ","
-                  << locBestFocusDouble << ","
-                  << pSignal << ","
-                  << filteredLocBestFocus << ","
-                  << dSignal << ","
-                  << totalPdSignal << ","
-                  << Kp << "\n";
-
-          // Flush every 10 frames to ensure data is written
-          if (imgcountfile % 10 == 0)
+          std::lock_guard<std::mutex> lock(csvMutex);
+          if (csvFile.is_open() && csvFile.good())
           {
-            csvFile.flush();
+            auto currentTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   std::chrono::system_clock::now().time_since_epoch())
+                                   .count();
+
+            // Use higher precision for double values
+            csvFile << std::fixed << std::setprecision(6);
+            csvFile << currentTime << ","
+                    << imgcountfile << ","
+                    << desiredLocBestFocus << ","
+                    << locBestFocusDouble << ","
+                    << pSignal << ","
+                    << filteredLocBestFocus << ","
+                    << dSignal << ","
+                    << totalPdSignal << ","
+                    << Kp << "\n";
+
+            // More frequent flushing for data safety - every 5 frames
+            if (imgcountfile % 5 == 0)
+            {
+              csvFile.flush();
+            }
+
+            // Check for write errors
+            if (csvFile.fail())
+            {
+              if (bAutofocusLogFlag)
+              {
+                logger->error("[autofocus::run] CSV write error detected, attempting to recover");
+              }
+
+              // Clear error flags and try to recover
+              csvFile.clear();
+
+              // If still failing, close and try to reopen
+              if (csvFile.fail())
+              {
+                csvFile.close();
+                csvFile.open(csvFilename, std::ios::out | std::ios::app);
+                if (!csvFile.is_open())
+                {
+                  if (bAutofocusLogFlag)
+                  {
+                    logger->error("[autofocus::run] Failed to recover CSV file: " + csvFilename);
+                  }
+                }
+              }
+            }
+          }
+          else if (csvFile.is_open())
+          {
+            // File is open but in bad state, try to recover
+            if (bAutofocusLogFlag)
+            {
+              logger->warn("[autofocus::run] CSV file in bad state, attempting recovery");
+            }
+            csvFile.clear();
           }
         }
 
@@ -747,20 +817,38 @@ int autofocus::computeBestFocus(cv::Mat image, int imgHeight, int imgWidth)
   auto fittingTime = std::chrono::duration_cast<std::chrono::microseconds>(fittingEnd - fittingStart);
   auto totalTime = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
 
-  // Save timing information to CSV file
-  std::ofstream benchmarkFile("../output/focus_benchmark.csv", std::ios::app);
-  if (benchmarkFile.is_open())
+  // Save timing information to CSV file with better error handling
+  try
   {
-    time_t now = time(0);
-    benchmarkFile << now << ","
-                  << totalTime.count() << ","
-                  << claheTime.count() << ","
-                  << blurTime.count() << ","
-                  << tenengradTime.count() << ","
-                  << columnTime.count() << ","
-                  << slidingTime.count() << ","
-                  << fittingTime.count() << std::endl;
-    benchmarkFile.close();
+    std::ofstream benchmarkFile("../output/focus_benchmark.csv", std::ios::app);
+    if (benchmarkFile.is_open() && benchmarkFile.good())
+    {
+      time_t now = time(0);
+      benchmarkFile << now << ","
+                    << totalTime.count() << ","
+                    << claheTime.count() << ","
+                    << blurTime.count() << ","
+                    << tenengradTime.count() << ","
+                    << columnTime.count() << ","
+                    << slidingTime.count() << ","
+                    << fittingTime.count() << std::endl;
+
+      if (benchmarkFile.fail())
+      {
+        if (bAutofocusLogFlag)
+        {
+          logger->warn("[autofocus::computeBestFocus] Failed to write benchmark data");
+        }
+      }
+      benchmarkFile.close();
+    }
+  }
+  catch (const std::exception &ex)
+  {
+    if (bAutofocusLogFlag)
+    {
+      logger->error("[autofocus::computeBestFocus] Benchmark file error: " + std::string(ex.what()));
+    }
   }
 
   return locBestFocus + kernel / 2; // Note: kernel/2 offset needed for sliding window
@@ -898,22 +986,40 @@ double autofocus::computeBestFocusReduced(cv::Mat image, int imgHeight, int imgW
   auto slidingTime = std::chrono::duration_cast<std::chrono::microseconds>(slidingEnd - slidingStart);
   auto comTime = std::chrono::duration_cast<std::chrono::microseconds>(comEnd - comStart);
 
-  std::ofstream reducedBenchmarkFile("../output/focus_benchmark_reduced.csv", std::ios::app);
-  if (reducedBenchmarkFile.is_open())
+  try
   {
-    auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                         std::chrono::system_clock::now().time_since_epoch())
-                         .count();
-    reducedBenchmarkFile << timestamp << ","
-                         << totalTime.count() << ","
-                         << resizeTime.count() << ","
-                         << claheTime.count() << ","
-                         << blurTime.count() << ","
-                         << robertsTime.count() << ","
-                         << columnTime.count() << ","
-                         << slidingTime.count() << ","
-                         << comTime.count() << std::endl;
-    reducedBenchmarkFile.close();
+    std::ofstream reducedBenchmarkFile("../output/focus_benchmark_reduced.csv", std::ios::app);
+    if (reducedBenchmarkFile.is_open() && reducedBenchmarkFile.good())
+    {
+      auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::system_clock::now().time_since_epoch())
+                           .count();
+      reducedBenchmarkFile << timestamp << ","
+                           << totalTime.count() << ","
+                           << resizeTime.count() << ","
+                           << claheTime.count() << ","
+                           << blurTime.count() << ","
+                           << robertsTime.count() << ","
+                           << columnTime.count() << ","
+                           << slidingTime.count() << ","
+                           << comTime.count() << std::endl;
+
+      if (reducedBenchmarkFile.fail())
+      {
+        if (bAutofocusLogFlag)
+        {
+          logger->warn("[autofocus::computeBestFocusReduced] Failed to write benchmark data");
+        }
+      }
+      reducedBenchmarkFile.close();
+    }
+  }
+  catch (const std::exception &ex)
+  {
+    if (bAutofocusLogFlag)
+    {
+      logger->error("[autofocus::computeBestFocusReduced] Benchmark file error: " + std::string(ex.what()));
+    }
   }
 
   return (centerOfMass + kernel / 2);

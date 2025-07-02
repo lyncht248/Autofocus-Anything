@@ -332,7 +332,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 						   // thresScale(0, 1, 0.01, 0.4, 6, 100),
 						   // scaleScale(0, 5, 0.01, 2.0, 6, 100),
 						   waitScale(0, HVIGTK_STAB_LIM, 100, 0, 6, 100),
-						   recordingSizeScale(100, 1800, 10, 900, 6, 100),
+						   recordingSizeScale(100, 1800, 10, 1200, 6, 100),
 						   // bestFocusScale(8, 632, 5, 200, 4, 100),
 						   bestFocusScale(190, 450, 5, 240, 4, 100),
 						   homePositionScale(-14.0, 0.0, 0.1, -9.1, 4, 100),
@@ -792,8 +792,6 @@ MainWindow::MainWindow() : Gtk::Window(),
 	priv->sharpnessLabel.set_text("Focus Profile");
 	priv->sharpnessLabel.set_justify(Gtk::Justification::JUSTIFY_CENTER);
 	priv->sharpnessLabel.set_halign(Gtk::Align::ALIGN_CENTER);
-
-	recordingSizeScale.setValue(600); // Ensure the recording size is set to 1200
 }
 
 // double MainWindow::getFrameRateScaleValue() const
@@ -1266,7 +1264,7 @@ void MainWindow::onFindFocusToggled()
 
 		// Make best focus scale active
 		bestFocusScale.set_sensitive(true);
-		bestFocusScale.setValue(400); // Set default best focus value to 320
+		bestFocusScale.setValue(375); // Set default best focus value to 320
 
 		// Start the find focus process
 		imgcount = 0;
