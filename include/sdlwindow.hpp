@@ -3,6 +3,7 @@
 
 #include <SDL.h>
 #include <pthread.h>
+#include <vector>
 #include "sdlwincommon.hpp"
 
 namespace SDLWindow
@@ -27,14 +28,14 @@ namespace SDLWindow
 		return sdlwin->response;
 	}
 
-	extern SDLWin* sdlwin_open();
-	extern void sdlwin_close(SDLWin* win);
+	extern SDLWin *sdlwin_open();
+	extern void sdlwin_close(SDLWin *win);
 
 	extern Response createFrame(SDLWin *win, int width, int height);
-	extern Response renderFrameG8(SDLWin *win, const void *buf = nullptr, size_t n=0, int xoff=0, int yoff=0);
-	extern void setRaster(SDLWin *win, int x=0, int y=0);
+	extern Response renderFrameG8(SDLWin *win, const void *buf = nullptr, size_t n = 0, int xoff = 0, int yoff = 0);
+	extern void setRaster(SDLWin *win, int x = 0, int y = 0);
 
-	extern unsigned long long upload(SDLWin *win, const void *buf, size_t n, bool lock = true, int i = 0, unsigned long long off=0);
+	extern unsigned long long upload(SDLWin *win, const void *buf, size_t n, bool lock = true, int i = 0, unsigned long long off = 0);
 	extern Response updateMap(SDLWin *win, const void *buf, int width, int height, int pitch);
 	extern void setShowingMap(SDLWin *win, bool value);
 	extern void resetZoom(SDLWin *win);
@@ -43,6 +44,10 @@ namespace SDLWindow
 	extern void unraise(SDLWin *win);
 	extern void hide(SDLWin *win);
 	extern void move(SDLWin *win, int x, int y);
+
+	extern void transferDepthMapData(SDLWin *win, const std::vector<std::vector<std::pair<double, double>>> &depthImage, int width, int height);
+	extern void clearDepthMapData(SDLWin *win);
+	extern void forceDepthMapTextureUpdate();
 
 	extern void quit(SDLWin *win);
 }

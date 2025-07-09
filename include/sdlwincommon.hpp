@@ -65,12 +65,37 @@ namespace SDLWindow
 		double zoomFactor;
 		double zoomOffsetX;
 		double zoomOffsetY;
-		
+
 		// Add ROI display parameters
-		System* system;
+		System *system;
 		bool showROI;
 		int roiCenterX, roiCenterY;
 		int roiWidth, roiHeight;
+		bool searchComplete;
+
+		// Stabilization offset for ROI display
+		double stabOffsetX, stabOffsetY;
+		bool stabActive;
+
+		// Depth mapping display parameters
+		bool showDepthMap;
+		bool hasDepthMap;
+
+		// Depth map data - simple types safe for shared memory
+		int depthMapWidth;
+		int depthMapHeight;
+
+		// Dynamic focus range from actual depth map data
+		float focusMin;
+		float focusMax;
+
+		// The size of the depth image - increased to accommodate typical camera resolutions
+		// Store actual focus positions for each pixel, negative values = no data
+		static constexpr int MAX_DEPTH_WIDTH = 512;	 // Max supported width (was 256)
+		static constexpr int MAX_DEPTH_HEIGHT = 384; // Max supported height (was 192)
+		float focusPositions[MAX_DEPTH_HEIGHT][MAX_DEPTH_WIDTH];
+		bool depthMapReady;
+		int depthDataVersion; // Track when depth data changes
 	};
 }
 

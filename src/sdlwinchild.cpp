@@ -5,11 +5,14 @@
 #include <stdint.h>
 #include <signal.h>
 #include <iostream>
+#include <cmath>
+#include <algorithm>
 #include "logfile.hpp"
 #include "SDL_render.h"
 #include "SDL_video.h"
 #include "sdlwinchild.hpp"
 #include "main.hpp"
+#include "system.hpp"
 #include <SDL_ttf.h>
 #include <SDL.h>
 
@@ -23,16 +26,15 @@ enum
 	BORDER_RIGHT
 };
 
-SDL_Rect borders[4] = { 
-	{0,0,1,BORDER_THRES}, 
-	{0,1,1,BORDER_THRES}, 
-	{0,0,BORDER_THRES,1},
-	{1,0,BORDER_THRES,1}
-};
+SDL_Rect borders[4] = {
+	{0, 0, 1, BORDER_THRES},
+	{0, 1, 1, BORDER_THRES},
+	{0, 0, BORDER_THRES, 1},
+	{1, 0, BORDER_THRES, 1}};
 
 using namespace SDLWindow;
 
-TTF_Font* font = nullptr;
+TTF_Font *font = nullptr;
 
 // Track mouse dragging for image panning and window dragging
 bool isDraggingImage = false;
@@ -40,8 +42,8 @@ bool isDraggingWindow = false;
 int dragStartX = 0;
 int dragStartY = 0;
 
-SDL_Cursor* handCursor = nullptr;
-SDL_Cursor* defaultCursor = nullptr;
+SDL_Cursor *handCursor = nullptr;
+SDL_Cursor *defaultCursor = nullptr;
 
 static bool debug_print = true;
 static int counter = 0;
@@ -52,7 +54,9 @@ static int lastClickX = 0, lastClickY = 0;
 
 // Forward declarations
 static void handleDoubleClick(int x, int y);
-static void drawROIOverlay(SDL_Renderer* renderer);
+static void drawROIOverlay(SDL_Renderer *renderer);
+static void drawDepthMapOverlay(SDL_Renderer *renderer);
+static void handleDoubleClickWithRenderer(int x, int y, SDL_Renderer *renderer);
 
 void convert_g8_to_rgb888(uint32_t *dst, const uint8_t *src, ssize_t n)
 {
@@ -72,93 +76,423 @@ void interrupt(int signo, siginfo_t *info, void *context)
 }
 
 // Add this function after the existing functions
-static void handleDoubleClick(int x, int y) {
-    // Convert screen coordinates to image coordinates
-    // For now, we'll store the screen coordinates and let the main process handle conversion
-    if (sdlwin) {
-        // Store the click position in shared memory for the main process to handle
-        pthread_mutex_lock(&sdlwin->mutex);
-        sdlwin->lcmd[10].d_int = x;  // Use some unused slots in lcmd
-        sdlwin->lcmd[11].d_int = y;
-        sdlwin->lcmd[12].d_bool = true; // Flag that we have a new ROI center
-        pthread_mutex_unlock(&sdlwin->mutex);
-        
-        printf("[SDL Child] Double-click detected at (%d, %d)\n", x, y);
-    }
+static void handleDoubleClick(int x, int y)
+{
+	if (!sdlwin)
+		return;
+
+	// We need to get the renderer to do proper coordinate conversion
+	// For now, store screen coordinates and let the main process handle conversion
+	pthread_mutex_lock(&sdlwin->mutex);
+	sdlwin->lcmd[10].d_int = x; // Store screen coordinates temporarily
+	sdlwin->lcmd[11].d_int = y;
+	sdlwin->lcmd[12].d_bool = true; // Flag that we have a new ROI center
+	pthread_mutex_unlock(&sdlwin->mutex);
+
+	printf("[SDL Child] Double-click detected at screen (%d, %d)\n", x, y);
+}
+
+// Add this function to handle double-click with proper coordinate conversion
+static void handleDoubleClickWithRenderer(int x, int y, SDL_Renderer *renderer)
+{
+	if (!sdlwin || !renderer)
+		return;
+
+	// Get current window dimensions from renderer
+	int windowWidth, windowHeight;
+	SDL_GetRendererOutputSize(renderer, &windowWidth, &windowHeight);
+
+	// Use the same coordinate transformation logic as in the mouse wheel handler
+	double xscale = ((double)windowWidth - BORDER_THRES * 2) / sdlwin->raster.w;
+	double yscale = ((double)windowHeight - BORDER_THRES * 2) / sdlwin->raster.h;
+	double arscale = xscale > yscale ? yscale : xscale;
+
+	// Apply zoom factor to the scaling
+	double zoomedScale = arscale * sdlwin->zoomFactor;
+	double swidth = zoomedScale * sdlwin->raster.w;
+	double sheight = zoomedScale * sdlwin->raster.h;
+
+	// Calculate center position (same as in redraw function)
+	double centerX = (windowWidth - swidth) / 2.0;
+	double centerY = (windowHeight - sheight) / 2.0;
+
+	// Make sure we don't go beyond borders
+	if (centerX < BORDER_THRES)
+		centerX = BORDER_THRES;
+	if (centerY < BORDER_THRES)
+		centerY = BORDER_THRES;
+
+	// Account for zoom offsets but NOT stabilization offsets (raster.x/y) for ROI placement
+	// We want to set ROI at original image coordinates, then let stabilization track from there
+	double adjustedCenterX = centerX + zoomedScale * sdlwin->zoomOffsetX;
+	double adjustedCenterY = centerY + zoomedScale * sdlwin->zoomOffsetY;
+
+	// Convert screen coordinates to image coordinates (ignoring stabilization offset)
+	// This gives us the original image coordinates as if there was no stabilization
+	double imageX = (x - adjustedCenterX) / zoomedScale;
+	double imageY = (y - adjustedCenterY) / zoomedScale;
+
+	// Clamp to image bounds
+	imageX = std::max(0.0, std::min(imageX, (double)(sdlwin->raster.w - 1)));
+	imageY = std::max(0.0, std::min(imageY, (double)(sdlwin->raster.h - 1)));
+
+	// Store the converted image coordinates in shared memory for the main process
+	pthread_mutex_lock(&sdlwin->mutex);
+	sdlwin->lcmd[10].d_int = (int)imageX; // Store converted image coordinates
+	sdlwin->lcmd[11].d_int = (int)imageY;
+	sdlwin->lcmd[12].d_bool = true; // Flag that we have a new ROI center
+	pthread_mutex_unlock(&sdlwin->mutex);
+
+	printf("[SDL Child] Double-click at screen (%d, %d) -> image (%d, %d)\n",
+		   x, y, (int)imageX, (int)imageY);
 }
 
 // Add this function to draw the ROI overlay
-static void drawROIOverlay(SDL_Renderer* renderer) {
-    if (!sdlwin || !sdlwin->showROI) {
-        return;
-    }
-    
-    pthread_mutex_lock(&sdlwin->mutex);
-    int centerX = sdlwin->roiCenterX;
-    int centerY = sdlwin->roiCenterY;
-    int width = sdlwin->roiWidth;
-    int height = sdlwin->roiHeight;
-    bool showROI = sdlwin->showROI;
-    pthread_mutex_unlock(&sdlwin->mutex);
-    
-    if (!showROI || centerX < 0 || centerY < 0) {
-        return;
-    }
-    
-    // Calculate ROI rectangle
-    int roiX = centerX - width / 2;
-    int roiY = centerY - height / 2;
-    
-    // Draw ROI rectangle
-    SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255); // Yellow color
-    
-    SDL_Rect roiRect = {roiX, roiY, width, height};
-    SDL_RenderDrawRect(renderer, &roiRect);
-    
-    // Draw thicker border by drawing multiple rectangles
-    for (int i = 1; i < 3; i++) {
-        SDL_Rect thickRect = {roiX - i, roiY - i, width + 2*i, height + 2*i};
-        SDL_RenderDrawRect(renderer, &thickRect);
-    }
-    
-    // Draw center crosshair
-    SDL_RenderDrawLine(renderer, centerX - 5, centerY, centerX + 5, centerY);
-    SDL_RenderDrawLine(renderer, centerX, centerY - 5, centerX, centerY + 5);
+static void drawROIOverlay(SDL_Renderer *renderer)
+{
+	if (!sdlwin || !sdlwin->showROI)
+	{
+		return;
+	}
+
+	pthread_mutex_lock(&sdlwin->mutex);
+	int imageCenterX = sdlwin->roiCenterX; // These are in image coordinates
+	int imageCenterY = sdlwin->roiCenterY;
+	int imageWidth = sdlwin->roiWidth;
+	int imageHeight = sdlwin->roiHeight;
+	bool showROI = sdlwin->showROI;
+	bool searchSuccessful = sdlwin->searchComplete;
+	pthread_mutex_unlock(&sdlwin->mutex);
+
+	if (!showROI || imageCenterX < 0 || imageCenterY < 0)
+	{
+		return;
+	}
+
+	// Convert image coordinates to screen coordinates using the same logic as redraw function
+	int windowWidth, windowHeight;
+	SDL_GetRendererOutputSize(renderer, &windowWidth, &windowHeight);
+
+	// Calculate scaling factors (same as in redraw function)
+	double xscale = ((double)windowWidth - BORDER_THRES * 2) / sdlwin->raster.w;
+	double yscale = ((double)windowHeight - BORDER_THRES * 2) / sdlwin->raster.h;
+	double arscale = xscale > yscale ? yscale : xscale;
+
+	// Apply zoom factor to the scaling
+	double zoomedScale = arscale * sdlwin->zoomFactor;
+	double swidth = zoomedScale * sdlwin->raster.w;
+	double sheight = zoomedScale * sdlwin->raster.h;
+
+	// Calculate center position (same as in redraw function)
+	double centerX = (windowWidth - swidth) / 2.0;
+	double centerY = (windowHeight - sheight) / 2.0;
+
+	// Make sure we don't go beyond borders
+	if (centerX < BORDER_THRES)
+		centerX = BORDER_THRES;
+	if (centerY < BORDER_THRES)
+		centerY = BORDER_THRES;
+
+	// Account for raster position and zoom offsets (same as in redraw function)
+	double adjustedCenterX = centerX + zoomedScale * (sdlwin->raster.x + sdlwin->zoomOffsetX);
+	double adjustedCenterY = centerY + zoomedScale * (sdlwin->raster.y + sdlwin->zoomOffsetY);
+
+	// Get stabilization offset from shared memory and apply to ROI display
+	double roiDisplayX = imageCenterX;
+	double roiDisplayY = imageCenterY;
+
+	// Use stabilization offset from shared memory (updated by main process)
+	if (sdlwin->stabActive)
+	{
+		// For display, the ROI should show where the analysis is happening (opposite to stab offset)
+		// This matches the logic in imagingcam.cpp where analysis moves opposite to stabilization
+		roiDisplayX = imageCenterX - sdlwin->stabOffsetX;
+		roiDisplayY = imageCenterY - sdlwin->stabOffsetY;
+	}
+
+	// Convert image coordinates to screen coordinates
+	int screenCenterX = (int)(adjustedCenterX + roiDisplayX * zoomedScale);
+	int screenCenterY = (int)(adjustedCenterY + roiDisplayY * zoomedScale);
+	int screenWidth = (int)(imageWidth * zoomedScale);
+	int screenHeight = (int)(imageHeight * zoomedScale);
+
+	// Calculate ROI rectangle in screen coordinates
+	int roiX = screenCenterX - screenWidth / 2;
+	int roiY = screenCenterY - screenHeight / 2;
+
+	// Choose color based on search success: red for successful, yellow for normal
+	if (searchSuccessful)
+	{
+		SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255); // Red color - optimal focus found
+	}
+	else
+	{
+		SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255); // Yellow color - normal ROI
+	}
+
+	SDL_Rect roiRect = {roiX, roiY, screenWidth, screenHeight};
+	SDL_RenderDrawRect(renderer, &roiRect);
+
+	// Draw thicker border by drawing multiple rectangles
+	for (int i = 1; i < 3; i++)
+	{
+		SDL_Rect thickRect = {roiX - i, roiY - i, screenWidth + 2 * i, screenHeight + 2 * i};
+		SDL_RenderDrawRect(renderer, &thickRect);
+	}
+
+	// Draw center crosshair
+	SDL_RenderDrawLine(renderer, screenCenterX - 5, screenCenterY, screenCenterX + 5, screenCenterY);
+	SDL_RenderDrawLine(renderer, screenCenterX, screenCenterY - 5, screenCenterX, screenCenterY + 5);
+}
+
+// Function to convert focus position to RGB color
+static void focusPositionToColor(float focusPosition, unsigned char &r, unsigned char &g, unsigned char &b, unsigned char &a)
+{
+	if (focusPosition < 0)
+	{
+		// No depth data - transparent
+		r = g = b = a = 0; // a is alpha which is 0 for transparent
+		return;
+	}
+
+	// Use dynamic focus range from actual depth map data
+	float FOCUS_MIN = sdlwin->focusMin;
+	float FOCUS_MAX = sdlwin->focusMax;
+
+	// Ensure we have a valid range (avoid division by zero)
+	if (FOCUS_MAX <= FOCUS_MIN)
+	{
+		// Fallback to single color if no valid range
+		r = 255;
+		g = 255;
+		b = 0;
+		a = 255; // Yellow
+		return;
+	}
+
+	float normalizedPosition = (focusPosition - FOCUS_MIN) / (FOCUS_MAX - FOCUS_MIN);
+	normalizedPosition = std::max(0.0f, std::min(1.0f, normalizedPosition)); // Clamp to [0,1]
+
+	// Color mapping based on normalized position
+	// 0.0 = red (RGB = 255, 0, 0), 0.5 = yellow (RGB = 255, 255, 0), 1.0 = blue (RGB = 0, 0, 255)
+	if (normalizedPosition <= 0.5)
+	{
+		// from (255, 0, 0) to (255, 255, 0)
+		r = 255;
+		g = 255 * normalizedPosition * 2;
+		b = 0;
+		a = 255;
+	}
+	else if (normalizedPosition > 0.5)
+	{
+		// from (255, 255, 0) to (0, 0, 255)
+		r = 255 - 255 * (normalizedPosition - 0.5) * 2;
+		g = 255 - 255 * (normalizedPosition - 0.5) * 2;
+		b = 255 * (normalizedPosition - 0.5) * 2;
+		a = 255;
+	}
+
+	// Debug output every 1000th call to avoid spam
+	static int colorCallCount = 0;
+	if (++colorCallCount % 1000 == 0)
+	{
+		std::cout << "[Debug] Focus: " << focusPosition << " (range: " << FOCUS_MIN << "-" << FOCUS_MAX
+				  << "), normalized: " << normalizedPosition << ", RGB: " << (int)r << ", " << (int)g << ", " << (int)b << std::endl;
+	}
+}
+
+// Static texture for efficient depth map rendering
+static SDL_Texture *depthMapTexture = nullptr;
+static int cachedDepthWidth = 0;
+static int cachedDepthHeight = 0;
+static bool forceTextureUpdate = false;
+static int lastDataVersion = 0; // Track data version changes
+
+// Function to force depth map texture update from outside
+void SDLWindow::forceDepthMapTextureUpdate()
+{
+	std::cout << "[Debug] forceDepthMapTextureUpdate() called - setting flag to true" << std::endl;
+	forceTextureUpdate = true;
+}
+
+// Add this function to draw the depth map overlay
+static void drawDepthMapOverlay(SDL_Renderer *renderer)
+{
+	if (!sdlwin || !sdlwin->showDepthMap || !sdlwin->hasDepthMap || !sdlwin->depthMapReady)
+	{
+		return;
+	}
+
+	// Get current window dimensions
+	int windowWidth, windowHeight;
+	SDL_GetRendererOutputSize(renderer, &windowWidth, &windowHeight);
+
+	pthread_mutex_lock(&sdlwin->mutex);
+	int depthWidth = sdlwin->depthMapWidth;
+	int depthHeight = sdlwin->depthMapHeight;
+	int currentDataVersion = sdlwin->depthDataVersion;
+
+	// Check if we need to recreate the texture (new data, first time, or data cleared)
+	bool needsTextureUpdate = (depthMapTexture == nullptr ||
+							   depthWidth != cachedDepthWidth ||
+							   depthHeight != cachedDepthHeight ||
+							   currentDataVersion != lastDataVersion ||
+							   forceTextureUpdate);
+
+	if (needsTextureUpdate)
+	{
+		std::cout << "[Debug] Texture update needed - texture=" << (depthMapTexture ? "exists" : "null")
+				  << ", dims: " << depthWidth << "x" << depthHeight
+				  << " vs cached: " << cachedDepthWidth << "x" << cachedDepthHeight
+				  << ", version: " << currentDataVersion << " vs cached: " << lastDataVersion
+				  << ", force=" << forceTextureUpdate << std::endl;
+		// Destroy old texture if it exists
+		if (depthMapTexture)
+		{
+			SDL_DestroyTexture(depthMapTexture);
+			depthMapTexture = nullptr;
+		}
+
+		// If data was cleared (width/height = 0), just destroy texture and return
+		if (depthWidth <= 0 || depthHeight <= 0)
+		{
+			cachedDepthWidth = depthWidth;
+			cachedDepthHeight = depthHeight;
+			pthread_mutex_unlock(&sdlwin->mutex);
+			return;
+		}
+
+		// Create new texture for the depth map
+		depthMapTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
+											SDL_TEXTUREACCESS_STREAMING, depthWidth, depthHeight);
+
+		if (depthMapTexture)
+		{
+			SDL_SetTextureBlendMode(depthMapTexture, SDL_BLENDMODE_BLEND);
+
+			// Lock texture and populate with depth data
+			void *pixels;
+			int pitch;
+			if (SDL_LockTexture(depthMapTexture, NULL, &pixels, &pitch) == 0)
+			{
+				Uint32 *pixelData = (Uint32 *)pixels;
+				int validPixelCount = 0;
+				float sampleFocus = -1.0f;
+
+				for (int y = 0; y < depthHeight; y++)
+				{
+					for (int x = 0; x < depthWidth; x++)
+					{
+						float focusPosition = sdlwin->focusPositions[y][x];
+						if (focusPosition > 0 && sampleFocus < 0)
+						{
+							sampleFocus = focusPosition; // Get first valid focus value as sample
+						}
+						if (focusPosition > 0)
+							validPixelCount++;
+
+						unsigned char r, g, b, a;
+						focusPositionToColor(focusPosition, r, g, b, a);
+
+						// Pack RGBA into a single Uint32 for SDL_PIXELFORMAT_RGBA8888
+						pixelData[y * (pitch / 4) + x] = (r << 24) | (g << 16) | (b << 8) | a;
+					}
+				}
+
+				std::cout << "[Debug] Texture populated with " << validPixelCount << " valid pixels, sample focus: " << sampleFocus << std::endl;
+				SDL_UnlockTexture(depthMapTexture);
+			}
+		}
+
+		// Always update cached dimensions and version after texture creation/destruction
+		cachedDepthWidth = depthWidth;
+		cachedDepthHeight = depthHeight;
+		lastDataVersion = currentDataVersion;
+		forceTextureUpdate = false; // Reset the force flag after update
+	}
+
+	pthread_mutex_unlock(&sdlwin->mutex);
+
+	if (!depthMapTexture || depthWidth <= 0 || depthHeight <= 0)
+	{
+		return;
+	}
+
+	// Calculate scaling to match current frame display
+	double xscale = ((double)windowWidth - BORDER_THRES * 2) / sdlwin->raster.w;
+	double yscale = ((double)windowHeight - BORDER_THRES * 2) / sdlwin->raster.h;
+	double arscale = xscale > yscale ? yscale : xscale;
+
+	// Apply zoom factor
+	double zoomedScale = arscale * sdlwin->zoomFactor;
+	double swidth = zoomedScale * sdlwin->raster.w;
+	double sheight = zoomedScale * sdlwin->raster.h;
+
+	// Calculate center position
+	double centerX = (windowWidth - swidth) / 2.0;
+	double centerY = (windowHeight - sheight) / 2.0;
+
+	if (centerX < BORDER_THRES)
+		centerX = BORDER_THRES;
+	if (centerY < BORDER_THRES)
+		centerY = BORDER_THRES;
+
+	// Account for zoom offsets only - do NOT apply raster offsets to keep depth map stationary
+	double adjustedCenterX = centerX + zoomedScale * sdlwin->zoomOffsetX;
+	double adjustedCenterY = centerY + zoomedScale * sdlwin->zoomOffsetY;
+
+	// Calculate scaling from depth map to display
+	// Depth map is 1/4 resolution of original frame
+	double depthScaleX = zoomedScale * 4.0;
+	double depthScaleY = zoomedScale * 4.0;
+
+	// Render the entire depth map as a single texture (much more efficient!)
+	SDL_Rect destRect = {
+		(int)adjustedCenterX,
+		(int)adjustedCenterY,
+		(int)(depthWidth * depthScaleX),
+		(int)(depthHeight * depthScaleY)};
+
+	SDL_RenderCopy(renderer, depthMapTexture, NULL, &destRect);
+
+	// Reset blend mode
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 
 static inline void redraw(SDL_Renderer *renderer, SDL_Texture *frame, SDL_Texture *map, int w, int h)
 {
 	if (frame)
 	{
-		//scale and buffer frame
-		double xscale = ((double) w - BORDER_THRES*2) / sdlwin->raster.w;
-		double yscale = ((double) h - BORDER_THRES*2) / sdlwin->raster.h;
+		// scale and buffer frame
+		double xscale = ((double)w - BORDER_THRES * 2) / sdlwin->raster.w;
+		double yscale = ((double)h - BORDER_THRES * 2) / sdlwin->raster.h;
 
 		SDL_Rect dstrect;
 		double centerx;
 		double centery;
 		{
 			double arscale = xscale > yscale ? yscale : xscale;
-			
+
 			// Apply zoom factor to the scaling
 			double zoomedScale = arscale * sdlwin->zoomFactor;
 			double swidth = zoomedScale * sdlwin->raster.w;
 			double sheight = zoomedScale * sdlwin->raster.h;
-			
+
 			// Calculate center position to keep zoom centered
 			centerx = (w - swidth) / 2.0;
 			centery = (h - sheight) / 2.0;
-			
+
 			// Make sure we don't go beyond borders
-			if (centerx < BORDER_THRES) centerx = BORDER_THRES;
-			if (centery < BORDER_THRES) centery = BORDER_THRES;
-			
-			dstrect = (SDL_Rect) { 
-				(int)(centerx + zoomedScale * (sdlwin->raster.x + sdlwin->zoomOffsetX)), 
-				(int)(centery + zoomedScale * (sdlwin->raster.y + sdlwin->zoomOffsetY)), 
-				(int)swidth, 
-				(int)sheight
-			};
+			if (centerx < BORDER_THRES)
+				centerx = BORDER_THRES;
+			if (centery < BORDER_THRES)
+				centery = BORDER_THRES;
+
+			dstrect = (SDL_Rect){
+				(int)(centerx + zoomedScale * (sdlwin->raster.x + sdlwin->zoomOffsetX)),
+				(int)(centery + zoomedScale * (sdlwin->raster.y + sdlwin->zoomOffsetY)),
+				(int)swidth,
+				(int)sheight};
 		}
 
 		SDL_RenderCopy(renderer, frame, NULL, &dstrect);
@@ -180,19 +514,19 @@ static inline void redraw(SDL_Renderer *renderer, SDL_Texture *frame, SDL_Textur
 				char zoomText[32];
 				sprintf(zoomText, "Zoom: %.1fx", sdlwin->zoomFactor);
 				SDL_Color textColor = {255, 255, 255, 255};
-				SDL_Surface* textSurface = TTF_RenderText_Solid(font, zoomText, textColor);
-				SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
-				
+				SDL_Surface *textSurface = TTF_RenderText_Solid(font, zoomText, textColor);
+				SDL_Texture *textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+
 				SDL_Rect textRect = {10, 10, textSurface->w, textSurface->h};
 				SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
-				
+
 				SDL_FreeSurface(textSurface);
 				SDL_DestroyTexture(textTexture);
 			}
 		}
 	}
 
-	//draw borders
+	// draw borders
 	SDL_SetRenderDrawColor(renderer, 0x15, 0x18, 0x1A, 0xFF);
 	borders[BORDER_TOP].w = w;
 	borders[BORDER_BOTTOM].w = w;
@@ -211,13 +545,16 @@ static inline void redraw(SDL_Renderer *renderer, SDL_Texture *frame, SDL_Textur
 
 	// Add ROI overlay at the end, just before returning
 	drawROIOverlay(renderer);
+
+	// Add depth map overlay
+	drawDepthMapOverlay(renderer);
 }
 
 static SDL_HitTestResult hit_test(SDL_Window *window, const SDL_Point *pt, void *data)
 {
 	int w, h;
 	SDL_GetWindowSize(window, &w, &h);
-	
+
 	// Check for border resize areas first
 	if (pt->x < BORDER_THRES)
 	{
@@ -254,36 +591,38 @@ int SDLWindow::child_main()
 	act.sa_sigaction = &interrupt;
 	sigaction(SIGINT, &act, NULL);
 
-	if (SDL_Init(SDL_INIT_VIDEO) )
+	if (SDL_Init(SDL_INIT_VIDEO))
 		return 1;
 
-	if (TTF_Init() < 0) {
+	if (TTF_Init() < 0)
+	{
 		return 1;
 	}
 
 	// Load font - replace path with your actual font file location
 	font = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16);
-	if (!font) {
+	if (!font)
+	{
 		printf("TTF_OpenFont error: %s\n", TTF_GetError());
 		// Consider whether to return an error or continue without text rendering
 	}
 
 	int scalexyz = 2;
-	// SDL_Window *window = SDL_CreateWindow("sdlwindow", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 800 * scalexyz, 600 * scalexyz, 
+	// SDL_Window *window = SDL_CreateWindow("sdlwindow", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 800 * scalexyz, 600 * scalexyz,
 	// 		SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_UTILITY | SDL_WINDOW_SKIP_TASKBAR | SDL_WINDOW_ALLOW_HIGHDPI);
-	// SDL_Window *window = SDL_CreateWindow("sdlwindow", 0, 0, 900 * scalexyz, 500 * scalexyz, 
+	// SDL_Window *window = SDL_CreateWindow("sdlwindow", 0, 0, 900 * scalexyz, 500 * scalexyz,
 	// 	SDL_WINDOW_HIDDEN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS  | SDL_WINDOW_SKIP_TASKBAR | SDL_WINDOW_ALLOW_HIGHDPI);
-	SDL_Window *window = SDL_CreateWindow("sdlwindow", gtkAppLocationX, gtkAppLocationY+205, 913 * scalexyz, 442 * scalexyz, SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALLOW_HIGHDPI);
+	SDL_Window *window = SDL_CreateWindow("sdlwindow", gtkAppLocationX, gtkAppLocationY + 205, 913 * scalexyz, 442 * scalexyz, SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALLOW_HIGHDPI);
 
 	if (!window)
 		return 2;
-	
-	//SDL_SetWindowPosition(window, 3000, 3000); 
+
+	// SDL_SetWindowPosition(window, 3000, 3000);
 
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best");
 
 	SDL_SetWindowHitTest(window, &hit_test, NULL);
-	
+
 	SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 	if (!renderer)
 	{
@@ -293,219 +632,235 @@ int SDLWindow::child_main()
 
 	SDL_Texture *frame = NULL, *map = NULL;
 
-	sdlwin->raster = (SDL_Rect) {0,0,0,0};
+	sdlwin->raster = (SDL_Rect){0, 0, 0, 0};
 
 	// Initialize cursors
 	defaultCursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
 	handCursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND);
 
 	SDL_Event e;
-	while(running)
+	while (running)
 	{
 		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0xFF);
 		SDL_RenderClear(renderer);
 		if (sdlwin->command)
 		{
 			pthread_mutex_lock(&sdlwin->mutex);
-			switch(sdlwin->command)
+			switch (sdlwin->command)
 			{
-				case CMD_DRAW_LINES:
+			case CMD_DRAW_LINES:
+			{
+				SDL_RenderDrawLines(renderer, (SDL_Point *)sdlwin->bcmd, sdlwin->lcmd[0].d_int);
+				break;
+			}
+			case CMD_CREATE_FRAME:
+			{
+				if (frame)
+					SDL_DestroyTexture(frame);
+
+				frame = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, sdlwin->raster.w, sdlwin->raster.h);
+				if (frame)
+					sdlwin->response = RE_OK;
+				else
+					sdlwin->response = RE_EFRAME;
+				break;
+			}
+			case CMD_RENDER_G8:
+			{
+				if (frame)
 				{
-					SDL_RenderDrawLines(renderer, (SDL_Point *) sdlwin->bcmd, sdlwin->lcmd[0].d_int);
-					break;
-				}
-				case CMD_CREATE_FRAME:
-				{
-					if (frame)
-						SDL_DestroyTexture(frame);
- 
-					frame = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, sdlwin->raster.w, sdlwin->raster.h);
-					if (frame)
+					void *pixels;
+					int pitch;
+					if (!SDL_LockTexture(frame, NULL, &pixels, &pitch))
+					{
+						convert_g8_to_rgb888((uint32_t *)pixels, sdlwin->bcmd, sdlwin->raster.w * sdlwin->raster.h);
+						SDL_UnlockTexture(frame);
 						sdlwin->response = RE_OK;
-					else
-						sdlwin->response = RE_EFRAME;
-					break;
-				}
-				case CMD_RENDER_G8:
-				{
-					if (frame)
-					{
-						void *pixels;
-						int pitch;
-						if (!SDL_LockTexture(frame, NULL, &pixels, &pitch) )
-						{
-							convert_g8_to_rgb888( (uint32_t *) pixels, sdlwin->bcmd, sdlwin->raster.w * sdlwin->raster.h);
-							SDL_UnlockTexture(frame);
-							sdlwin->response = RE_OK;
-						} else sdlwin->response = RE_EFRAME;
-					} else sdlwin->response = RE_EFRAME;
-					break;
-				}
-				case CMD_UPDATE_MAP:
-				{
-					if (map)
-						SDL_DestroyTexture(map);
-					int w = sdlwin->lcmd[0].d_int;
-					int h = sdlwin->lcmd[1].d_int;
-					int p = sdlwin->lcmd[2].d_int;
-					map = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
-					if (map)
-					{
-						SDL_SetTextureBlendMode(map, SDL_BLENDMODE_BLEND);
-						void *pixels;
-						int pitch;
-						if (!SDL_LockTexture(map, NULL, &pixels, &pitch) )
-						{
-							memcpy(pixels, sdlwin->bcmd, h * pitch);
-							SDL_UnlockTexture(map);
-							sdlwin->response = RE_OK;
-						} else sdlwin->response = RE_EFRAME;
 					}
 					else
 						sdlwin->response = RE_EFRAME;
-					break;
 				}
-				case CMD_RAISE:
+				else
+					sdlwin->response = RE_EFRAME;
+				break;
+			}
+			case CMD_UPDATE_MAP:
+			{
+				if (map)
+					SDL_DestroyTexture(map);
+				int w = sdlwin->lcmd[0].d_int;
+				int h = sdlwin->lcmd[1].d_int;
+				int p = sdlwin->lcmd[2].d_int;
+				map = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
+				if (map)
 				{
-					SDL_ShowWindow(window);
-					//SDL_SetWindowAlwaysOnTop(window, SDL_TRUE);
-					SDL_Delay(10);
-					break;
+					SDL_SetTextureBlendMode(map, SDL_BLENDMODE_BLEND);
+					void *pixels;
+					int pitch;
+					if (!SDL_LockTexture(map, NULL, &pixels, &pitch))
+					{
+						memcpy(pixels, sdlwin->bcmd, h * pitch);
+						SDL_UnlockTexture(map);
+						sdlwin->response = RE_OK;
+					}
+					else
+						sdlwin->response = RE_EFRAME;
 				}
-				case CMD_UNRAISE:
-				{
-					SDL_SetWindowAlwaysOnTop(window, SDL_FALSE);
-					SDL_Delay(10);
-					break;
-				}
-				case CMD_HIDE:
-				{
-					SDL_HideWindow(window);
-					SDL_Delay(10);
-					break;
-				}
-				case CMD_MOVE:
-				{
-					int x = sdlwin->lcmd[0].d_int;
-					int y = sdlwin->lcmd[1].d_int;
-					//Causes window to always appear in centerof screen... test removing for now
-					//SDL_SetWindowPosition(window, x, y);
-					break;
-				}
-				case CMD_QUIT:
-				{
-					sdlwin->command = CMD_NONE;
-					pthread_cond_broadcast(&sdlwin->hasResponse);
-					pthread_mutex_unlock(&sdlwin->mutex);
-					goto quit;
-				}
-				case CMD_RESET_ZOOM:
-				{
-					sdlwin->zoomFactor = 1.0;  // Reset zoom
-					sdlwin->zoomOffsetX = 0.0; // Reset zoom offsets
-					sdlwin->zoomOffsetY = 0.0;
-					sdlwin->response = RE_OK;
-					break;
-				}
-				default:
-					break;
+				else
+					sdlwin->response = RE_EFRAME;
+				break;
+			}
+			case CMD_RAISE:
+			{
+				SDL_ShowWindow(window);
+				// SDL_SetWindowAlwaysOnTop(window, SDL_TRUE);
+				SDL_Delay(10);
+				break;
+			}
+			case CMD_UNRAISE:
+			{
+				SDL_SetWindowAlwaysOnTop(window, SDL_FALSE);
+				SDL_Delay(10);
+				break;
+			}
+			case CMD_HIDE:
+			{
+				SDL_HideWindow(window);
+				SDL_Delay(10);
+				break;
+			}
+			case CMD_MOVE:
+			{
+				int x = sdlwin->lcmd[0].d_int;
+				int y = sdlwin->lcmd[1].d_int;
+				// Causes window to always appear in centerof screen... test removing for now
+				// SDL_SetWindowPosition(window, x, y);
+				break;
+			}
+			case CMD_QUIT:
+			{
+				sdlwin->command = CMD_NONE;
+				pthread_cond_broadcast(&sdlwin->hasResponse);
+				pthread_mutex_unlock(&sdlwin->mutex);
+				goto quit;
+			}
+			case CMD_RESET_ZOOM:
+			{
+				sdlwin->zoomFactor = 1.0;  // Reset zoom
+				sdlwin->zoomOffsetX = 0.0; // Reset zoom offsets
+				sdlwin->zoomOffsetY = 0.0;
+				sdlwin->response = RE_OK;
+				break;
+			}
+			default:
+				break;
 			}
 			sdlwin->command = CMD_NONE;
 			pthread_cond_broadcast(&sdlwin->hasResponse);
 			pthread_mutex_unlock(&sdlwin->mutex);
 		}
 
-		while(SDL_PollEvent(&e) != 0)
+		while (SDL_PollEvent(&e) != 0)
 		{
-			if(e.type == SDL_MOUSEWHEEL)
+			if (e.type == SDL_MOUSEWHEEL)
 			{
 				// Get mouse position
 				int mouseX, mouseY;
 				SDL_GetMouseState(&mouseX, &mouseY);
-				
+
 				// Get current window dimensions
 				int windowWidth, windowHeight;
 				SDL_GetRendererOutputSize(renderer, &windowWidth, &windowHeight);
-				
+
 				// Calculate scaling factors before zoom change
-				double xscale = ((double) windowWidth - BORDER_THRES*2) / sdlwin->raster.w;
-				double yscale = ((double) windowHeight - BORDER_THRES*2) / sdlwin->raster.h;
+				double xscale = ((double)windowWidth - BORDER_THRES * 2) / sdlwin->raster.w;
+				double yscale = ((double)windowHeight - BORDER_THRES * 2) / sdlwin->raster.h;
 				double arscale = xscale > yscale ? yscale : xscale;
 				double oldZoom = sdlwin->zoomFactor;
-				
+
 				// Calculate current visible region dimensions
 				double currentVisibleWidth = arscale * oldZoom * sdlwin->raster.w;
 				double currentVisibleHeight = arscale * oldZoom * sdlwin->raster.h;
-				
+
 				// Center position of the visible region
 				double centerX = (windowWidth - currentVisibleWidth) / 2.0;
-				if (centerX < BORDER_THRES) centerX = BORDER_THRES;
+				if (centerX < BORDER_THRES)
+					centerX = BORDER_THRES;
 				double centerY = (windowHeight - currentVisibleHeight) / 2.0;
-				if (centerY < BORDER_THRES) centerY = BORDER_THRES;
-				
+				if (centerY < BORDER_THRES)
+					centerY = BORDER_THRES;
+
 				// Calculate the true image coordinates under the mouse pointer
 				// This is in the original image space coordinates (before any zoom)
 				double imageX = (mouseX - centerX) / (arscale * oldZoom) - sdlwin->zoomOffsetX;
 				double imageY = (mouseY - centerY) / (arscale * oldZoom) - sdlwin->zoomOffsetY;
-				
+
 				// Check for zoom out at minimum zoom level
 				bool resetPosition = false;
-				
+
 				// Change zoom factor
-				if(e.wheel.y > 0) // Scroll up (zoom in)
+				if (e.wheel.y > 0) // Scroll up (zoom in)
 				{
-					sdlwin->zoomFactor *= 1.1; // Increase zoom by 10%
-					if(sdlwin->zoomFactor > 5.0) // Limit maximum zoom
+					sdlwin->zoomFactor *= 1.1;	  // Increase zoom by 10%
+					if (sdlwin->zoomFactor > 5.0) // Limit maximum zoom
 						sdlwin->zoomFactor = 5.0;
 				}
-				else if(e.wheel.y < 0) // Scroll down (zoom out)
+				else if (e.wheel.y < 0) // Scroll down (zoom out)
 				{
 					// Check if we're already at min zoom and trying to zoom out further
-					if(sdlwin->zoomFactor <= 1.0) {
-						resetPosition = true; // Signal to reset position
+					if (sdlwin->zoomFactor <= 1.0)
+					{
+						resetPosition = true;	  // Signal to reset position
 						sdlwin->zoomFactor = 1.0; // Keep zoom at minimum
-					} else {
-						sdlwin->zoomFactor /= 1.1; // Decrease zoom by 10%
-						if(sdlwin->zoomFactor < 1.0) // Limit minimum zoom
+					}
+					else
+					{
+						sdlwin->zoomFactor /= 1.1;	  // Decrease zoom by 10%
+						if (sdlwin->zoomFactor < 1.0) // Limit minimum zoom
 							sdlwin->zoomFactor = 1.0;
 					}
 				}
-				
+
 				// If zoom changed or we need to reset position
-				if (oldZoom != sdlwin->zoomFactor || resetPosition) 
+				if (oldZoom != sdlwin->zoomFactor || resetPosition)
 				{
-					if (resetPosition) {
+					if (resetPosition)
+					{
 						// Reset position to center
 						sdlwin->zoomOffsetX = 0.0;
 						sdlwin->zoomOffsetY = 0.0;
-					} else {
+					}
+					else
+					{
 						// Calculate new visible dimensions after zoom
 						double newVisibleWidth = arscale * sdlwin->zoomFactor * sdlwin->raster.w;
 						double newVisibleHeight = arscale * sdlwin->zoomFactor * sdlwin->raster.h;
-						
+
 						// New center position
 						double newCenterX = (windowWidth - newVisibleWidth) / 2.0;
-						if (newCenterX < BORDER_THRES) newCenterX = BORDER_THRES;
+						if (newCenterX < BORDER_THRES)
+							newCenterX = BORDER_THRES;
 						double newCenterY = (windowHeight - newVisibleHeight) / 2.0;
-						if (newCenterY < BORDER_THRES) newCenterY = BORDER_THRES;
-						
+						if (newCenterY < BORDER_THRES)
+							newCenterY = BORDER_THRES;
+
 						// Calculate where the same image point would be displayed after zoom
 						double newDisplayX = imageX * arscale * sdlwin->zoomFactor + newCenterX;
 						double newDisplayY = imageY * arscale * sdlwin->zoomFactor + newCenterY;
-						
+
 						// Calculate the adjustment needed to keep mouse over the same point
 						double deltaX = mouseX - newDisplayX;
 						double deltaY = mouseY - newDisplayY;
-						
+
 						// Update zoom offsets - convert to image space coordinates
 						sdlwin->zoomOffsetX = deltaX / (arscale * sdlwin->zoomFactor);
 						sdlwin->zoomOffsetY = deltaY / (arscale * sdlwin->zoomFactor);
 					}
 				}
 			}
-						else if (e.type == SDL_MOUSEBUTTONDOWN)
+			else if (e.type == SDL_MOUSEBUTTONDOWN)
 			{
-				if (e.button.button == SDL_BUTTON_MIDDLE)  // Middle mouse button
+				if (e.button.button == SDL_BUTTON_MIDDLE) // Middle mouse button
 				{
 					sdlwin->zoomFactor = 1.0;  // Reset zoom
 					sdlwin->zoomOffsetX = 0.0; // Reset zoom offsets
@@ -516,14 +871,17 @@ int SDLWindow::child_main()
 					Uint32 currentTime = SDL_GetTicks();
 					int currentX = e.button.x;
 					int currentY = e.button.y;
-					
+
 					// Check for double-click (within 500ms and 10 pixels)
-					if (currentTime - lastClickTime < 500 && 
-						abs(currentX - lastClickX) < 10 && 
-						abs(currentY - lastClickY) < 10) {
-						
-						handleDoubleClick(currentX, currentY);
-					} else {
+					if (currentTime - lastClickTime < 500 &&
+						abs(currentX - lastClickX) < 10 &&
+						abs(currentY - lastClickY) < 10)
+					{
+
+						handleDoubleClickWithRenderer(currentX, currentY, renderer);
+					}
+					else
+					{
 						// Start dragging based on zoom level
 						if (sdlwin->zoomFactor > 1.0)
 						{
@@ -534,12 +892,12 @@ int SDLWindow::child_main()
 						}
 						else
 						{
-							// When not zoomed in, drag the window
+							// When not zoomed in, drag the window - use global coordinates
 							isDraggingWindow = true;
-							SDL_GetMouseState(&dragStartX, &dragStartY);
+							SDL_GetGlobalMouseState(&dragStartX, &dragStartY);
 						}
 					}
-					
+
 					lastClickTime = currentTime;
 					lastClickX = currentX;
 					lastClickY = currentY;
@@ -549,7 +907,8 @@ int SDLWindow::child_main()
 			{
 				if (e.button.button == SDL_BUTTON_LEFT)
 				{
-					if (isDraggingImage) {
+					if (isDraggingImage)
+					{
 						SDL_SetCursor(defaultCursor); // Change back to default cursor
 					}
 					isDraggingImage = false;
@@ -562,31 +921,35 @@ int SDLWindow::child_main()
 				{
 					int currentX, currentY;
 					SDL_GetMouseState(&currentX, &currentY);
-					
+
 					// Simple direct translation at higher zoom levels
-					if (sdlwin->zoomFactor > 1.0) {
+					if (sdlwin->zoomFactor > 1.0)
+					{
 						// Calculate delta in screen pixels
 						int deltaX = currentX - dragStartX;
 						int deltaY = currentY - dragStartY;
-						
+
 						// Skip tiny movements
-						if (abs(deltaX) < 2 && abs(deltaY) < 2) {
+						if (abs(deltaX) < 2 && abs(deltaY) < 2)
+						{
 							dragStartX = currentX;
 							dragStartY = currentY;
-						} else {
+						}
+						else
+						{
 							// Get the scale factor (how many screen pixels per image pixel)
 							int windowWidth, windowHeight;
 							SDL_GetRendererOutputSize(renderer, &windowWidth, &windowHeight);
-							
-							double xscale = ((double)windowWidth - BORDER_THRES*2) / sdlwin->raster.w;
-							double yscale = ((double)windowHeight - BORDER_THRES*2) / sdlwin->raster.h;
+
+							double xscale = ((double)windowWidth - BORDER_THRES * 2) / sdlwin->raster.w;
+							double yscale = ((double)windowHeight - BORDER_THRES * 2) / sdlwin->raster.h;
 							double scale = (xscale < yscale) ? xscale : yscale;
 							scale *= sdlwin->zoomFactor;
-							
+
 							// Convert to image space (simpler approach)
 							sdlwin->zoomOffsetX += (double)deltaX / scale;
 							sdlwin->zoomOffsetY += (double)deltaY / scale;
-							
+
 							dragStartX = currentX;
 							dragStartY = currentY;
 						}
@@ -595,22 +958,24 @@ int SDLWindow::child_main()
 				else if (isDraggingWindow)
 				{
 					int currentX, currentY;
-					SDL_GetMouseState(&currentX, &currentY);
-					
+					SDL_GetGlobalMouseState(&currentX, &currentY);
+
 					// Calculate delta for window movement
 					int deltaX = currentX - dragStartX;
 					int deltaY = currentY - dragStartY;
-					
+
 					// Move the window
 					int windowX, windowY;
 					SDL_GetWindowPosition(window, &windowX, &windowY);
 					SDL_SetWindowPosition(window, windowX + deltaX, windowY + deltaY);
-					
-					// Don't update dragStart coordinates since window moved
+
+					// Update dragStart coordinates to current position
+					dragStartX = currentX;
+					dragStartY = currentY;
 				}
 			}
 		}
-		
+
 		if (SDL_GetWindowFlags(window) & SDL_WINDOW_SHOWN)
 		{
 			int w, h;
@@ -622,9 +987,11 @@ int SDLWindow::child_main()
 		else
 			SDL_Delay(100);
 	}
-	quit:;
+quit:;
 	if (frame)
 		SDL_DestroyTexture(frame);
+	if (depthMapTexture)
+		SDL_DestroyTexture(depthMapTexture);
 	if (handCursor)
 		SDL_FreeCursor(handCursor);
 	if (defaultCursor)
@@ -632,13 +999,14 @@ int SDLWindow::child_main()
 	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
-	
-	if (font) {
+
+	if (font)
+	{
 		TTF_CloseFont(font);
 		font = nullptr;
 	}
 
 	TTF_Quit();
-	
+
 	return 0;
 }

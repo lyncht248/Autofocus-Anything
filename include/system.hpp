@@ -16,7 +16,7 @@
 #include "logfile.hpp"
 #include "stabiliser.hpp"
 #include "framefilter.hpp"
-#include "phasecorr_stabiliser.hpp"
+#include "phasecorr2_stabiliser.hpp"
 #include "sharpness_analyzer.hpp"
 #include "sharpness_graph.hpp"
 #include "imagingcam.hpp"
@@ -146,7 +146,33 @@ public:
 	// Get access to imaging camera
 	ImagingCam *getImagingCam() { return imagingCam.get(); }
 
+	// Get current stabilization offset (returns true if stabilization is active)
+	bool getStabilizationOffset(double &offsetX, double &offsetY);
+
+	void onGetDepthsClicked();
+	void whenGetDepthsToggled(bool gettingDepths);
+	void whenViewDepthsToggled(bool viewingDepths);
+
+	// Depth mapping data structures
+	struct DepthMapData
+	{
+		std::vector<std::vector<std::pair<double, double>>> depthImage; // max_sharpness, actual_focus_position pairs
+		int width;
+		int height;
+		bool isValid;
+
+		DepthMapData() : width(0), height(0), isValid(false) {}
+	};
+
+	DepthMapData currentDepthMap;
+
 private:
+	// Helper method to create stabilizer map with default parameters
+	void createStabiliserMapWithDefaults(const VidFrame &frame);
+
+	// Helper method to calculate threshold for target percentage of pixels
+	double calculateThresholdForPercentage(const CVD::Image<unsigned char> &image, double vesselSize, double targetPercentage);
+
 	void renderFrame();
 	void releaseFrame();
 
@@ -219,9 +245,8 @@ private:
 	// Add a boolean to enable or disable PhaseCorr usage.
 	bool usePhaseCorr = true;
 
-	// Add a PhaseCorrStabiliser object
-	PhaseCorrStabiliser phaseCorrStabiliser;
-
+	// Add a PhaseCorrStabiliser2 object
+	PhaseCorrStabiliser2 phaseCorrStabiliser{8, 1.0}; // 1.0 = complete replacement like old stabilizer
 	// Add a boolean to check if the reference frame is set
 	bool phaseCorrStabiliserReferenceNotSet = true;
 
@@ -238,6 +263,9 @@ private:
 
 	// Imaging camera for ROI-based autofocus
 	std::unique_ptr<ImagingCam> imagingCam;
+
+	// Flag to prevent clearing ROI when imaging camera updates best focus
+	bool imagingCamUpdatingFocus = false;
 };
 
 #endif

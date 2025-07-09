@@ -1,7 +1,8 @@
 #pragma once
 #include <opencv2/opencv.hpp>
 
-class PhaseCorrStabiliser {
+class PhaseCorrStabiliser
+{
 public:
     PhaseCorrStabiliser();
     ~PhaseCorrStabiliser();

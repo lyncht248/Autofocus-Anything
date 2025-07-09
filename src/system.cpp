@@ -4,11 +4,14 @@
 #include <chrono>
 #include <ctime>
 #include <cvd/image_ref.h>
+#include <cvd/convolution.h>
 #include <set>
 #include <gtkmm.h>
 #include <cstring>
 #include <string>
 #include <thread>
+#include <cmath>
+#include <algorithm>
 #include "VimbaC/Include/VmbCommonTypes.h"
 #include "VimbaCPP/Include/Frame.h"
 #include "VimbaCPP/Include/SharedPointerDefines.h"
@@ -18,7 +21,7 @@
 #include "main.hpp"
 #include "autofocus.hpp"
 #include "notificationCenter.hpp"
-#include "phasecorr_stabiliser.hpp"
+#include "phasecorr2_stabiliser.hpp"
 #include "sharpness_analyzer.hpp"
 #include "sharpness_graph.hpp"
 #include "imagingcam.hpp"
@@ -136,7 +139,9 @@ void FrameProcessor::stabilise()
 
 	ThreadStopper::makeStoppable();
 
-	int frameCount = 0;
+	// Stabilization logic using new fast and accurate phase correlation method:
+	// - Processes every frame for maximum accuracy
+	// - Uses center ROI with 0.5x downscaling for optimal speed/accuracy tradeoff
 
 	while (running)
 	{
@@ -155,104 +160,127 @@ void FrameProcessor::stabilise()
 		if (vframe == nullptr)
 			continue;
 
-		// Check if we should skip this frame's offset calculation
-		bool skipOffsetCalculation = false;
-		double currentFPS = system.getFPS();
-		if (currentFPS > 40.0)
-		{
-			skipOffsetCalculation = ((frameCount % 2) != 0);
-		}
-		frameCount++;
-
-		// If the user wants PhaseCorr, do that
+		// Process every frame with the new faster and more accurate phase correlation method
 		if (system.usePhaseCorr)
 		{
-			if (!skipOffsetCalculation)
+			// Start timing for performance benchmarking
+			auto startTime = std::chrono::high_resolution_clock::now();
+
+			// Convert VidFrame -> cv::Mat
+			cv::Mat fullFrame(
+				vframe->size().y,
+				vframe->size().x,
+				CV_8UC1,
+				vframe->data());
+
+			// Extract center ROI BEFORE downscaling to avoid subpixel issues
+			int roiWidth = fullFrame.cols / 2;
+			int roiHeight = fullFrame.rows / 2;
+			int roiX = (fullFrame.cols - roiWidth) / 2;
+			int roiY = (fullFrame.rows - roiHeight) / 2;
+
+			// Ensure ROI coordinates are even to avoid subpixel shifts
+			roiX = (roiX / 2) * 2;
+			roiY = (roiY / 2) * 2;
+			roiWidth = (roiWidth / 2) * 2;
+			roiHeight = (roiHeight / 2) * 2;
+
+			cv::Rect roiRect(roiX, roiY, roiWidth, roiHeight);
+			cv::Mat roiFrame = fullFrame(roiRect);
+
+			// Now downscale the ROI by 0.5x for optimal speed/accuracy tradeoff
+			cv::Mat halfFrame;
+			cv::resize(roiFrame, halfFrame, cv::Size(), 0.5, 0.5);
+
+			cv::Point2f shift(0.0f, 0.0f);
+			// If reference not set, init it
+			if (system.phaseCorrStabiliserReferenceNotSet)
 			{
-				// Convert VidFrame -> cv::Mat
-				cv::Mat fullFrame(
-					vframe->size().y,
-					vframe->size().x,
-					CV_8UC1,
-					vframe->data());
+				system.phaseCorrStabiliser.initReference(halfFrame);
+				system.phaseCorrStabiliserReferenceNotSet = false;
+			}
+			else
+			{
+				// Compute offset using the new more accurate stabilizer
+				shift = system.phaseCorrStabiliser.computeShift(halfFrame);
+			}
 
-				// Extract center ROI BEFORE downscaling to avoid subpixel issues
-				int roiWidth = fullFrame.cols / 2;
-				int roiHeight = fullFrame.rows / 2;
-				int roiX = (fullFrame.cols - roiWidth) / 2;
-				int roiY = (fullFrame.rows - roiHeight) / 2;
+			// End timing and log performance
+			auto endTime = std::chrono::high_resolution_clock::now();
+			auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
 
-				// Ensure ROI coordinates are even to avoid subpixel shifts
-				roiX = (roiX / 2) * 2;
-				roiY = (roiY / 2) * 2;
-				roiWidth = (roiWidth / 2) * 2;
-				roiHeight = (roiHeight / 2) * 2;
+			static int frameCount = 0;
+			static long totalTime = 0;
+			frameCount++;
+			totalTime += duration.count();
 
-				cv::Rect roiRect(roiX, roiY, roiWidth, roiHeight);
-				cv::Mat roiFrame = fullFrame(roiRect);
-
-				// Now downscale the ROI
-				cv::Mat halfFrame;
-				cv::resize(roiFrame, halfFrame, cv::Size(), 0.5, 0.5);
-
-				cv::Point2f shift(0.0f, 0.0f);
-				// If reference not set, init it
-				if (system.phaseCorrStabiliserReferenceNotSet)
+			// Log performance every 30 frames
+			if (frameCount % 30 == 0)
+			{
+				double avgTime = totalTime / 30.0;
+				if (bSystemLogFlag)
 				{
-					system.phaseCorrStabiliser.initReference(halfFrame);
-					system.phaseCorrStabiliserReferenceNotSet = false;
+					logger->info("[PhaseCorrStabiliser2] Avg time per frame: {:.2f}μs ({:.2f}ms), Frame size: {}x{}, Raw shift: ({:.3f}, {:.3f})",
+								 avgTime, avgTime / 1000.0, halfFrame.cols, halfFrame.rows, shift.x, shift.y);
 				}
-				else
+				totalTime = 0;
+			}
+
+			stabMutex.lock();
+			// Scale shift back up by factor of 2.0 (only for 0.5x downscaling - ROI extraction doesn't affect coordinate scaling)
+			// Positive shift means frame moved right/down, so we need to move display left/up to compensate
+			TooN::Vector<2> calculatedOffset;
+			calculatedOffset[0] = shift.x * 2.0f; // 2x scaling to account for 0.5x downscaling
+			calculatedOffset[1] = shift.y * 2.0f; // 2x scaling to account for 0.5x downscaling
+
+			// Apply the offset directly (no distribution needed with faster stabilizer)
+			currentOff = calculatedOffset;
+			offset += currentOff;
+			_stabComplete = stabQueue.empty();
+			if (_stabComplete)
+				stabComplete.broadcast();
+			stabMutex.unlock();
+		}
+		else
+		{
+			// Original stabiliser method - runs on every frame (no skipping)
+			if (system.stabiliser.is_valid())
+			{
+				// Start timing for performance comparison
+				auto startTime = std::chrono::high_resolution_clock::now();
+
+				TooN::Vector<2> calculatedOffset = system.stabiliser.stabilise(*vframe, offset);
+
+				// End timing and log performance
+				auto endTime = std::chrono::high_resolution_clock::now();
+				auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+
+				static int oldFrameCount = 0;
+				static long oldTotalTime = 0;
+				oldFrameCount++;
+				oldTotalTime += duration.count();
+
+				// Log performance every 30 frames
+				if (oldFrameCount % 30 == 0)
 				{
-					// Compute offset
-					shift = system.phaseCorrStabiliser.computeShift(halfFrame);
+					double avgTime = oldTotalTime / 30.0;
+					if (bSystemLogFlag)
+					{
+						logger->info("[OldStabiliser] Avg time per frame: {:.2f}μs ({:.2f}ms), Frame size: {}x{}",
+									 avgTime, avgTime / 1000.0, vframe->size().x, vframe->size().y);
+					}
+					oldTotalTime = 0;
 				}
 
 				stabMutex.lock();
-				// Scale shift back up by factor of 2.0 (since we used 0.5 scale)
-				currentOff[0] = shift.x * -2.0f;
-				currentOff[1] = shift.y * -2.0f;
 
+				// Apply the offset directly without distribution (every frame processing)
+				currentOff = calculatedOffset;
 				offset += currentOff;
 				_stabComplete = stabQueue.empty();
 				if (_stabComplete)
 					stabComplete.broadcast();
 				stabMutex.unlock();
-			}
-			else
-			{
-				// Skip all processing, just mark as complete
-				stabMutex.lock();
-				_stabComplete = stabQueue.empty();
-				if (_stabComplete)
-					stabComplete.broadcast();
-				stabMutex.unlock();
-			}
-		}
-		else
-		{
-			// Original stabiliser method
-			if (system.stabiliser.is_valid())
-			{
-				if (!skipOffsetCalculation)
-				{
-					TooN::Vector<2> off = system.stabiliser.stabilise(*vframe, offset);
-					stabMutex.lock();
-					currentOff = off;
-					offset += currentOff;
-					_stabComplete = stabQueue.empty();
-					if (_stabComplete)
-						stabComplete.broadcast();
-					stabMutex.unlock();
-				}
-				else
-				{
-					stabMutex.lock();
-					_stabComplete = stabQueue.empty();
-					if (_stabComplete)
-						stabComplete.broadcast();
-					stabMutex.unlock();
-				}
 			}
 			else
 			{
@@ -368,15 +396,37 @@ void FrameProcessor::processFrame() // What to do with each frame received from 
 				while (!_stabComplete)
 					stabComplete.wait(stabMutex);
 
-			rasterPos[0] -= currentOff[0];											// x offset
-			rasterPos[1] -= (currentOff[1] + (system.getFPS() > 40.0 ? 0.5 : 1.0)); // y offset
+			rasterPos[0] -= currentOff[0]; // x offset
+			rasterPos[1] -= currentOff[1]; // y offset (no correction needed with new stabilizer)
+
 			currentOff = TooN::Zeros;
 			stabMutex.unlock();
 			SDLWindow::setRaster(childwin, rasterPos[0], rasterPos[1]);
+
+			// Update stabilization offset in shared memory for ROI display
+			if (childwin)
+			{
+				pthread_mutex_lock(&childwin->mutex);
+				childwin->stabOffsetX = rasterPos[0];
+				childwin->stabOffsetY = rasterPos[1];
+				childwin->stabActive = true;
+				pthread_mutex_unlock(&childwin->mutex);
+			}
 		}
 		else
 		{
 			SDLWindow::setRaster(childwin);
+
+			// Clear stabilization offset when not stabilizing
+			if (childwin)
+			{
+				pthread_mutex_lock(&childwin->mutex);
+				childwin->stabOffsetX = 0.0;
+				childwin->stabOffsetY = 0.0;
+				childwin->stabActive = false;
+				pthread_mutex_unlock(&childwin->mutex);
+			}
+
 			if (bSystemFramesFlag)
 			{
 				logger->info("[FrameProcessor::processFrame] SDLWindow::setRaster called");
@@ -515,44 +565,48 @@ void FrameProcessor::processFrame() // What to do with each frame received from 
 			}
 		}
 
-		// Start imaging camera monitoring if not already started and we have a valid frame
-		static bool imagingCamStarted = false;
-		if (!imagingCamStarted && vidFrame && vidFrame->data() && vidFrame->size().x > 0)
-		{
-			system.imagingCam->start();
-			imagingCamStarted = true;
-		}
+		// Imaging camera monitoring will be started only when user double-clicks to set ROI
 
 		// Check for double-click events from SDL window
 		if (childwin && vidFrame)
 		{
 			pthread_mutex_lock(&childwin->mutex);
 			if (childwin->lcmd[12].d_bool)
-			{ // Check if we have a new ROI center
-				int clickX = childwin->lcmd[10].d_int;
-				int clickY = childwin->lcmd[11].d_int;
+			{										   // Check if we have a new ROI center
+				int imageX = childwin->lcmd[10].d_int; // Already converted to image coordinates by SDL child
+				int imageY = childwin->lcmd[11].d_int;
 				childwin->lcmd[12].d_bool = false; // Clear the flag
 
-				// Convert SDL window coordinates to image coordinates
-				// This is a simplified conversion - we may need to account for borders, zoom, etc.
-				CVD::ImageRef frameSize = vidFrame->size();
-				int imageX = (clickX * frameSize.x) / childwin->raster.w;
-				int imageY = (clickY * frameSize.y) / childwin->raster.h;
+				// Calculate ROI size based on zoom level to keep screen pixels constant
+				// At 1.0x zoom: 150 screen pixels = 150 image pixels
+				// At 2.0x zoom: 150 screen pixels = 75 image pixels
+				double zoomFactor = childwin->zoomFactor;
+				int roiSizePixels = (int)round(150.0 / zoomFactor);
+				roiSizePixels = std::max(20, std::min(roiSizePixels, 500)); // Clamp between 20 and 500 pixels
 
-				// Clamp to image bounds
-				imageX = std::max(0, std::min(imageX, frameSize.x - 1));
-				imageY = std::max(0, std::min(imageY, frameSize.y - 1));
+				// Get frame dimensions for boundary checking
+				CVD::ImageRef frameSize = vidFrame->size();
+
+				// Ensure ROI doesn't go outside frame bounds
+				int halfRoi = roiSizePixels / 2;
+				imageX = std::max(halfRoi, std::min(imageX, frameSize.x - halfRoi));
+				imageY = std::max(halfRoi, std::min(imageY, frameSize.y - halfRoi));
 
 				pthread_mutex_unlock(&childwin->mutex);
 
+				// Set the ROI size first
+				system.getImagingCam()->setROISize(roiSizePixels, roiSizePixels);
+
+				// Then set the center
 				system.updateROICenter(imageX, imageY);
 
 				// Start ROI-based focus search
 				if (bSystemLogFlag)
 				{
-					logger->info("[FrameProcessor::processFrame] Starting imaging camera focus search at ({}, {})", imageX, imageY);
+					logger->info("[FrameProcessor::processFrame] Starting imaging camera focus search at ({}, {}) with ROI size {}x{}",
+								 imageX, imageY, roiSizePixels, roiSizePixels);
 				}
-				system.imagingCam->startROIFocusSearch();
+				system.getImagingCam()->startROIFocusSearch();
 			}
 			else
 			{
@@ -783,8 +837,11 @@ System::System(int argc, char **argv) : window(),
 
 	window.signalResetClicked().connect(sigc::mem_fun(*this, &System::onResetClicked));
 	window.signalRecenterClicked().connect(sigc::mem_fun(*this, &System::onRecenterClicked));
+	window.signalGetDepthsClicked().connect(sigc::mem_fun(*this, &System::onGetDepthsClicked));
+	window.getGetDepthsActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenGetDepthsToggled));
 
 	window.getHoldFocusActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenHoldFocusToggled));
+	window.getViewDepthsActive().signalToggled().connect(sigc::mem_fun(*this, &System::whenViewDepthsToggled));
 	window.get3DStabActive().signalToggled().connect(sigc::mem_fun(*this, &System::when3DStabToggled));
 	window.get2DStabActive().signalToggled().connect(sigc::mem_fun(*this, &System::when2DStabToggled));
 
@@ -864,24 +921,35 @@ System::System(int argc, char **argv) : window(),
 	sigSharpnessUpdated.connect(sigc::mem_fun(*this, &System::updateSharpnessGraph));
 
 	// Set up imaging camera callbacks for GUI integration
-	if (imagingCam)
+	if (getImagingCam())
 	{
-		imagingCam->setHoldFocusCallback([this](bool enabled)
-										 {
+		getImagingCam()->setHoldFocusCallback([this](bool enabled)
+											  {
 			// Use a dispatcher to safely update GUI from another thread
 			Glib::signal_idle().connect_once([this, enabled]() {
 				window.setHoldFocus(enabled);
 			}); });
 
-		imagingCam->setBestFocusCallback([this](int position)
-										 {
+		getImagingCam()->setBestFocusCallback([this](int position)
+											  {
 			// Use a dispatcher to safely update GUI from another thread
 			Glib::signal_idle().connect_once([this, position]() {
+				imagingCamUpdatingFocus = true; // Prevent ROI clearing during imaging camera update
 				window.setBestFocusScaleValue(static_cast<double>(position));
+				imagingCamUpdatingFocus = false; // Reset flag
 			}); });
+
+		// Add the new search complete callback
+		getImagingCam()->setSearchCompleteCallback([this](bool successful)
+												   {
+			if (childwin) {
+				pthread_mutex_lock(&childwin->mutex);
+				childwin->searchComplete = successful;
+				pthread_mutex_unlock(&childwin->mutex);
+			} });
 	}
 
-	// Imaging camera monitoring will be started after first frame is received
+	// Imaging camera monitoring will be started when user double-clicks to set ROI
 }
 
 bool System::startStreaming()
@@ -1087,6 +1155,9 @@ void System::whenLiveViewToggled(bool viewingLive)
 			logger->info("[System::whenLiveViewToggled] Live view toggled off");
 		}
 		stopStreaming();
+
+		// Clear any existing ROI when switching to recording view
+		clearROIDisplay();
 	}
 }
 
@@ -1140,12 +1211,29 @@ void System::whenStabiliseToggled(bool stabilising)
 		if (bSystemLogFlag)
 			logger->info("[System::whenStabiliseToggled] Stabilise toggled on");
 
-		// If user wants the old stabiliser, we do nothing special here
-		// If user wants the new phase correlation, ensure it is reset so it starts fresh
 		if (usePhaseCorr)
 		{
+			// Phase correlation stabilizer setup
 			phaseCorrStabiliser.reset();			   // clear reference frame
 			phaseCorrStabiliserReferenceNotSet = true; // Important: Set this to true!
+		}
+		else
+		{
+			// Old stabilizer setup - automatically create map with good defaults
+			if (window.getLiveView().getValue() && frameProcessor.vidFrame)
+			{
+				// Use current live frame to create map
+				createStabiliserMapWithDefaults(*frameProcessor.vidFrame);
+			}
+			else if (!window.getLiveView().getValue() && recorder->countFrames() > 0)
+			{
+				// Use current frame from recording
+				VidFrame *vframe = recorder->getFrame(window.getFrameSliderValue());
+				if (vframe)
+				{
+					createStabiliserMapWithDefaults(*vframe);
+				}
+			}
 		}
 	}
 	else
@@ -1153,9 +1241,19 @@ void System::whenStabiliseToggled(bool stabilising)
 		if (bSystemLogFlag)
 			logger->info("[System::whenStabiliseToggled] Stabilise toggled off");
 
-		// Also reset the PhaseCorrStabiliser reference
-		phaseCorrStabiliser.reset();
-		phaseCorrStabiliserReferenceNotSet = true; // Important: Set this to true!
+		if (usePhaseCorr)
+		{
+			// Reset the PhaseCorrStabiliser2 reference
+			phaseCorrStabiliser.reset();
+			phaseCorrStabiliserReferenceNotSet = true;
+		}
+		else
+		{
+			// Hide map and invalidate old stabilizer
+			frameProcessor.filters.erase("map");
+			SDLWindow::setShowingMap(childwin, false);
+			stabiliser.invalidate();
+		}
 	}
 	frameProcessor.stabMutex.unlock();
 }
@@ -1193,10 +1291,64 @@ void System::onResetClicked()
 {
 	if (bSystemLogFlag)
 	{
-		logger->info("[System::onResetClicked] Lens reset button clicked");
+		logger->info("[System::onResetClicked] Reset All button clicked - performing comprehensive system reset");
 	}
-	// Hide the out of bounds warning when reset is clicked
+
+	// 1. Stop all focus modes and clear global variables
+	bFindFocus = false;
+	bHoldFocus = false;
+
+	// 2. Stop and clear ROI tracking and imaging camera monitoring
+	if (getImagingCam())
+	{
+		getImagingCam()->stop(); // Stop all monitoring threads and focus search
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::onResetClicked] Stopped imaging camera monitoring and focus search");
+		}
+	}
+
+	// Clear ROI display from SDL window
+	clearROIDisplay();
+
+	// 3. Reset stabilization and clear offsets
+	frameProcessor.stabMutex.lock();
+	while (!frameProcessor._stabComplete)
+		frameProcessor.stabComplete.wait(frameProcessor.stabMutex);
+
+	// Reset stabilization offsets
+	frameProcessor.resetRaster();
+
+	// Reset phase correlation stabilizer
+	if (usePhaseCorr)
+	{
+		phaseCorrStabiliser.reset();
+		phaseCorrStabiliserReferenceNotSet = true;
+	}
+	frameProcessor.stabMutex.unlock();
+
+	// 4. Clear depth mapping data and reset SDL depth map
+	currentDepthMap.isValid = false;
+	currentDepthMap.depthImage.clear();
+	currentDepthMap.width = 0;
+	currentDepthMap.height = 0;
+
+	// Clear SDL depth map data and force texture update
+	if (childwin)
+	{
+		SDLWindow::clearDepthMapData(childwin);
+	}
+
+	// 5. Reset zoom and offsets in SDL window
+	frameProcessor.resetZoom();
+
+	// Hide out-of-bounds warning
 	window.hideOutOfBoundsWarning();
+
+	if (bSystemLogFlag)
+	{
+		logger->info("[System::onResetClicked] Reset All complete - all systems cleared and reset to defaults");
+	}
 }
 
 void System::onRecenterClicked()
@@ -1235,7 +1387,13 @@ void System::whenHoldFocusToggled(bool holdingFocus)
 		{
 			logger->info("[System::whenHoldFocusToggled] Hold focus toggled off");
 		}
-		// CODE TO BE EXECUTED WHEN "HOLD FOCUS" IS DISABLED GOES HERE
+
+		// Stop ROI tracking and clear display
+		if (getImagingCam())
+		{
+			getImagingCam()->stop(); // Stop the monitoring thread
+		}
+
 		bHoldFocus = 0;
 
 		// Clear the ROI display from SDL window
@@ -1519,6 +1677,28 @@ void System::onWindowBestFocusChanged(double val)
 	int val2 = round(val);
 	// TODO: This should be in a mutex, and done much better. but it's not critical
 	desiredLocBestFocus = val2;
+
+	// Check if this is a manual user change (not from imaging camera callback)
+	// If ROI search was complete and user manually changes focus, clear the ROI tracking
+	if (childwin && !imagingCamUpdatingFocus)
+	{
+		pthread_mutex_lock(&childwin->mutex);
+		bool wasSearchComplete = childwin->searchComplete;
+		bool hasActiveROI = childwin->showROI;
+		pthread_mutex_unlock(&childwin->mutex);
+
+		// If there was a completed ROI search and user manually changed focus, clear it
+		if (wasSearchComplete && hasActiveROI)
+		{
+			if (bSystemLogFlag)
+			{
+				logger->info("[System::onWindowBestFocusChanged] User manually changed focus after ROI search - clearing ROI tracking");
+			}
+
+			// Clear the ROI display and stop monitoring
+			clearROIDisplay();
+		}
+	}
 }
 
 void System::onWindowPauseClicked()
@@ -1605,9 +1785,9 @@ System::~System()
 	}
 
 	// Stop imaging camera before other cleanup
-	if (imagingCam)
+	if (getImagingCam())
 	{
-		imagingCam->stop();
+		getImagingCam()->stop();
 		imagingCam.reset();
 	}
 }
@@ -1687,30 +1867,195 @@ void System::updateSharpnessGraph()
 	window.updateSharpnessGraph(currentSharpnessValues);
 }
 
-void System::updateROICenter(int x, int y)
+void System::onGetDepthsClicked()
 {
-	if (imagingCam)
+	if (bSystemLogFlag)
 	{
-		imagingCam->setROICenter(x, y);
-		if (bSystemLogFlag)
-		{
-			logger->info("[System::updateROICenter] ROI center updated to ({}, {})", x, y);
-		}
+		logger->info("[System::onGetDepthsClicked] Get Depths toggle clicked");
 	}
 
-	// Update SDL window display parameters
+	// Check toggle state to determine action
+	bool gettingDepths = window.getGetDepthsActive().getValue();
+
+	if (gettingDepths)
+	{
+		// Toggle ON - Start depth mapping
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::onGetDepthsClicked] Starting depth mapping");
+		}
+
+		// Only run if viewing live feed
+		if (!window.getLiveView().getValue())
+		{
+			window.displayMessageError("Depth mapping only available in live view mode");
+			window.getGetDepthsActive().setValue(false); // Turn off toggle if invalid
+			return;
+		}
+
+		// Step 1: Clear stabilization and reset offsets
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::onGetDepthsClicked] Clearing stabilization and resetting offsets");
+		}
+
+		// Turn off stabilization to reset offsets
+		window.setStabiliseActive(false);
+
+		// Reset the stabilization offsets in frame processor
+		frameProcessor.resetRaster();
+
+		// Small delay to ensure stabilization is properly reset
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+		// Turn stabilization back on with fresh start
+		window.setStabiliseActive(true);
+
+		// Step 2: Clear any existing depth map data
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::onGetDepthsClicked] Clearing existing depth map data");
+		}
+
+		// Clear system depth map data
+		currentDepthMap.isValid = false;
+		currentDepthMap.depthImage.clear();
+		currentDepthMap.width = 0;
+		currentDepthMap.height = 0;
+
+		// Clear SDL depth map data
+		if (childwin)
+		{
+			SDLWindow::clearDepthMapData(childwin);
+		}
+
+		// Turn off 'View Depths' toggle
+		window.setViewDepths(false);
+
+		// Step 3: Enable Hold Focus
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::onGetDepthsClicked] Enabling Hold Focus");
+		}
+
+		// Enable Hold Focus mode
+		bHoldFocus = true;
+		window.setHoldFocus(true);
+
+		// Start the depth mapping process
+		if (getImagingCam())
+		{
+			getImagingCam()->startDepthMapping();
+		}
+	}
+	else
+	{
+		// Toggle OFF - Clear depth mapping
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::onGetDepthsClicked] Clearing depth mapping");
+		}
+
+		// Clear system depth map data
+		currentDepthMap.isValid = false;
+		currentDepthMap.depthImage.clear();
+		currentDepthMap.width = 0;
+		currentDepthMap.height = 0;
+
+		// Clear SDL depth map data and force texture update
+		if (childwin)
+		{
+			SDLWindow::clearDepthMapData(childwin);
+		}
+
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::onGetDepthsClicked] Depth mapping cleared");
+		}
+	}
+}
+
+void System::whenGetDepthsToggled(bool gettingDepths)
+{
+	// This method is called when the toggle state changes
+	// The actual logic is handled in onGetDepthsClicked()
+	if (bSystemLogFlag)
+	{
+		logger->info("[System::whenGetDepthsToggled] Get Depths toggle state changed to: {}", gettingDepths);
+	}
+}
+
+void System::whenViewDepthsToggled(bool viewingDepths)
+{
+	if (bSystemLogFlag)
+	{
+		logger->info("[System::whenViewDepthsToggled] View Depths toggled: {}", viewingDepths);
+	}
+
+	// Update SDL window to show/hide depth map overlay
+	if (childwin)
+	{
+		pthread_mutex_lock(&childwin->mutex);
+		childwin->showDepthMap = viewingDepths;
+
+		pthread_mutex_unlock(&childwin->mutex);
+	}
+}
+
+void System::updateROICenter(int x, int y)
+{
+	// Only update ROI if we're in live view mode
+	if (!window.getLiveView().getValue())
+	{
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::updateROICenter] ROI update ignored - not in live view mode");
+		}
+		return;
+	}
+
+	// Start ROI tracking if imagingCam exists
+	if (getImagingCam())
+	{
+		getImagingCam()->setROICenter(x, y);
+		getImagingCam()->start(); // Start the monitoring thread
+	}
+
+	// Update SDL window display parameters with current ROI info from imaging camera
 	if (childwin)
 	{
 		pthread_mutex_lock(&childwin->mutex);
 		childwin->roiCenterX = x;
 		childwin->roiCenterY = y;
 		childwin->showROI = true;
+		childwin->searchComplete = false; // Reset search complete state
+
+		// Get the current ROI size from imaging camera to ensure synchronization
+		if (getImagingCam())
+		{
+			int centerX, centerY, width, height;
+			getImagingCam()->getCurrentROI(centerX, centerY, width, height);
+			childwin->roiWidth = width;
+			childwin->roiHeight = height;
+		}
+
 		pthread_mutex_unlock(&childwin->mutex);
 	}
 }
 
 void System::clearROIDisplay()
 {
+	// Stop ROI tracking first to ensure threads are stopped
+	if (getImagingCam())
+	{
+		getImagingCam()->stop(); // Stop the monitoring thread and any active focus search
+
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::clearROIDisplay] Stopped imaging camera monitoring and focus search threads");
+		}
+	}
+
 	// Clear the SDL window ROI display
 	if (childwin)
 	{
@@ -1718,6 +2063,7 @@ void System::clearROIDisplay()
 		childwin->showROI = false;
 		childwin->roiCenterX = -1;
 		childwin->roiCenterY = -1;
+		childwin->searchComplete = false; // Reset search complete state
 		pthread_mutex_unlock(&childwin->mutex);
 
 		if (bSystemLogFlag)
@@ -1736,7 +2082,7 @@ void System::getCurrentROI(int &centerX, int &centerY, int &width, int &height) 
 	else
 	{
 		centerX = centerY = -1;
-		width = height = 100;
+		width = height = 150;
 	}
 
 	// Also update SDL window with current ROI info
@@ -1748,6 +2094,7 @@ void System::getCurrentROI(int &centerX, int &centerY, int &width, int &height) 
 		childwin->roiWidth = width;
 		childwin->roiHeight = height;
 		childwin->showROI = true;
+		childwin->searchComplete = false;
 		pthread_mutex_unlock(&childwin->mutex);
 	}
 }
@@ -1757,15 +2104,197 @@ void System::setSDLWindow(SDLWindow::SDLWin *win)
 	if (win)
 	{
 		win->system = this;
-		win->roiWidth = 100; // Default ROI size
-		win->roiHeight = 100;
+		win->roiWidth = 150; // Default ROI size
+		win->roiHeight = 150;
 		win->showROI = false;
 		win->roiCenterX = -1;
 		win->roiCenterY = -1;
+		win->showDepthMap = false;
+		win->hasDepthMap = false;
+		win->depthMapReady = false;
+		win->depthMapWidth = 0;
+		win->depthMapHeight = 0;
+		for (int y = 0; y < SDLWindow::SDLWin::MAX_DEPTH_HEIGHT; y++)
+		{
+			for (int x = 0; x < SDLWindow::SDLWin::MAX_DEPTH_WIDTH; x++)
+			{
+				win->focusPositions[y][x] = -1.0f; // Negative indicates no data
+			}
+		}
 
 		if (bSystemLogFlag)
 		{
 			logger->info("[System::setSDLWindow] SDL window connected to system");
 		}
 	}
+}
+
+bool System::getStabilizationOffset(double &offsetX, double &offsetY)
+{
+	bool stabilising = window.getStabiliseActive().getValue();
+	if (stabilising)
+	{
+		// Use try_lock to avoid deadlock if stabMutex is already held by current thread
+		if (frameProcessor.stabMutex.trylock())
+		{
+			offsetX = frameProcessor.rasterPos[0];
+			offsetY = frameProcessor.rasterPos[1];
+			frameProcessor.stabMutex.unlock();
+			return true;
+		}
+		else
+		{
+			// If we can't get the lock, use the last known values from SDL shared memory
+			// This avoids deadlock when called from within stabilization thread
+			if (childwin)
+			{
+				if (pthread_mutex_trylock(&childwin->mutex) == 0)
+				{
+					offsetX = childwin->stabOffsetX;
+					offsetY = childwin->stabOffsetY;
+					pthread_mutex_unlock(&childwin->mutex);
+					return true;
+				}
+			}
+			// Fallback to no offset if all locks fail
+			offsetX = 0.0;
+			offsetY = 0.0;
+			return false;
+		}
+	}
+	else
+	{
+		offsetX = 0.0;
+		offsetY = 0.0;
+		return false;
+	}
+}
+
+void System::createStabiliserMapWithDefaults(const VidFrame &frame)
+{
+	if (bSystemLogFlag)
+	{
+		logger->info("[System::createStabiliserMapWithDefaults] Creating stabilizer map with automatic parameters");
+	}
+
+	// Convert VidFrame to the format expected by stabilizer
+	CVD::ImageRef frameSize = frame.size();
+	CVD::Image<unsigned char> stab_image(frameSize);
+
+	// Copy frame data
+	CVD::ImageRef scan;
+	scan.home();
+	do
+	{
+		stab_image[scan] = frame[scan];
+	} while (scan.next(frameSize));
+
+	// Use reasonable default scale (vessel size)
+	double defaultScale = 2.0;
+
+	// Calculate threshold for approximately 10% pixel selection
+	double threshold = calculateThresholdForPercentage(stab_image, defaultScale, 0.10);
+
+	if (bSystemLogFlag)
+	{
+		logger->info("[System::createStabiliserMapWithDefaults] Using scale: {}, threshold: {}", defaultScale, threshold);
+	}
+
+	// Set the stabilizer parameters
+	stabiliser.adjust_scale(defaultScale);
+	stabiliser.adjust_thresh(threshold);
+
+	// Create the map
+	stabiliser.make_map(stab_image, DEFAULT_NUM_TRACKERS);
+
+	// Show the map if stabilizer is valid
+	if (stabiliser.is_valid())
+	{
+		stabiliser.predraw();
+		frameProcessor.filters["map"] = &stabiliser;
+		SDLWindow::setShowingMap(childwin, true);
+
+		if (bSystemLogFlag)
+		{
+			logger->info("[System::createStabiliserMapWithDefaults] Map created and displayed successfully");
+		}
+	}
+	else
+	{
+		if (bSystemLogFlag)
+		{
+			logger->warn("[System::createStabiliserMapWithDefaults] Failed to create valid stabilizer map");
+		}
+	}
+}
+
+double System::calculateThresholdForPercentage(const CVD::Image<unsigned char> &image, double vesselSize, double targetPercentage)
+{
+	CVD::ImageRef size = image.size();
+	if (size.x <= 0 || size.y <= 0)
+		return 0.4; // Default fallback
+
+	// Apply same processing as stabilizer: Gaussian blur then eigenvalue calculation
+	CVD::Image<double> dim(size);
+	CVD::Image<double> blurred(size);
+
+	// Convert to double and copy
+	CVD::ImageRef scan;
+	scan.home();
+	do
+	{
+		dim[scan] = static_cast<double>(image[scan]);
+	} while (scan.next(size));
+
+	// Apply Gaussian blur (same as in stabilizer)
+	CVD::convolveGaussian(dim, blurred, vesselSize, 3.0);
+
+	// Calculate eigenvalues (simplified version of get_large_eig)
+	std::vector<double> eigenvalues;
+	eigenvalues.reserve(size.x * size.y);
+
+	CVD::ImageRef border(20, 20); // Use reasonable border
+	CVD::ImageRef maxScan(size - border);
+
+	scan = border;
+	do
+	{
+		// Calculate Hessian eigenvalues (same as in stabilizer)
+		const CVD::ImageRef dx(1, 0);
+		const CVD::ImageRef dy(0, 1);
+
+		double a = blurred[scan - dx] + blurred[scan + dx] - 2 * blurred[scan];
+		double c = blurred[scan - dy] + blurred[scan + dy] - 2 * blurred[scan];
+		double b = 0.25 * (blurred[scan - dx - dy] + blurred[scan + dx + dy] - blurred[scan - dx + dy] - blurred[scan + dx - dy]);
+
+		double det = a * c - b * b;
+		double trace2 = 0.5 * (a + c);
+
+		double large_eigenval = trace2 + sqrt(std::max(0.0, trace2 * trace2 - det));
+		eigenvalues.push_back(large_eigenval);
+
+	} while (scan.next(border, maxScan));
+
+	if (eigenvalues.empty())
+		return 0.4; // Default fallback
+
+	// Sort eigenvalues to find threshold for target percentage
+	std::sort(eigenvalues.begin(), eigenvalues.end(), std::greater<double>());
+
+	// Find threshold that gives us approximately the target percentage
+	size_t targetIndex = static_cast<size_t>(eigenvalues.size() * targetPercentage);
+	targetIndex = std::min(targetIndex, eigenvalues.size() - 1);
+
+	double calculatedThreshold = eigenvalues[targetIndex];
+
+	// Ensure threshold is within reasonable bounds
+	calculatedThreshold = std::max(0.1, std::min(calculatedThreshold, 2.0));
+
+	if (bSystemLogFlag)
+	{
+		logger->info("[System::calculateThresholdForPercentage] Calculated threshold {} for {}% pixel selection from {} eigenvalues",
+					 calculatedThreshold, targetPercentage * 100, eigenvalues.size());
+	}
+
+	return calculatedThreshold;
 }
