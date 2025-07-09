@@ -475,7 +475,7 @@ void autofocus::run()
           }
           else if (bFindFocus)
           {
-            desiredLocBestFocus = 375;
+            desiredLocBestFocus = 330;
             previous = static_cast<int>(std::round(locBestFocusDouble));
             if (bAutofocusLogFlag)
             {
@@ -944,7 +944,7 @@ double autofocus::computeBestFocusReduced(cv::Mat image, int imgHeight, int imgW
   // std::cout << "COM: " << centerOfMass << ", Amplitude: " << amplitude << std::endl;
 
   // If the amplitude is too low, return the scaled desiredLocBestFocus
-  if (amplitude < 4.0)
+  if (amplitude < 3.0)
   {
     std::cout << "Amplitude is too low, returning scaled desiredLocBestFocus\n";
     return static_cast<double>(desiredLocBestFocus);

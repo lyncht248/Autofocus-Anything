@@ -1264,7 +1264,7 @@ void MainWindow::onFindFocusToggled()
 
 		// Make best focus scale active
 		bestFocusScale.set_sensitive(true);
-		bestFocusScale.setValue(375); // Set default best focus value to 320
+		bestFocusScale.setValue(330); // Set default best focus value to 320
 
 		// Start the find focus process
 		imgcount = 0;
