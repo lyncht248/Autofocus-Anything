@@ -1,42 +1,43 @@
-#pragma once
-#ifndef PLAYER_H    // To make sure you don't declare the function more than once by including the header multiple times.
-#define PLAYER_H
+#ifndef AUTOFOCUS_H
+#define AUTOFOCUS_H
 
-#include "stdafx.h"
-#include <windows.h>
-#include "tchar.h"
-#include <iostream>
-#include <iomanip>
-#include <fstream>
+#include <opencv2/highgui.hpp>
 
-#include "C:\opencv-4.2.0\opencv\build\include\opencv2\opencv.hpp"
+// Global Variables
+// extern std::atomic<bool> bAutofocusing; //Flag that controls the autofocusing
+// while() loop extern std::atomic<bool> bNewImage; //Flag that is 1 for when
+// the buffer image is new, 0 when buffer image is old
 
-//#include "opencv\sources\include\opencv2\opencv.hpp"
-//#include "opencv\build\include\opencv2\opencv.hpp"
-//
-//#include "opencv/build/include/opencv2/core/core.hpp"
-//#include "opencv\build\include\opencv2\imgproc\imgproc_c.h"
-//#include "opencv\build\include\opencv2\imgcodecs.hpp"
-//#include "opencv/build/include/opencv2/core/mat.hpp"
+// extern unsigned char* img_read_buf; // Video capture. Accessed by T1.
+// extern unsigned char* img_transfer_buf; // Transfer. Accessed by T1 and T2.
+// extern unsigned char* img_calc_buf; // Calculation. Accessed by T2.
+// extern std::mutex mtx;
 
-//public:
-//	CComboBox CComboCamera;
+class autofocus { // This object handles autofocusing
+public:
+  void run();
 
+  // thread for capturing video from the tilted camera
+  static void capturevideo();
 
-//Functions from ctrl_obj.cpp that we need
-void __init__();
-void mov_rel(double mmToMove);
-void close_motor();
+  // computes the location of best-focus, from 8 to 310
+  int computebestfocus(cv::Mat image, int imgHeight, int imgWidth);
 
+private:
+  // computes the sharpness curve along the horizontal of the image using a
+  // sharpness algorithm
+  std::vector<double> computesharpness(cv::Mat image, int imgHeight,
+                                       int imgWidth, int kernel);
 
-//Functions from cam_obj.cpp that we need
-//void init_cam();
-//void binning();
-//void start_video();
-//void end_video();
-//cv::Mat video_frame(CString FilePath);
-// 
-//Functions from sensor.cpp that we need
-int sharpness(cv::Mat img, double scale, std::ofstream& outputFile, std::ofstream& outputFile2);
+  // computes the sharpness score for a given portion of imagedata
+  cv::Scalar robertscross(cv::Mat imagedata);
+  cv::Scalar tenengrad(cv::Mat imagedata);
+  cv::Scalar vollath(cv::Mat imagedata);
+  cv::Scalar canny(cv::Mat imagedata);
 
-#endif
+  // fits a normal curve to the given curve, which avoids local maxima
+  std::vector<double> fitnormalcurve(std::vector<double> curve, int kernel);
+  double normpdf(double x, double u, double s); // helper function
+};
+
+#endif // AUTOFOCUS_H
