@@ -1,39 +1,56 @@
----------
-Building
----------
+# autofocus-anything
 
-Requirements
--------------
+## Requirements
+
 Package dependencies: cmake pkg-config libgtkmm-3.0-dev libtoon-dev libcvd-dev libsdl2-dev libusb-1.0-0-dev liblapack-dev
 
 Other libraries 
 Vimba: Copy the .so files in Vimba_6_0/VimbaCPP/DynamicLib/x86_64bit to your system's library path (e.g. /usr/lib/)
 
-Build Commands
----------------
+## Build Commands
 
-$ cmake
-This command will ensure all requirements are present and accounted for and generate an appropriate Makefile
-
-$ make
-Build the binary
-
-Important
-----------
-
-If moving the app to another location, ensure you have read-write privileges there and make sure the VimbaGigETL.cti file is present alongside the hvi-gtk executable.
+```bash
+mkdir build
+cd build
+cmake .. # add -DCMAKE_BUILD_TYPE=Release for production
+sudo make
+```
+The resulting executable is placed in `build/`.
 
 
-Development
------------
+### Important
 
-Most files have unit tests attached (see test/ directory).
-
-To run the tests: 
-
-$ sudo make <filename>_test
-
-$ ./<filename>_test
+If moving the app to another location, ensure you have read-write privileges there and make sure the VimbaGigETL.cti file is present alongside the executable.
 
 
+## Development
 
+Most modules ship with dedicated tests under `test/`.
+
+```bash
+# Example: build & run autofocus tests
+sudo make autofocus_test   # builds the specific test target
+./autofocus_test
+```
+
+
+## File Structure
+
+```
+include/   ── Public headers
+src/       ── Implementation (.cpp) files
+lib/       ── Pre-compiled third-party libraries
+Vimba_6_0/ ── Bundled Allied Vision SDK (optional, system-wide install preferred)
+test/      ── GoogleTest / GoogleMock unit tests
+```
+
+
+## License
+
+This project is released under the MIT License for academic use. For commercial use, please contact [lyncht248@gmail.com](mailto:lyncht248@gmail.com). See [LICENSE](LICENSE) for full details.
+
+## Acknowledgements
+
+
+* Paul Meyer MD, FRCP for optical concepts and designs of the autofocus-anything device
+* Dr. Thierry Savin for supervising and providing engineering input
