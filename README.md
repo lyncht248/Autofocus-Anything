@@ -1,4 +1,4 @@
-# autofocus-anything
+# Autofocus-Anything
 
 ## Requirements
 
