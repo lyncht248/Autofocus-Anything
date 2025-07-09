@@ -22,3 +22,18 @@ Important
 ----------
 
 If moving the app to another location, ensure you have read-write privileges there and make sure the VimbaGigETL.cti file is present alongside the hvi-gtk executable.
+
+
+Development
+-----------
+
+Most files have unit tests attached (see test/ directory).
+
+To run the tests: 
+
+$ sudo make <filename>_test
+
+$ ./<filename>_test
+
+
+

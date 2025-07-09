@@ -82,6 +82,16 @@
         "xiosbase": "cpp",
         "xstring": "cpp",
         "xtree": "cpp",
-        "format": "cpp"
-    }
+        "format": "cpp",
+        "future": "cpp"
+    },
+    "cmake.configureOnOpen": true,
+    "C_Cpp.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+    "C_Cpp.preferredPathSeparator": "Forward Slash",
+    "editor.formatOnSave": true,
+    "[cpp]": {
+        "editor.defaultFormatter": "ms-vscode.cpptools",
+        "editor.formatOnSave": true
+    },
+    "C_Cpp.formatting": "clangFormat"
 }

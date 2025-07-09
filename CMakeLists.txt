@@ -16,11 +16,15 @@ pkg_check_modules(TOON TooN)
 pkg_check_modules(SDL sdl2)
 pkg_check_modules(FMT fmt)
 pkg_check_modules(SPDLOG spdlog)
+pkg_check_modules(SDL2TTF SDL2_ttf)
 #pkg_check_modules(SDLGFX SDL2_gfx)
 
 ### Commented these out
 #pkg_search_module(LIBUSB1 REQUIRED libusb-1.0)
 #include_directories(SYSTEM ${LIBUSB1_INCLUDE_DIRS})
+
+# Add our project include directories
+include_directories(${CMAKE_SOURCE_DIR}/include)
 
 include_directories(${GTKMM_INCLUDE_DIRS})
 link_directories (${GTKMM_LIBRARY_DIRS})
@@ -34,11 +38,16 @@ include_directories(${SDL_INCLUDE_DIRS})
 link_directories (${SDL_LIBRARY_DIRS})
 add_definitions (${SDL_CFLAGS_OTHER})
 
+include_directories(${SDL2TTF_INCLUDE_DIRS})
+link_directories(${SDL2TTF_LIBRARY_DIRS})
+add_definitions(${SDL2TTF_CFLAGS_OTHER})
+
 #include_directories(${SDLGFX_INCLUDE_DIRS})
 #link_directories (${SDLGFX_LIBRARY_DIRS})
 #add_definitions (${SDLGFX_CFLAGS_OTHER})
 
-include_directories(Vimba_6_0)
+# Update Vimba path
+include_directories(${CMAKE_SOURCE_DIR}/lib)
 
 include_directories(${FMT_INCLUDE_DIRS})
 link_directories(${FMT_LIBRARY_DIRS})
@@ -59,9 +68,208 @@ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
 SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
 
-add_executable(hvi-gtk main.cpp mainwindow.cpp sdlwindow.cpp sdlwinchild.cpp cond.cpp system.cpp recorder.cpp thread.cpp stabiliser.cpp vesseledgel.cpp autofocus.cpp lens.cpp tiltedcam.cpp pid.cpp)
 
-configure_file(${CMAKE_SOURCE_DIR}/Vimba_6_0/VimbaGigETL.cti ${CMAKE_BINARY_DIR}/VimbaGigETL.cti COPYONLY)
+# Add Xeryon library with updated file paths
+add_library(xeryon_lib
+    ${CMAKE_SOURCE_DIR}/src/Xeryon.cpp
+    ${CMAKE_SOURCE_DIR}/src/Distance.cpp
+    ${CMAKE_SOURCE_DIR}/src/Axis.cpp
+    ${CMAKE_SOURCE_DIR}/src/Stage.cpp
+)
+
+# Set C++11 standard for Xeryon library (required for std::future, etc.)
+target_compile_features(xeryon_lib PUBLIC cxx_std_11)
+
+# Copy settings file from config directory
+configure_file(${CMAKE_SOURCE_DIR}/config/settings_default.txt ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
+
+# Define source files
+set(SOURCES
+    ${CMAKE_SOURCE_DIR}/src/main.cpp 
+    ${CMAKE_SOURCE_DIR}/src/mainwindow.cpp 
+    ${CMAKE_SOURCE_DIR}/src/sdlwindow.cpp 
+    ${CMAKE_SOURCE_DIR}/src/sdlwinchild.cpp 
+    ${CMAKE_SOURCE_DIR}/src/cond.cpp 
+    ${CMAKE_SOURCE_DIR}/src/system.cpp 
+    ${CMAKE_SOURCE_DIR}/src/recorder.cpp 
+    ${CMAKE_SOURCE_DIR}/src/thread.cpp 
+    ${CMAKE_SOURCE_DIR}/src/stabiliser.cpp 
+    ${CMAKE_SOURCE_DIR}/src/vesseledgel.cpp 
+    ${CMAKE_SOURCE_DIR}/src/autofocus.cpp 
+    ${CMAKE_SOURCE_DIR}/src/lens.cpp 
+    ${CMAKE_SOURCE_DIR}/src/tiltedcam.cpp 
+    ${CMAKE_SOURCE_DIR}/src/pid.cpp
+    ${CMAKE_SOURCE_DIR}/src/Distance.cpp
+    ${CMAKE_SOURCE_DIR}/src/Xeryon.cpp
+    ${CMAKE_SOURCE_DIR}/src/Axis.cpp
+    ${CMAKE_SOURCE_DIR}/src/Stage.cpp
+    ${CMAKE_SOURCE_DIR}/src/phasecorr_stabiliser.cpp
+    ${CMAKE_SOURCE_DIR}/src/sharpness_analyzer.cpp
+    ${CMAKE_SOURCE_DIR}/src/sharpness_graph.cpp
+    ${CMAKE_SOURCE_DIR}/src/imagingcam.cpp
+)
+
+# Add the executable with source files
+add_executable(hvi-gtk ${SOURCES})
+
+# Update file path for Vimba config
+configure_file(${CMAKE_SOURCE_DIR}/lib/VimbaGigETL.cti ${CMAKE_BINARY_DIR}/VimbaGigETL.cti COPYONLY)
 
 #target_compile_options(hvi-gtk PRIVATE -Wall -Wextra)
-target_link_libraries(hvi-gtk ${GTKMM_LIBRARIES} ${TOON_LIBRARIES} ${OpenCV_LIBS} ${SDL_LIBRARIES} ${FMT_LIBRARIES} ${SPDLOG_LIBRARIES} cvd VimbaCPP rt pthread ${CMAKE_SOURCE_DIR}/libASICamera2.a -lusb-1.0)
+target_link_libraries(hvi-gtk ${GTKMM_LIBRARIES} ${TOON_LIBRARIES} ${OpenCV_LIBS} ${SDL_LIBRARIES} ${SDL2TTF_LIBRARIES} ${FMT_LIBRARIES} ${SPDLOG_LIBRARIES} cvd VimbaCPP rt pthread xeryon_lib ${CMAKE_SOURCE_DIR}/lib/libASICamera2.a -lusb-1.0)
+
+# Copy settings file to build directory
+configure_file(${CMAKE_SOURCE_DIR}/config/settings_default.txt ${CMAKE_BINARY_DIR}/settings_default.txt COPYONLY)
+
+# Add Google Test
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  GIT_REPOSITORY https://github.com/google/googletest.git
+  GIT_TAG release-1.12.1
+)
+FetchContent_MakeAvailable(googletest)
+
+# Enable testing
+enable_testing()
+
+# Create logs directory for tests
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/logs)
+
+# Create a library target for testing tiltedcam
+add_library(tiltedcam_lib STATIC
+    ${CMAKE_SOURCE_DIR}/src/tiltedcam.cpp
+    ${CMAKE_SOURCE_DIR}/test/mock_logfile.cpp  # Use the mock implementation
+)
+
+target_link_libraries(tiltedcam_lib 
+    ${OpenCV_LIBS} 
+    ${SDL_LIBRARIES} 
+    ${FMT_LIBRARIES} 
+    ${SPDLOG_LIBRARIES}
+    ${GTKMM_LIBRARIES}
+    cvd
+    VimbaCPP
+    rt 
+    pthread 
+    ${CMAKE_SOURCE_DIR}/lib/libASICamera2.a 
+    -lusb-1.0
+)
+
+# Add test executable
+add_executable(tiltedcam_test test/tiltedcam_test.cpp)
+target_link_libraries(tiltedcam_test PRIVATE 
+    gtest_main
+    tiltedcam_lib
+)
+
+# Register test
+include(GoogleTest)
+gtest_discover_tests(tiltedcam_test)
+
+# Create a library target for testing lens
+add_library(lens_lib STATIC
+    ${CMAKE_SOURCE_DIR}/src/lens.cpp
+    ${CMAKE_SOURCE_DIR}/test/mock_logfile.cpp  # Use the mock implementation
+    ${CMAKE_SOURCE_DIR}/test/mock_lens_globals.cpp  # Add mock globals
+)
+
+target_link_libraries(lens_lib 
+    xeryon_lib
+    ${OpenCV_LIBS} 
+    ${SDL_LIBRARIES} 
+    ${FMT_LIBRARIES} 
+    ${SPDLOG_LIBRARIES}
+    ${GTKMM_LIBRARIES}
+    cvd
+    rt 
+    pthread 
+)
+
+# Add the lens_test executable
+add_executable(lens_test
+    test/lens_test.cpp
+)
+
+# Link against the necessary libraries
+target_link_libraries(lens_test
+    PRIVATE
+    lens_lib
+    gtest
+    gtest_main
+    pthread
+)
+
+# Add the test to CTest
+add_test(NAME LensTest COMMAND lens_test)
+
+# Create a library target for testing autofocus
+add_library(autofocus_lib STATIC
+    ${CMAKE_SOURCE_DIR}/src/autofocus.cpp
+    ${CMAKE_SOURCE_DIR}/src/lens.cpp
+    ${CMAKE_SOURCE_DIR}/src/tiltedcam.cpp
+    ${CMAKE_SOURCE_DIR}/src/pid.cpp
+    ${CMAKE_SOURCE_DIR}/test/mock_logfile.cpp
+    ${CMAKE_SOURCE_DIR}/test/mock_lens_globals.cpp
+)
+
+target_link_libraries(autofocus_lib 
+    xeryon_lib
+    ${OpenCV_LIBS} 
+    ${SDL_LIBRARIES} 
+    ${FMT_LIBRARIES} 
+    ${SPDLOG_LIBRARIES}
+    ${GTKMM_LIBRARIES}
+    cvd
+    VimbaCPP
+    rt 
+    pthread 
+    ${CMAKE_SOURCE_DIR}/lib/libASICamera2.a 
+    -lusb-1.0
+)
+
+# Add the autofocus_test executable
+add_executable(autofocus_test
+    test/autofocus_test.cpp
+)
+
+# Link against the necessary libraries
+target_link_libraries(autofocus_test
+    PRIVATE
+    autofocus_lib
+    gtest
+    gtest_main
+    pthread
+)
+
+# Add the test to CTest
+add_test(NAME AutofocusTest COMMAND autofocus_test)
+
+# Add the new_device_calibration executable
+add_executable(new_device_calibration
+    test/new_device_calibration.cpp
+)
+
+# Link against the necessary libraries
+target_link_libraries(new_device_calibration
+    PRIVATE
+    autofocus_lib
+    gtest
+    gtest_main
+    pthread
+)
+
+# Add the test to CTest
+add_test(NAME DeviceCalibrationTest COMMAND new_device_calibration)
+
+# Add the standalone PID tuning application
+add_executable(pid_tuning_standalone 
+    test/pid_tuning_standalone.cpp
+)
+
+# Link with the necessary libraries
+target_link_libraries(pid_tuning_standalone 
+    PRIVATE
+    autofocus_lib
+    pthread
+)
