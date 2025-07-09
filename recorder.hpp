@@ -25,48 +25,45 @@ public:
 	Recorder(System &sys);
 	~Recorder();
 	
-	// Returns frame n of recording, if there is a recording
 	VidFrame* getFrame(int n);
-
-	// Puts frame into position n of a recording
 	int putFrame(VidFrame *frame);
 
-	// Saves or loads all the frames in a given location into 'frames' vector
-	void saveFrames(std::string location);
-	void loadFrames(std::string location);
+	void saveFrames(const std::string &location);
+	void loadFrames(const std::string &location);
 
-	// True when busy saving/loading
-	bool isBuffering() const;
+	bool isBuffering() const; 
 
 	void stopBuffering();
 
 	int countFrames();
 
-	// Returns current frame
 	VidFrame* getFrame();
-	void releaseFrame();
+	// void releaseFrame();
 
 	void clearFrames();
-	
+
+	void setBufferFrameRate();
+
 	void connectTo(VDispatcher<std::tuple<Operation, bool> > *sOperationComplete);
 	//Glib::Dispatcher* signalOperationComplete();
 	VDispatcher<std::string>& signalOperationLoad();
 	VDispatcher<std::string>& signalOperationSave();
-	VDispatcher<int>& signalBuffer();
+	VDispatcher<std::pair<int, int> >& signalBuffer();
 private:
 	void emitOperationComplete(Operation op, bool success);
-	void bufferFrames(int start);
+	void bufferFrames(std::pair<int, int> data); // 
 	System &system;
 	bool buffering;
-	std::vector<VidFrame*> frames; // This is the vector of video frames
+	std::vector<VidFrame*> frames;
 	VDispatcher<std::tuple<Operation, bool> > *sigOperationComplete;
 	VDispatcher<std::string> sigOperationSave, sigOperationLoad;
-	VDispatcher<int> sigBuffer;
+	VDispatcher<std::pair<int, int> > sigBuffer;
 
 	Glib::Threads::Mutex mutex;
 	Glib::Threads::Cond frameReleased;
 
 	VidFrame *current;
+	int bufSleep;
 };
 
 using RecOpRes = std::tuple<Recorder::Operation, bool>;

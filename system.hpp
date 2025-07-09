@@ -6,20 +6,19 @@
 #include <iostream>
 #include <queue>
 
+#include "cairomm/surface.h"
 #include "vidframe.hpp"
 #include "mainwindow.hpp"
+#include "autofocus.hpp"
 #include "cond.hpp"
 #include "thread.hpp"
 #include "recorder.hpp"
 #include "tsqueue.hpp"
 #include "logfile.hpp"
 #include "stabiliser.hpp"
-
-#include <TooN/TooN.h>
-
+#include "framefilter.hpp"
 
 namespace Vimba = AVT::VmbAPI;
-using namespace TooN;
 
 class System;
 
@@ -27,67 +26,73 @@ class FrameProcessor
 {
 	friend class System;
 public:
-
-	// Starts a GLib::Thread and passes relevant variables (ie. mutex) to process frames using processFrame();
 	FrameProcessor(System &sys);
-
-	// Destructor that stops frame processing 
 	~FrameProcessor();
 	
-	// Releases frame using Glib::Threads::Cond frameReleased
 	void releaseFrame();
+	void resetRaster();
+	::Cairo::RefPtr< ::Cairo::Surface> getFrame();
 
-	//public function to get the most recent processed frame.
-	VidFrame *getFrame();
-
-protected: 
-	// Processes frames according to a tsqueue
+protected: //Only available to derived and friend classes
+	void stabilise();
 	void processFrame();
 
-	//Pointer to the most recent proessed frame
-	VidFrame *processed;
-	std::vector<std::function<void(VidFrame*)> > filters;
+	::Cairo::RefPtr< ::Cairo::ImageSurface> processed;
+	VidFrame *vidFrame;
+	std::unordered_map<std::string, FrameFilter*> filters;
 	bool running;
+	bool _stabNewFrame;
+	bool _stabComplete;
+	bool _frameReleased;
 
-	Glib::Threads::Mutex mutex;
-	Glib::Threads::Cond frameReleased;
+	Glib::Threads::Mutex mutex, stabMutex;
+	Glib::Threads::Cond frameReleased, stabNewFrame, stabComplete;
 
 	System &system;
+
+	TooN::Vector<2> offset, currentOff, rasterPos;
+	TSQueue<VidFrame *> stabQueue, released;
+
+	Glib::Threads::Thread *processorThread, *stabThread;
 };
 
+/*
+This class is responsible for all the processing behind the GUI, including frame streaming (see FrameProcessor), closing/opening the GUI, 
+and operating other neccessary threads.
+*/
 class System
 {
+	friend class FrameProcessor; //Allows FrameProcessor to access private methods
 public:
-	//Constructor, sets up GUI by calling functions using MainWindow window object.
-	// All GUI changes are handled by mainwindow.cpp from here. 
-	System(int argc, char **argv);
 
-	//Destructor, closes app
+	// Constructor function for system class
+	System(int argc, char **argv);
 	~System();
 
 	MainWindow& getWindow();
 	Recorder& getRecorder();
 
-	void startStreaming();
+	bool startStreaming();
 	void stopStreaming();
 	
 	template<typename T>
-	void setFeature(const std::string &fname, T val)
+	bool setFeature(const std::string &fname, T val)
 	{
 		if (cam != nullptr)
 		{
 			Vimba::FeaturePtr pFeature;
 			if (cam->GetFeatureByName(fname.c_str(), pFeature ) == VmbErrorSuccess && pFeature->SetValue(val) == VmbErrorSuccess)
 			{
-				hvigtk_logfile << "Set " << fname << " to: " << val << std::endl;
-				hvigtk_logfile.flush();
+				logger->info("[System.hpp] Set {} to: {}", fname, val);
+				return true;
 			}
 			else
 			{
-				hvigtk_logfile << "FAILED to set " << fname << " to: " << val << std::endl;
-				hvigtk_logfile.flush();
+				logger->error("[System.hpp] FAILED to set {} to: {}", fname, val);
+				return false;
 			}
 		}
+		return false;
 	}
 
 	template<typename T>
@@ -100,12 +105,12 @@ public:
 			{
 				T out;
 				pFeature->GetValue(out);
+				logger->info("[System.hpp] Got {} = {}", fname, out);
 				return out;
 			}
 			else
 			{
-				hvigtk_logfile << "FAILED to get " << fname << std::endl;
-				hvigtk_logfile.flush();
+				logger->error("[System.hpp] FAILED to get {}", fname);
 			}
 		}
 
@@ -115,22 +120,23 @@ public:
 	TSQueue<VidFrame *>& getFrameQueue();
 	Glib::Dispatcher& signalNewFrame();
 
+	VidFrame* getFrame();
+	double getFPS(); //see TODO below
+
+
 private:
-	// Either pulls frame from recorder or frame processor (live cam) and sends to window
 	void renderFrame();
 	void releaseFrame();
 
 	void whenLiveViewToggled(bool viewingLive);
 
-	//Past logic for buttons below... 
-
 	void whenMakeMapToggled(bool makingMap);
 	void whenStabiliseToggled(bool stabilising);
 	void whenShowMapToggled(bool showingMap);
 
-	void whenFindFocusToggled(bool findingFocus);
 	void whenHoldFocusToggled(bool holdingFocus);
 	void when3DStabToggled(bool active);
+	void when2DStabToggled(bool active2);
 
 	void whenLoadingToggled(bool loading);
 	void whenSavingToggled(bool saving);
@@ -144,36 +150,49 @@ private:
 	void onWindowThresholdChanged(double val);
 	void onWindowScaleChanged(double val);
 	void onWindowBestFocusChanged(double val);
+	void onWindowPauseClicked();
+	void onFindFocusClicked();
+	void onResetClicked();
+	void onWindowEnterClicked();
 
-	double Edge_Threshold, Edge_Scale;
+	bool onCloseClicked(const GdkEventAny* event);
 
+	void on_error();
+	void handleDisconnection();
 
 	struct Private;
-	MainWindow window;
-	Vimba::VimbaSystem &vsys;
-	Vimba::CameraPtr cam;
+	MainWindow window; //object from mainwindow.cpp class
+	autofocus AF; //object from autofocus.cpp class
+	Vimba::VimbaSystem &vsys; //For interacting with Vimba camera
+	Vimba::CameraPtr cam; //For interacting with Vimba camera
 
-	CVD::ImageRef size;
-	
-	CVD::Image<unsigned char> im;
-	//CVD::Image<unsigned int> im;
-
-
-    Stabiliser my_stabiliser;
-    Vector<2> offset;
+	CVD::ImageRef size; 
+	CVD::Image<unsigned int> im;
 
 	struct Private *priv;
 
 	Glib::Dispatcher sigNewFrame;
 
 	TSQueue<VidFrame *> frameQueue;
+
 	
 	FrameProcessor frameProcessor;
 	
 	ObjectThread thread;
 
-	Recorder *recorder;
+	//Recorder *recorder;
+	std::unique_ptr<Recorder> recorder; //Attempting to fix some memory leakage
 	VDispatcher<RecOpRes> sRecorderOperationComplete;
+
+	Stabiliser stabiliser; //For running x-y stabilization
+	bool madeMap;
+	bool errorDialogShown = false;
+	//double actualFPS; //TODO: Implement actualFPS instead of using value in box
+
+	// Flags for disconnection states
+	bool tiltedCamDisconnected = false;
+	bool imagingCamDisconnected = false;
+	bool lensDisconnected = false;
 };
 
 #endif

@@ -7,7 +7,7 @@
 #include <unordered_map>
 
 
-
+// Conditions are used in MainWindow.cpp (mainly) to signal to other objects when certain buttons are pressed, interacted with, etc. 
 class Condition
 {
 	friend class OpCondition;
@@ -43,7 +43,7 @@ protected:
     SignalFalse sigFalse;
 	SignalDestroyed sigDestroyed;
     
-    bool value; //the signal 
+    bool value;
 	std::string identity;
 };
 

@@ -1,4 +1,4 @@
-// Used by vesseledge to determine the direction of each vessel
+// -*- c++ -*-
 
 #ifndef COMPASS_H
 #define COMPASS_H

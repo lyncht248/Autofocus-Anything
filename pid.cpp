@@ -28,7 +28,7 @@
 
 #include <iostream>
 #include <cmath>
-#include "pid.h"
+#include "pid.hpp"
 
 using namespace std;
 
@@ -38,7 +38,7 @@ public:
     PIDImpl(double dt, double max, double min, double Kp, double Kd, double Ki);
     ~PIDImpl();
     double calculate(double setpoint, double pv);
-
+    double _filtered_derivative; // Adding a variable for the filtered derivative
 private:
     double _dt;
     double _max;
@@ -76,13 +76,13 @@ PIDImpl::PIDImpl(double dt, double max, double min, double Kp, double Kd, double
     _Kd(Kd),
     _Ki(Ki),
     _pre_error(0),
-    _integral(0)
+    _integral(0),
+    _filtered_derivative(0) // Initialize to 0
 {
 }
 
 double PIDImpl::calculate(double setpoint, double pv)
 {
-
     // Calculate error
     double error = setpoint - pv;
 
@@ -93,9 +93,13 @@ double PIDImpl::calculate(double setpoint, double pv)
     _integral += error * _dt;
     double Iout = _Ki * _integral;
 
-    // Derivative term
+    // Raw Derivative term
     double derivative = (error - _pre_error) / _dt;
-    double Dout = _Kd * derivative;
+
+    // Low-pass filter for the derivative term
+    double alpha = 0.1; // Example value, you might need to tweak this
+    _filtered_derivative = (1 - alpha) * _filtered_derivative + alpha * derivative;
+    double Dout = _Kd * _filtered_derivative;
 
     // Calculate total output
     double output = Pout + Iout + Dout;

@@ -3,70 +3,77 @@
 
 #include <gtkmm.h>
 #include <cairomm/cairomm.h>
+#include <unordered_map>
 
 #include "cond.hpp"
 #include "gtkmm/drawingarea.h"
-#include "gtkmm/glarea.h"
 #include "sigc++/connection.h"
 #include "vidframe.hpp"
 
-#include "stabiliser.hpp"
-//Defines the slider widget
 class ScaleWidget : public Gtk::Bin
 {
 public: 
-	//Creates the widget
-    ScaleWidget(double lower, double upper, double inc, double def);
-
-	//Destroys the widget
+    ScaleWidget(double lower, double upper, double inc, double def, int spinButtonWidth=0, int scaleWidth=0, bool stepSnap=false);
     virtual ~ScaleWidget();
     
     using SignalChanged = sigc::signal<void(double)>;
     SignalChanged signalChanged();
 
-	using SignalUserChanged = sigc::signal<void(Gtk::ScrollType scroll, double newValue)>;
-	SignalUserChanged signalUserChanged();
-    
     void setSpinButtonPrec(int digits);
     void setSpinButtonWidth(int width);
     void setScaleSizeRequest(int width, int height);
     
-	//Functions that get and set value from slider
     double getValue() const;
     void setValue(double v);
+	void setUpperLimit(double value);
 private:
     void spinButtonChanged();
     void scaleChanged();
-	bool changeScale(Gtk::ScrollType scroll, double newValue);
     
     SignalChanged sigChanged;
-	SignalUserChanged sigUserChanged;
     
     Gtk::Scale scale;
     Gtk::SpinButton spinButton;
     Gtk::Grid grid;
     
     sigc::connection spinButtonConnection, scaleConnection;
+	bool stepSnap;
 };
 
+class RenderFilter
+{
+public:
+	virtual void draw(const ::Cairo::RefPtr< ::Cairo::Context>& cr) = 0;
+};
+
+
+/*
+This class is responsible for the GTK GUI buttons, logic, etc., and is a derived class from GTK::Window
+*/
 class MainWindow : public Gtk::Window
 {
 public: 
     struct Private;
-	// Lays out the GUI
     MainWindow();
     virtual ~MainWindow();
 
-	// Call to update the Camera values
+	// double getFrameRateScaleValue() const;
+	double getStabWaitScaleValue() const;
+	double getRecordingSizeScaleValue() const;
+	double getBestFocusScaleValue() const;
+
+	void setBestFocusScaleValue(double v);
+
+	void getDisplayDimensions(double &w, double &h) const;
+
 	void updateCameraValues(double gain, double expose, double gamma);
 
-	// For the fps feature
-	void displayMessage(const std::string &msg);
+	void displayMessageFPS(const std::string &msg);
+	void displayMessageLoadSave(const std::string &msg);
+	void displayMessageError(const std::string &msg);
 
-	// Call for renderDisplay, which puts the camera frame in the GUI
 	void renderFrame(VidFrame *frame);
 
-	// Signals used to cause logic changes in system.cpp
     using SignalFrameDrawn = sigc::signal<void()>;
     SignalFrameDrawn signalFrameDrawn();
 
@@ -82,6 +89,18 @@ public:
 	using SignalBestFocusChanged = sigc::signal<void(double)>;
 	SignalBestFocusChanged signalBestFocusChanged();
 
+    using SignalPauseClicked = sigc::signal<void()>;
+    SignalPauseClicked signalPauseClicked();
+
+	using SignalEnterClicked = sigc::signal<void()>;
+	SignalEnterClicked signalEnterClicked();
+
+	using SignalFindFocusClicked = sigc::signal<void()>;
+    SignalFindFocusClicked signalFindFocusClicked();
+
+	using SignalResetClicked = sigc::signal<void()>;
+    SignalResetClicked signalResetClicked();
+
 	void setHasBuffer(bool val);
 	void setLiveView(bool val);
 	void setLoading(bool val);
@@ -89,13 +108,17 @@ public:
 	void setPlayingBuffer(bool val);
 	void setSeeking(bool val);
 	void setRecording(bool val);
+	void setMakingMap(bool val);
+	void setShowingMap(bool val);
+	void set3DStab(bool val);
+	void setHoldFocus(bool val);
 
 	Condition& getMakeMapActive();
 	Condition& getStabiliseActive();
 	Condition& getShowMapActive();
-	Condition& getFindFocusActive();
 	Condition& getHoldFocusActive();
 	Condition& get3DStabActive();
+	Condition& get2DStabActive();
 	Condition& getHasBuffer();
 	Condition& getLiveView();
 	Condition& getLoading();
@@ -103,10 +126,22 @@ public:
 	Condition& getPlayingBuffer();
 	Condition& getSeeking();
 	Condition& getRecording();
+	Condition& getPausedRecording();
 
 	int getFrameSliderValue() const;
+	double getFrameRateEntryBox() const;
 	std::string getFileLocation() const;
-    
+
+	void addRenderFilter(const std::string &key, RenderFilter *filter);
+	RenderFilter* removeRenderFilter(const std::string &key);
+	
+	void setTrackingFPS(bool val);
+protected:
+	virtual void on_realize() override;
+	virtual void on_show() override;
+
+	bool _on_state_event(GdkEventWindowState* window_state_event);
+
 private:
 	/*
 	 * This is the function which will draw the currently loaded frame.
@@ -122,10 +157,13 @@ private:
 	void whenStabiliseToggled(bool stabilising);
 	void whenShowMapToggled(bool showingMap);
 
-	void whenFindFocusToggled(bool findingFocus);
 	void whenHoldFocusToggled(bool holdingFocus);
 	void when3DStabToggled(bool active);
-    
+	void when2DStabToggled(bool active2);
+    void onFindFocusClicked(); 
+    void onResetClicked(); 
+
+
     void bufferFilled();
     void bufferEmptied();
     
@@ -135,6 +173,7 @@ private:
 	void whenLoadingToggled(bool loading);
 	void whenSavingToggled(bool saving);
 	void whenRecordingToggled(bool recording);
+	void whenPausedRecordingToggled(bool paused);
 	void whenTrackingFPSToggled(bool tracking);
 
 	void onLoadButtonClicked();
@@ -153,42 +192,43 @@ private:
 	void onGainScaleChange(double val);
 	void onExposeScaleChange(double val);
 	void onGammaScaleChange(double val);
+	void onFrameRateChange(double val);
 
 	void onThresScaleChange(double val);
 	void onScaleScaleChange(double val);
+	void onRecordingSizeScaleChange(double val);
 	void onBestFocusScaleChange(double val);
     
     struct Private *priv;
     
-    ScaleWidget gainScale, exposeScale, gammaScale, frameSlider, thresScale, scaleScale, bestFocusScale;
-    Gtk::Button recordButton, backToStartButton, pauseButton, playButton, fileLoadButton, fileSaveButton;
-    Gtk::Entry fileNameEntry;
+    ScaleWidget gainScale, exposeScale, gammaScale, frameSlider, thresScale, scaleScale, waitScale, recordingSizeScale, bestFocusScale;
+    Gtk::Button recordButton, backToStartButton, pauseButton, playButton, fileLoadButton, fileSaveButton, findFocusButton, resetButton, enterButton;
+    Gtk::Entry fileNameEntry, frameRateEntry;
     Gtk::FileChooserButton fileChooseButton;
-    Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, findFocusToggle, holdFocusToggle, tdStabToggle;
-    Gtk::Label fpsLabel;
+    Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, holdFocusToggle, threedStabToggle, twodStabToggle;
+    Gtk::Label fpsLabel, loadSaveLabel, errorLabel;
 
 
-	Gtk::DrawingArea display;
-	int displayW, displayH;
 	VidFrame *drawFrame;
-	CVD::Image<unsigned char> im;
 	bool newDrawFrame;
 	int countFrames;
     
-    Condition makeMapActive, stabiliseActive, showMapActive, findFocusActive, holdFocusActive, tdStabActive, 
-			  hasBuffer, liveView, loading, saving, playingBuffer, seeking, recording, trackingFPS;
+    Condition makeMapActive, stabiliseActive, showMapActive, holdFocusActive, threedStabActive, twodStabActive,
+			  hasBuffer, liveView, loading, saving, playingBuffer, seeking, recording, pausedRecording, trackingFPS;
 
 	SignalFrameDrawn sigFrameDrawn;
 	SignalFeatureUpdated sigFeatureUpdated;
 	SignalThresholdChanged sigThresholdChanged;
 	SignalScaleChanged sigScaleChanged;
 	SignalBestFocusChanged sigBestFocusChanged;
+	SignalPauseClicked sigPauseClicked;
+	SignalEnterClicked sigEnterClicked;
+	SignalFindFocusClicked sigFindFocusClicked;
+	SignalResetClicked sigResetClicked;
 
-	sigc::connection gainScaleConnection, exposeScaleConnection, gammaScaleConnection, frameSliderConnection;
+	sigc::connection gainScaleConnection, exposeScaleConnection, gammaScaleConnection, frameRateScaleConnection, frameSliderConnection, stateChangeConnection;
 
-	Stabiliser my_stabiliser; 
-	TooN::Vector<2> offset;
-
+	std::unordered_map<std::string, RenderFilter*> renderFilters;
 };
 
 #endif

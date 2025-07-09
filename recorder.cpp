@@ -7,7 +7,9 @@
 #include "system.hpp"
 #include "main.hpp"
 
-#define FNUM_SIZE 21
+#define FNUM_SIZE 26
+
+bool bRecorderLogFlag = 0; // 1 = log, 0 = don't log
 
 Recorder::Recorder(System &sys) :
 	system(sys),
@@ -17,21 +19,28 @@ Recorder::Recorder(System &sys) :
 	sigOperationSave(),
 	sigOperationLoad(),
 	sigBuffer(),
-	mutex(),
+	mutex(), // Holds frame data
 	frameReleased(),
 	current(nullptr)
 {
 	sigOperationLoad.connect(sigc::mem_fun(*this, &Recorder::loadFrames) );
 	sigOperationSave.connect(sigc::mem_fun(*this, &Recorder::saveFrames) );
 	sigBuffer.connect(sigc::mem_fun(*this, &Recorder::bufferFrames) );
+
+	if(bRecorderLogFlag) logger->info("[Recorder::Recorder()] constructor called");
 }
 
 Recorder::~Recorder()
 {
-	for (VidFrame *vf : frames)
-	{
-		delete vf;
+	//If there is frame data still accessed by frames, delete it
+	if(frames.size() > 0) {
+		for (VidFrame *vf : frames)
+		{
+			delete vf;
+		}
+		frames.clear(); 
 	}
+	if(bRecorderLogFlag) logger->info("[Recorder::~Recorder()] destructor called");
 }
 
 VidFrame* Recorder::getFrame(int n)
@@ -44,16 +53,23 @@ VidFrame* Recorder::getFrame(int n)
 		return nullptr;
 }
 
+//Fills up the frames buffer (or the RAM) with frames, either from live camera or from loaded file
 int Recorder::putFrame(VidFrame *frame)
 {
 	frames.push_back(frame);
 	emitOperationComplete(Operation::RECOP_ADDFRAME, true);
-	if (frames.size() == HVIGTK_RECORD_FRAMECOUNT)
+
+	//If the frames queue size is equal to the recording size scale value, emit the RECOP_FILLED signal
+	if (frames.size() == (int) system.getWindow().getRecordingSizeScaleValue() )
 		emitOperationComplete(Operation::RECOP_FILLED, true);
+
+	//Should always be the length of the recorded frames
+	if(bRecorderLogFlag) logger->info("[Recorder::putFrame()] frames queue is size: {}", frames.size());
 	return frames.size();
+
 }
 
-void Recorder::saveFrames(const std::string location)
+void Recorder::saveFrames(const std::string &location)
 {
 	char fnum[FNUM_SIZE];
 	mkdir(location.c_str(), 0777);
@@ -63,8 +79,6 @@ void Recorder::saveFrames(const std::string location)
 		std::ofstream ofs(location + fnum);
 		if (ofs.is_open() )
 		{
-			hvigtk_logfile << "Saving: " << location << fnum << std::endl;
-			hvigtk_logfile.flush();
 			CVD::img_save(*(frames[i]), ofs, CVD::ImageType::PNM);
 		}
 		else
@@ -73,32 +87,52 @@ void Recorder::saveFrames(const std::string location)
 			return;
 		}
 	}
+	if(bRecorderLogFlag) logger->info("[Recorder::saveFrames()] frames saved to: {}", location);
 	emitOperationComplete(Operation::RECOP_SAVE, true);
 }
 
-void Recorder::loadFrames(const std::string location)
+void Recorder::loadFrames(const std::string &location)
 {
-	for (VidFrame *vf : frames)
-	{
-		delete vf;
+	//If there are frames in the recorder, delete them now
+	std::cout << "Load Frames entered" << std::endl;
+
+	if(countFrames() > 0) {
+
+		clearFrames();
 	}
-	frames.clear();
+
+	//Loads new frames from location
 	int i = 0;
 	char fnum[FNUM_SIZE];
+	//Sometimes crashes here, sometimes crashes at img_load, therefore error must be happening elsewhere. 
+	std::cout << "about to start loading frames" << std::endl;
 	while (true)
 	{
 		std::snprintf(fnum, FNUM_SIZE, "/hvi-video-%.5d.pgm", i);
 		std::ifstream ifs(location + fnum);
 		if (ifs.is_open() )
 		{
-			VidFrame *frame = new VidFrame();
+			IVidFrame *frame = new IVidFrame();
+			std::cout << "img_load about to be called" << std::endl;
+			std::cout << "frame->size(): " << frame->size() << std::endl;
+			std::cout << "frame:" << frame << std::endl;
 			CVD::img_load(*frame, ifs);
-			auto sz = frame->size();
-			//hvigtk_logfile << "Loading: " << location << fnum << " (" << sz.x << ", " << sz.y << ")" << std::endl;
-			//hvigtk_logfile.flush();
+			//auto sz = frame->size();
+			std::cout << "frames.push_back about to be called" << std::endl;
 			frames.push_back(frame);
 			i++;
+			std::cout << "emitOperationComplete about to be called" << std::endl;
 			emitOperationComplete(Operation::RECOP_ADDFRAME, true);
+
+			// IVidFrame *tempFrame = new IVidFrame();
+			// CVD::img_load(*tempFrame, ifs);
+
+			// VidFrame *frame = new VidFrame(*tempFrame); // Use the copy constructor
+
+			// frames.push_back(frame);
+			// i++;
+			// emitOperationComplete(Operation::RECOP_ADDFRAME, true);
+
 		}
 		else
 		{
@@ -106,6 +140,7 @@ void Recorder::loadFrames(const std::string location)
 			return;
 		}
 	}
+	if(bRecorderLogFlag) logger->info("[Recorder::loadFrames()] frames loaded from: {}", location);
 }
 
 int Recorder::countFrames()
@@ -118,16 +153,24 @@ VidFrame* Recorder::getFrame()
 	return current;
 }
 
-void Recorder::releaseFrame()
-{
-	mutex.lock();
-	frameReleased.broadcast();
-	mutex.unlock();
-}
+// void Recorder::releaseFrame()
+// {
+// 	mutex.lock();
+// 	frameReleased.broadcast();
+// 	mutex.unlock();
+// }
 
-void Recorder::clearFrames()
+void Recorder::clearFrames() //Called ONLY when a new recording is started... call more often?
 {
+	buffering = false;
+	mutex.lock();
+	for (VidFrame *frame : frames)
+	{
+		delete frame;
+	}
 	frames.clear();
+	mutex.unlock();
+	if(bRecorderLogFlag) logger->info("[Recorder::clearFrames()] frames cleared");
 	emitOperationComplete(Operation::RECOP_EMPTIED, true);
 }
 
@@ -137,23 +180,31 @@ void Recorder::emitOperationComplete(Operation op, bool success)
 		sigOperationComplete->emit(std::make_tuple(op, success) );
 }
 
-void Recorder::bufferFrames(int start)
+// Loads frames into FrameQueue (see FrameObserver) at data.second frames per second, starting at data.first frame
+// Started in System::whenPlayingToggled(bool playing = true)
+// Stopped when System::whenPlayingToggled(bool playing = false)
+void Recorder::bufferFrames(std::pair<int, int> data)
 {
-	hvigtk_logfile << "Recorder buffering started from frame: " << start << std::endl;
-	hvigtk_logfile.flush();
+	int start = data.first;
+	int bufSleep = round(1000.0 / data.second);
+	if(bRecorderLogFlag) logger->info("[Recorder::bufferFrames()] buffering started from frame: {}", start);
 	buffering = true;
+
+	//Loads frames into FrameQueue at frame rate until frames.size reached
 	for (unsigned long i = start; buffering && i < frames.size(); i++)
 	{
-		mutex.lock();
 		{
+			mutex.lock();
 			current = frames[i];
-			system.signalNewFrame().emit();
-			std::this_thread::sleep_for(std::chrono::milliseconds(33) );
-			frameReleased.wait(mutex);
+			system.getFrameQueue().push(frames[i]);		
+			mutex.unlock();
+			std::this_thread::sleep_for(std::chrono::milliseconds(bufSleep) );
 		}
-		mutex.unlock();
 	}
+	//Waits until last frame is processed 
+	system.getFrameQueue().waitForEmpty(); //Stops here until all frames have been played
 	buffering = false;
+
 	emitOperationComplete(Operation::RECOP_BUFFER, true);
 }
 
@@ -178,7 +229,7 @@ Glib::Dispatcher* Recorder::signalOperationComplete()
 }
 */
 
-VDispatcher<int>& Recorder::signalBuffer()
+VDispatcher<std::pair<int, int> >& Recorder::signalBuffer()
 {
 	return sigBuffer;
 }

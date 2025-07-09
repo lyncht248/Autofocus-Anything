@@ -11,12 +11,8 @@
 struct Frame
 {
 	public: 
-		// If nothing passed to struct Frame, buffer is null
 		Frame();
-		
-		// If a Frame is passed to struct Frame, create matching frame
 		Frame(const Frame &other);
-
 		~Frame();
 
 		VmbUchar_t *buffer;
@@ -24,20 +20,8 @@ struct Frame
 		VmbPixelFormatType pixf;
 };
 
-using VidFrame = CVD::Image<VmbUchar_t>;
-
-/*
-class VidFrame : public CVD::Image<VmbUchar_t>
-{
-	friend class FrameProcessor;
-public:
-	VidFrame(Frame &f);
-	VidFrame(CVD::Image<VmbUchar_t> &im);
-	~VidFrame();
-protected:
-	static Frame nullframe;
-	Frame &frame;
-};
-*/
+//(I think) Image has data management, so you must delete, but BasicImage does not, so don't need to delete
+using VidFrame = CVD::BasicImage<VmbUchar_t>;
+using IVidFrame = CVD::Image<VmbUchar_t>;
 
 #endif

@@ -1,18 +1,20 @@
 #include "stabiliser.hpp"
+#include "cairomm/enums.h"
+#include "cairomm/surface.h"
 
+#include <cvd/image_ref.h>
 #include <cvd/vector_image_ref.h>
 #include <cvd/convolution.h>
-#include <cvd/gl_helpers.h>
+#include <cvd/image_io.h>
+#include <cvd/byte.h>
 #include <TooN/helpers.h>
 #include <TooN/irls.h>
-#include "logfile.hpp"
-
-//#include <GL/gl.h>
 
 #include <iostream>
 #include <fstream>
-
-// #include <fltk/events.h>
+#include <vector>
+#include "main.hpp"
+#include "sdlwindow.hpp"
 
 using namespace CVD;
 using namespace TooN;
@@ -36,20 +38,24 @@ void get_large_eig(BasicImage<double>& im,
 // const double vessel_size=2.0; // around what size are the blood vessels
 
 void Stabiliser::make_map(const CVD::BasicImage<unsigned char>& im, int num_trackers){
-
-  
   my_num_trackers=num_trackers;
   ImageRef size = im.size();
   tracker_edgels.resize(num_trackers);
   vessel_edgels.resize(num_trackers);
-  dim.resize(size);
 
+  //std::cout << "vessel_edgels.size: "<< vessel_edgels.size() << std::endl;
+
+  dim.resize(size);
   ImageRef scan;
   scan.home();
   do{
     ImageRef hscan(scan);
     dim[scan]=im[scan];
   } while(scan.next(size));
+
+  //for predrawing
+  frameWidth = size.x;
+  frameHeight = size.y;
 
   recompute_chains();
 }
@@ -70,6 +76,11 @@ void Stabiliser::adjust_thresh(double thresh){
 
 void Stabiliser::recompute_chains(){
   ImageRef size=dim.size();
+  if (!size.x || !size.y) //no map created
+  {
+	  valid = false;
+	  return;
+  }
 
   Image<double> blurred(size);
   convolveGaussian(dim,blurred,vessel_size,3.0);
@@ -84,8 +95,6 @@ void Stabiliser::recompute_chains(){
   current_chains.clear();
   current_edgel=-1;
   patch_im_valid=false;
-
-
 
   vessels.clear();
   get_max(lambda1, direction, border, hessian_thresh, vessels);
@@ -151,7 +160,8 @@ void Stabiliser::recompute_chains(){
   }
 
 
-  cout << "got " << chains.size() << " chains" << endl;
+
+  //cout << "got " << chains.size() << " chains" << endl;
 
 
   valid=true;
@@ -226,7 +236,7 @@ int sq_diff(const BasicImage<unsigned char>& im,
 }
 
 
-
+//int increment = 0;
 
 Vector<2> Stabiliser::stabilise(CVD::BasicImage<unsigned char>& im,
 				const Vector<2>& offset){
@@ -236,6 +246,7 @@ Vector<2> Stabiliser::stabilise(CVD::BasicImage<unsigned char>& im,
 
   const int num_trackers=vessel_edgels.size();
     // match the trackers against the new frame
+
   IRLS<2,double, RobustI> irls;
   irls.sd_inlier=1.0;
 
@@ -404,7 +415,7 @@ int sqdist(ImageRef& p, int x, int y){
 }
 
 
-void Stabiliser::click(int x, int y){
+void Stabiliser::click(int x, int y, bool shiftdown){
 	int closest_dist;
 	if(!chains.empty()){
 		closest_dist = sqdist(chains.begin()->pixels[0],x,y);
@@ -438,9 +449,8 @@ void Stabiliser::click(int x, int y){
 		}
 	}
 
-// REPLACE WITH GTK EQUIVALENTS??
-
-/*	if(fltk::event_state() & fltk::SHIFT){
+	if(shiftdown)
+	{
 		set<list<Chain>::iterator>::iterator in_set=current_chains.find(best_it);
 		if(in_set==current_chains.end()){
 			current_chains.insert(best_it);
@@ -451,7 +461,7 @@ void Stabiliser::click(int x, int y){
 	} else {
 		current_chains.clear();
 		current_chains.insert(best_it);
-	} */
+	}
 	track_frame_count=0;
 }
 
@@ -542,51 +552,128 @@ void Stabiliser::key(int keyval){
 	}
 }
 
-void Chain::draw(bool setcol){
-	if(setcol){
-		if(level==100){
-			glColor3f(0,1,0);
-		} else {
-			glColor3f(((3.0+level)/6.0),0,((3.0-level)/6.0));
-		}
+static bool _crFirst = true;
+
+static void crVertex(const ::Cairo::RefPtr< ::Cairo::Context>& cr, CVD::ImageRef &pixel)
+{
+	if (_crFirst)
+	{
+		cr->move_to(pixel.x, pixel.y);
+		_crFirst = false;
 	}
-	glBegin(GL_POINTS);
-	glVertex(pixels);
-	glEnd();
+	else
+	{
+		cr->line_to(pixel.x, pixel.y);
+	}
 }
 
-void Stabiliser::draw(){
-    hvigtk_logfile << "stabiliser draw called" << std::endl;
-	hvigtk_logfile.flush();
+static void crVertex(const ::Cairo::RefPtr< ::Cairo::Context>& cr, std::vector<CVD::ImageRef> &pixels)
+{
+	for (CVD::ImageRef &pixel : pixels)
+		cr->line_to(pixel.x, pixel.y);
+}
 
+static void crEnd(const ::Cairo::RefPtr< ::Cairo::Context>& cr)
+{
+	cr->stroke();
+	_crFirst = true;
+}
+
+void Chain::draw(const ::Cairo::RefPtr< ::Cairo::Context>& cr, bool setcol)
+{
+	if(setcol){
+		if(level==100){
+			cr->set_source_rgba(0,1,0,1);
+		} else {
+			cr->set_source_rgba(((3.0+level)/6.0),0,((3.0-level)/6.0),1);
+		}
+	}
+	crVertex(cr, pixels);
+	crEnd(cr);
+}
+
+void Stabiliser::draw(::Cairo::RefPtr< ::Cairo::ImageSurface> cr)
+{
+}
+
+static void compress(std::vector<AbsPixel> &pixels, ::Cairo::RefPtr<const ::Cairo::ImageSurface> surface)
+{
+	pixels.clear();
+	const uint32_t *buf = (const uint32_t *) surface->get_data();
+	int stride = surface->get_stride() / 4;
+	int size = surface->get_width() * surface->get_height();
+	for (int i = 0; i < size; i++)
+	{
+		if (buf[i] >> 24) //alpha value as per Cairo::FORMAT_ARGB32
+		{
+			pixels.push_back( (AbsPixel) { (unsigned short) (i % stride), (unsigned short) (i / stride), buf[i] | 0xFF000000} );
+		}
+	}
+}
+
+void Stabiliser::predraw()
+{
     // if(valid){
-		glPointSize(3);
+		surface = Cairo::ImageSurface::create(Cairo::FORMAT_ARGB32, frameWidth, frameHeight);
+		auto cr = Cairo::Context::create(surface);
+		cr->set_source_rgba(0,0,0,0);
+		cr->rectangle(0, 0, frameWidth, frameHeight);
+		cr->fill();
+		cr->set_line_width(1.5);
 		list<Chain>::iterator it;
 		for(it=chains.begin(); it!=chains.end(); it++){
-			it->draw(true);
+			it->draw(cr, true);
 		}
 
 		for(it=persistent_chains.begin(); it!=persistent_chains.end(); it++){
-			it->draw(true);
+			it->draw(cr, true);
 		}
 
 		set<list<Chain>::iterator>::iterator cit;
 		for(cit=current_chains.begin(); cit!=current_chains.end();cit++){
-			glColor3f(1,1,1);
-			glPointSize(5);
-			(*cit)->draw(false);
-			glPointSize(3);
-			(*cit)->draw(true);
+			cr->set_source_rgba(1,1,1,1);
+			cr->set_line_width(2.5);
+			(*cit)->draw(cr, false);
+			cr->set_line_width(1.5);
+			(*cit)->draw(cr, true);
 		}
 		if(!current_chains.empty() && current_edgel!=-1){
-			glColor3f(0,0,0);
-			glPointSize(5);
-			glBegin(GL_POINTS);
-			glVertex((*(current_chains.begin()))->pixels[current_edgel]);
-			glEnd();
+			cr->set_source_rgba(0,0,0,1);
+			cr->set_line_width(2.5);
+			
+			crVertex(cr, (*(current_chains.begin()))->pixels[current_edgel]);
+			crEnd(cr);
 		}
+		SDLWindow::updateMap(childwin, surface->get_data(), surface->get_width(), surface->get_height(), surface->get_stride() );
+		//compress(compressed, surface);
 		// }
-	glFlush();
+}
+
+void Stabiliser::invalidate()
+{
+	current_chains.clear();
+	current_edgel = -1;
+	dim = CVD::Image<double>();
+	lambda1 = CVD::Image<double>();
+	direction = CVD::Image<TooN::Vector<2> >();
+	border.x = 0;
+	border.y = 0;
+	vessels.clear();
+	tracker_edgels.clear();
+	vessel_edgels.clear();
+	endpoints.clear();
+	vessel_im = CVD::Image<int>();
+	chains.clear();
+	persistent_chains.clear();
+	patch_im = CVD::Image<unsigned char>(CVD::ImageRef(8,8) );
+	patch_im_valid = false;
+	track_frame_count = 0;
+	compressed.clear();
+}
+
+bool Stabiliser::is_valid() const
+{
+	return valid;
 }
 
 int Stabiliser::get_level(){
@@ -595,14 +682,14 @@ int Stabiliser::get_level(){
 		if(level==100) level=0;
 		return level;
 	}
-    else return 0;
+	return 0;
 }
 
 int Stabiliser::get_length(){
 	if(!current_chains.empty() && current_edgel!=-1){
 		return (*current_chains.begin())->pixels.size();
 	}
-    else return 0;
+	return 0;
 }
 
 

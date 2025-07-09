@@ -1,41 +1,51 @@
-// Initially written by Tom Drummond in 2014. 
+// -*- c++ -*-
 
 #ifndef STABILISER_H
 #define STABILISER_H
 
 #include <cvd/image.h>
-#include <cvd/gl_helpers.h>
 #include <TooN/TooN.h>
 #include <vector>
 #include <list>
 #include <set>
 
-#include "vesseledge.hpp"
+#include "cairomm/surface.h"
+#include "vesseledgel.hpp"
+#include "framefilter.hpp"
+
+
+#define DEFAULT_NUM_TRACKERS 600
 
 struct Chain {
 	Chain(){
 		level=100;
 	}
 
-	void draw(bool setcol);
+	void draw(const ::Cairo::RefPtr< ::Cairo::Context>& cr, bool setcol);
 
 	int level;
 	std::vector<CVD::ImageRef> pixels;
 };
 
-// Added const here... 
 struct compit{
-	bool operator() (const std::list<Chain>::iterator& it1, const std::list<Chain>::iterator& it2) const{
+	bool operator() (const std::list<Chain>::iterator& it1, const std::list<Chain>::iterator& it2) const
+	{
 		return (&(*it1) < &(*it2));
 	}
 };
 
+struct AbsPixel
+{
+	unsigned short int x, y;
+	uint32_t color;
+};
 
-
-class Stabiliser {
+class Stabiliser : public FrameFilter
+{
 public:
   Stabiliser() : 
-    patch_im(CVD::ImageRef(8,8))
+    patch_im(CVD::ImageRef(8,8)),
+	compressed()
   {
     valid=false;
     hessian_thresh=0.4;
@@ -57,10 +67,15 @@ public:
   std::vector<CVD::ImageRef> get_neighbours(const CVD::ImageRef&  pos);
   CVD::ImageRef get_first_neighbour(const CVD::ImageRef& pos);
 
-  void click(int x, int y);
+  void click(int x, int y, bool shiftdown);
   void key(int keyval);
 
-  void draw();
+  void predraw();
+  void invalidate();
+
+  bool is_valid() const;
+
+  virtual void draw(::Cairo::RefPtr< ::Cairo::ImageSurface> cr);
 
   int get_level();
   int get_length();
@@ -101,7 +116,10 @@ private:
   CVD::Image<unsigned char> patch_im;
   bool patch_im_valid;
 
-	int track_frame_count;
+  int track_frame_count;
+  Cairo::RefPtr<Cairo::ImageSurface> surface;
+  std::vector<AbsPixel> compressed;
+  int frameWidth, frameHeight;
 };
 
 #endif
