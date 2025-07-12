@@ -4,7 +4,7 @@
 
 [**Thomas Lynch**](https://github.com/lyncht248/)<sup>1</sup> · [**Paul A R Meyer**](https://scholar.google.com/citations?user=NmHgX-wAAAAJ)<sup>1</sup><sup>, 2</sup> · [**Thierry Savin**](http://savinlab.eng.cam.ac.uk/)<sup>1, &dagger;</sup> 
 
-<sup>1</sup>Department of Engineering, Cambridge University&emsp;&emsp;&emsp;&emsp;<sup>2</sup>Department of Ophthalmology, Addenbrooke's Hospital
+<sup>1</sup>Dept. of Engineering, Cambridge University&emsp;&emsp;&emsp;&emsp;<sup>2</sup>Dept. of Ophthalmology, Addenbrooke's Hospital
 
 &dagger;corresponding author
 
