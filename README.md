@@ -10,13 +10,9 @@
 
 </div>
 
-
 <p align="center">
-    <img src="https://i.imgur.com/nYqJ2kE.gif">
+    <img width=70% src="./assets/teaser-resize.gif">
 </p>
-
-
-![Diagram](./assets/teaser-resize.gif)
 
 This repository contains the embedded software and desktop application used to operate the _Autofocus-Anything (AA)_ modular device. This device can be mounted on the camera port of any standard microscope or slit-lamp, enabling high-precision autofocus at video rate. 
 
