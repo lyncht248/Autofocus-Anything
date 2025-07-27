@@ -2,7 +2,7 @@
 <h2>Video Autofocus using an Adjustable-Focus Air-Lens and Sharpness Analysis of an Inclined Image Plane
 </h2>
 
-[**Thomas Lynch**](https://github.com/lyncht248/)<sup>1</sup> · [**Paul A R Meyer**](https://scholar.google.com/citations?user=NmHgX-wAAAAJ)<sup>1</sup><sup>, 2</sup> · [**Thierry Savin**](http://savinlab.eng.cam.ac.uk/)<sup>1, &dagger;</sup> 
+[**Thomas Lynch**](https://github.com/lyncht248/)<sup>1</sup> · [**Paul A R Meyer**](https://www.researchgate.net/scientific-contributions/Paul-AR-Meyer-2178939150)<sup>1</sup><sup>, 2</sup> · [**Thierry Savin**](http://savinlab.eng.cam.ac.uk/)<sup>1, &dagger;</sup> 
 
 <sup>1</sup>Dept. of Engineering, Cambridge University&emsp;&emsp;&emsp;&emsp;<sup>2</sup>Dept. of Ophthalmology, Addenbrooke's Hospital
 
