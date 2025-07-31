@@ -1,25 +1,10 @@
-<div align="center">
-<h2>Video Autofocus using an Adjustable-Focus Air-Lens and Sharpness Analysis of an Inclined Image Plane
-</h2>
-
-[**Thomas Lynch**](https://github.com/lyncht248/)<sup>1</sup> · [**Paul A R Meyer**](https://www.researchgate.net/scientific-contributions/Paul-AR-Meyer-2178939150)<sup>1</sup><sup>, 2</sup> · [**Thierry Savin**](http://savinlab.eng.cam.ac.uk/)<sup>1, &dagger;</sup> 
-
-<sup>1</sup>Dept. of Engineering, Cambridge University&emsp;&emsp;&emsp;&emsp;<sup>2</sup>Dept. of Ophthalmology, Addenbrooke's Hospital
-
-&dagger;corresponding author
-
-</div>
-<p align="center">
-    <img width=80% src="./assets/teaser-resize.gif">
-</p>
-
-This repository contains the embedded software and desktop application used to operate the _Autofocus-Anything_ modular device. This device can be mounted on the camera port of any standard microscope or slit-lamp, enabling high-precision autofocus at video rate. 
-
+# Autofocus-Anything
 
 ## Requirements
 
 Package dependencies: cmake pkg-config libgtkmm-3.0-dev libtoon-dev libcvd-dev libsdl2-dev libusb-1.0-0-dev liblapack-dev
 
+Other libraries 
 Vimba: Copy the .so files in Vimba_6_0/VimbaCPP/DynamicLib/x86_64bit to your system's library path (e.g. /usr/lib/)
 
 ## Build Commands
@@ -62,8 +47,10 @@ test/      ── GoogleTest / GoogleMock unit tests
 
 ## License
 
-This project is released under the MIT License for academic use. For commercial use, please contact [tel32@cam.ac.uk](mailto:tel32@cam.ac.uk). See [LICENSE](LICENSE) for full details.
+This project is released under the MIT License for academic use. For commercial use, please contact [lyncht248@gmail.com](mailto:lyncht248@gmail.com). See [LICENSE](LICENSE) for full details.
 
 ## Acknowledgements
-* Paul Meyer MD, FRCP for optical designs of the autofocus device 
+
+
+* Paul Meyer MD, FRCP for optical concepts and designs of the autofocus-anything device
 * Dr. Thierry Savin for supervising and providing engineering input
