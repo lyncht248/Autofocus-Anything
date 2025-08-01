@@ -44,9 +44,13 @@ public:
     bool initialize();
     
     /**
-     * @brief Returns the lens to the starting position
+     * @brief Moves the lens to the predefined starting position.
      * 
-     * Moves the lens to the stored return position value.
+     * This method moves the lens to the position stored in the `returnPosition` variable.
+     * It updates the `currentLensLoc` to reflect the new position and waits briefly to ensure
+     * the movement completes. If an error occurs during the process, it logs the error.
+     * 
+     * @throws std::exception If the movement command fails.
      */
     void returnToStart();
     

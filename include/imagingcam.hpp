@@ -7,90 +7,210 @@
 #include <chrono>
 #include <functional>
 
-class System; // Forward declaration
-
+/**
+ * ImagingCam class handles the camera operations including ROI sharpness monitoring,
+ * focus search, and depth mapping.
+ */
 class ImagingCam
 {
 public:
+    /**
+     * Constructor for ImagingCam.
+     * Initializes the camera system and sets default parameters.
+     * 
+     * @param system Reference to the System object.
+     */
     ImagingCam(System &system);
+
+    /**
+     * Destructor for ImagingCam.
+     * Ensures all threads are stopped and resources are released.
+     */
     ~ImagingCam();
 
-    // Start/stop the monitoring thread
+    /**
+     * Starts the monitoring thread for ROI sharpness analysis.
+     */
     void start();
+
+    /**
+     * Stops the monitoring thread for ROI sharpness analysis.
+     */
     void stop();
 
-    // Set ROI size (default 50x50)
+    /**
+     * Sets the size of the Region of Interest (ROI).
+     * 
+     * @param width Width of the ROI.
+     * @param height Height of the ROI.
+     */
     void setROISize(int width, int height);
 
-    // Set ROI center coordinates (default is image center)
+    /**
+     * Sets the center coordinates of the Region of Interest (ROI).
+     * 
+     * @param centerX X-coordinate of the ROI center.
+     * @param centerY Y-coordinate of the ROI center.
+     */
     void setROICenter(int centerX, int centerY);
 
-    // Get current ROI parameters for display
+    /**
+     * Retrieves the current ROI parameters.
+     * 
+     * @param centerX Reference to store the X-coordinate of the ROI center.
+     * @param centerY Reference to store the Y-coordinate of the ROI center.
+     * @param width Reference to store the width of the ROI.
+     * @param height Reference to store the height of the ROI.
+     */
     void getCurrentROI(int &centerX, int &centerY, int &width, int &height) const;
 
-    // Start focus search for current ROI
+    /**
+     * Starts the focus search process for the current ROI.
+     */
     void startROIFocusSearch();
 
-    // Check if focus search is currently active
+    /**
+     * Checks if the focus search is currently active.
+     * 
+     * @return True if focus search is active, false otherwise.
+     */
     bool isFocusSearchActive() const { return m_focusSearchActive.load(); }
 
-    // Start depth mapping process
+    /**
+     * Starts the depth mapping process.
+     */
     void startDepthMapping();
 
-    // Check if depth mapping is currently active
+    /**
+     * Checks if the depth mapping process is currently active.
+     * 
+     * @return True if depth mapping is active, false otherwise.
+     */
     bool isDepthMappingActive() const { return m_depthMappingActive.load(); }
 
-    // Callback functions for GUI integration
-    using HoldFocusCallback = std::function<void(bool)>;
-    using BestFocusCallback = std::function<void(int)>;
-    using SearchCompleteCallback = std::function<void(bool)>;
-
+    /**
+     * Sets the callback function for Hold Focus mode updates.
+     * 
+     * @param callback Function to be called when Hold Focus mode changes.
+     */
     void setHoldFocusCallback(HoldFocusCallback callback) { m_holdFocusCallback = callback; }
+
+    /**
+     * Sets the callback function for Best Focus position updates.
+     * 
+     * @param callback Function to be called when the best focus position is found.
+     */
     void setBestFocusCallback(BestFocusCallback callback) { m_bestFocusCallback = callback; }
+
+    /**
+     * Sets the callback function for Search Complete updates.
+     * 
+     * @param callback Function to be called when the focus search is complete.
+     */
     void setSearchCompleteCallback(SearchCompleteCallback callback) { m_searchCompleteCallback = callback; }
 
 private:
-    // Thread function that runs at 5Hz
+    /**
+     * Thread function that runs at 5Hz to monitor ROI sharpness.
+     */
     void monitorThreadFunction();
 
-    // Calculate sharpness for a region using Tenengrad method
+    /**
+     * Calculates the sharpness of a region using the Tenengrad method.
+     * 
+     * @param region Image region to calculate sharpness for.
+     * @return Sharpness score of the region.
+     */
     double calculateSharpness(const cv::Mat &region);
 
-    // Extract ROI from frame based on current settings
+    /**
+     * Extracts the Region of Interest (ROI) from a frame based on current settings.
+     * 
+     * @param frame Input frame to extract ROI from.
+     * @return Extracted ROI as a cv::Mat object.
+     */
     cv::Mat extractROI(const cv::Mat &frame);
 
-    // Focus search implementation using golden section search
+    /**
+     * Implements the focus search algorithm using golden section search.
+     */
     void performFocusSearch();
 
-    // Use depth map for instant focus positioning if available
+    /**
+     * Attempts to use the depth map for instant focus positioning if available.
+     * 
+     * @return True if depth map focus was successful, false otherwise.
+     */
     bool tryDepthMapFocus();
 
-    // Depth mapping implementation
+    /**
+     * Implements the depth mapping process.
+     */
     void performDepthMapping();
 
-    // Calculate sharpness image using Roberts Cross operator
+    /**
+     * Calculates a sharpness image using the Roberts Cross operator.
+     * 
+     * @param frame Input frame to calculate sharpness image for.
+     * @return Sharpness image as a cv::Mat object.
+     */
     cv::Mat calculateSharpnessImage(const cv::Mat &frame);
 
-    // Calculate sharpness image using Tenengrad (Sobel) operator
+    /**
+     * Calculates a sharpness image using the Tenengrad (Sobel) operator.
+     * 
+     * @param frame Input frame to calculate sharpness image for.
+     * @return Sharpness image as a cv::Mat object.
+     */
     cv::Mat calculateSharpnessImageTenengrad(const cv::Mat &frame);
 
-    // Create smoothly padded frame to eliminate edge artifacts
+    /**
+     * Creates a smoothly padded frame to eliminate edge artifacts.
+     * 
+     * @param frame Input frame to pad.
+     * @param validMask Mask indicating valid regions in the frame.
+     * @return Padded frame as a cv::Mat object.
+     */
     cv::Mat createSmoothedPaddedFrame(const cv::Mat &frame, const cv::Mat &validMask);
 
-    // Perform local max suppression on depth image to remove artifacts
+    /**
+     * Performs local max suppression on the depth image to remove artifacts.
+     * 
+     * @param depthImage Depth image to process.
+     * @param width Width of the depth image.
+     * @param height Height of the depth image.
+     */
     void performLocalMaxSuppression(std::vector<std::vector<std::pair<double, double>>> &depthImage,
                                     int width, int height);
 
-    // Set desired focus position and wait for lens to settle SETTLE_TIME_MS
+    /**
+     * Sets the desired focus position and waits for the lens to settle.
+     * 
+     * @param position Desired focus position.
+     */
     void setFocusPositionAndWait(int position);
 
-    // Set desired focus position and wait for lens to settle for a custom time
+    /**
+     * Sets the desired focus position and waits for the lens to settle for a custom time.
+     * 
+     * @param position Desired focus position.
+     * @param settleTimeMs Time in milliseconds to wait for the lens to settle.
+     */
     void setFocusPositionAndWaitLong(int position, int settleTimeMs);
 
-    // Get current ROI sharpness
+    /**
+     * Retrieves the current sharpness of the ROI.
+     * 
+     * @return Sharpness score of the current ROI.
+     */
     double getCurrentROISharpness();
 
-    // Get multiple samples and return the average for more reliable measurement
+    /**
+     * Retrieves multiple sharpness samples and returns the average for reliability.
+     * 
+     * @param numSamples Number of samples to average.
+     * @return Averaged sharpness score.
+     */
     double getAveragedROISharpness(int numSamples = SAMPLES_PER_POSITION);
 
     System &m_system;
