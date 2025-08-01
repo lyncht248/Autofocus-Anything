@@ -24,248 +24,391 @@
 
 namespace Vimba = AVT::VmbAPI;
 
-class System;
-
+/**
+ * @class FrameProcessor
+ * @brief Handles frame processing and stabilization in the system.
+ * 
+ * This class manages threads for processing and stabilizing frames, and provides methods
+ * for releasing frames, resetting raster positions, and accessing processed frames.
+ */
 class FrameProcessor
 {
-	friend class System;
+    friend class System;
 
 public:
-	FrameProcessor(System &sys);
-	~FrameProcessor();
+    /**
+     * @brief Constructor for FrameProcessor.
+     * 
+     * Initializes the frame processor with a reference to the system.
+     * 
+     * @param sys Reference to the System object.
+     */
+    FrameProcessor(System &sys);
 
-	void releaseFrame();
-	void resetRaster();
-	::Cairo::RefPtr<::Cairo::Surface> getFrame();
-	void resetZoom();
+    /**
+     * @brief Destructor for FrameProcessor.
+     * 
+     * Cleans up resources used by the frame processor.
+     */
+    ~FrameProcessor();
 
-protected: // Only available to derived and friend classes
-	void stabilise();
-	void processFrame();
+    /**
+     * @brief Releases the current frame.
+     */
+    void releaseFrame();
 
-	::Cairo::RefPtr<::Cairo::ImageSurface> processed;
-	VidFrame *vidFrame;
-	std::unordered_map<std::string, FrameFilter *> filters;
-	bool running;
-	bool _stabNewFrame;
-	bool _stabComplete;
-	bool _frameReleased;
+    /**
+     * @brief Resets the raster position.
+     */
+    void resetRaster();
 
-	Glib::Threads::Mutex mutex, stabMutex;
-	Glib::Threads::Cond frameReleased, stabNewFrame, stabComplete;
+    /**
+     * @brief Gets the processed frame.
+     * 
+     * @return A Cairo surface containing the processed frame.
+     */
+    ::Cairo::RefPtr<::Cairo::Surface> getFrame();
 
-	System &system;
+    /**
+     * @brief Resets the zoom level.
+     */
+    void resetZoom();
 
-	TooN::Vector<2> offset, currentOff, rasterPos;
-	TSQueue<VidFrame *> stabQueue, released;
+protected:
+    /**
+     * @brief Stabilizes frames using phase correlation.
+     */
+    void stabilise();
 
-	Glib::Threads::Thread *processorThread, *stabThread;
+    /**
+     * @brief Processes each frame received from the FrameObserver.
+     */
+    void processFrame();
+
+    ::Cairo::RefPtr<::Cairo::ImageSurface> processed; ///< Processed frame surface.
+    VidFrame *vidFrame; ///< Pointer to the current video frame.
+    std::unordered_map<std::string, FrameFilter *> filters; ///< Filters applied to frames.
+    bool running; ///< Indicates whether the processor is running.
+    bool _stabNewFrame; ///< Flag for new stabilization frame.
+    bool _stabComplete; ///< Flag for stabilization completion.
+    bool _frameReleased; ///< Flag for frame release.
+
+    Glib::Threads::Mutex mutex, stabMutex; ///< Mutexes for thread synchronization.
+    Glib::Threads::Cond frameReleased, stabNewFrame, stabComplete; ///< Conditions for thread synchronization.
+
+    System &system; ///< Reference to the System object.
+
+    TooN::Vector<2> offset, currentOff, rasterPos; ///< Vectors for raster positions and offsets.
+    TSQueue<VidFrame *> stabQueue, released; ///< Queues for stabilization and released frames.
+
+    Glib::Threads::Thread *processorThread, *stabThread; ///< Threads for processing and stabilization.
 };
 
-/*
-This class is responsible for all the processing behind the GUI, including frame streaming (see FrameProcessor), closing/opening the GUI,
-and operating other neccessary threads.
-*/
+/**
+ * @class System
+ * @brief Manages the overall system, including GUI, frame processing, and camera operations.
+ * 
+ * This class is responsible for initializing the system, handling GUI interactions, managing
+ * threads, and operating the camera and stabilization components.
+ */
 class System
 {
-	friend class FrameProcessor; // Allows FrameProcessor to access private methods
+    friend class FrameProcessor; ///< Allows FrameProcessor to access private methods.
+
 public:
-	// Constructor function for system class
-	System(int argc, char **argv);
-	~System();
+    /**
+     * @brief Constructor for System.
+     * 
+     * Initializes the system with command-line arguments.
+     * 
+     * @param argc Number of command-line arguments.
+     * @param argv Array of command-line arguments.
+     */
+    System(int argc, char **argv);
 
-	MainWindow &getWindow();
-	Recorder &getRecorder();
+    /**
+     * @brief Destructor for System.
+     * 
+     * Cleans up resources used by the system.
+     */
+    ~System();
 
-	bool startStreaming();
-	void stopStreaming();
+    /**
+     * @brief Gets the main window object.
+     * 
+     * @return Reference to the MainWindow object.
+     */
+    MainWindow &getWindow();
 
-	template <typename T>
-	bool setFeature(const std::string &fname, T val)
-	{
-		if (cam != nullptr)
-		{
-			Vimba::FeaturePtr pFeature;
-			if (cam->GetFeatureByName(fname.c_str(), pFeature) == VmbErrorSuccess && pFeature->SetValue(val) == VmbErrorSuccess)
-			{
-				logger->info("[System.hpp] Set {} to: {}", fname, val);
-				return true;
-			}
-			else
-			{
-				logger->error("[System.hpp] FAILED to set {} to: {}", fname, val);
-				return false;
-			}
-		}
-		return false;
-	}
+    /**
+     * @brief Gets the recorder object.
+     * 
+     * @return Reference to the Recorder object.
+     */
+    Recorder &getRecorder();
 
-	template <typename T>
-	T getFeature(const std::string &fname)
-	{
-		if (cam != nullptr)
-		{
-			Vimba::FeaturePtr pFeature;
-			if (cam->GetFeatureByName(fname.c_str(), pFeature) == VmbErrorSuccess)
-			{
-				T out;
-				pFeature->GetValue(out);
-				logger->info("[System.hpp] Got {} = {}", fname, out);
-				return out;
-			}
-			else
-			{
-				logger->error("[System.hpp] FAILED to get {}", fname);
-			}
-		}
+    /**
+     * @brief Starts streaming frames from the camera.
+     * 
+     * @return True if streaming started successfully, false otherwise.
+     */
+    bool startStreaming();
 
-		return T();
-	}
+    /**
+     * @brief Stops streaming frames from the camera.
+     */
+    void stopStreaming();
 
-	TSQueue<VidFrame *> &getFrameQueue();
-	Glib::Dispatcher &signalNewFrame();
+    /**
+     * @brief Sets a camera feature to a specified value.
+     * 
+     * @tparam T Type of the feature value.
+     * @param fname Name of the feature.
+     * @param val Value to set.
+     * @return True if the feature was set successfully, false otherwise.
+     */
+    template <typename T>
+    bool setFeature(const std::string &fname, T val)
+    {
+        if (cam != nullptr)
+        {
+            Vimba::FeaturePtr pFeature;
+            if (cam->GetFeatureByName(fname.c_str(), pFeature) == VmbErrorSuccess && pFeature->SetValue(val) == VmbErrorSuccess)
+            {
+                logger->info("[System.hpp] Set {} to: {}", fname, val);
+                return true;
+            }
+            else
+            {
+                logger->error("[System.hpp] FAILED to set {} to: {}", fname, val);
+                return false;
+            }
+        }
+        return false;
+    }
 
-	VidFrame *getFrame();
-	double getFPS(); // see TODO below
+    /**
+     * @brief Gets the value of a camera feature.
+     * 
+     * @tparam T Type of the feature value.
+     * @param fname Name of the feature.
+     * @return The value of the feature.
+     */
+    template <typename T>
+    T getFeature(const std::string &fname)
+    {
+        if (cam != nullptr)
+        {
+            Vimba::FeaturePtr pFeature;
+            if (cam->GetFeatureByName(fname.c_str(), pFeature) == VmbErrorSuccess)
+            {
+                T out;
+                pFeature->GetValue(out);
+                logger->info("[System.hpp] Got {} = {}", fname, out);
+                return out;
+            }
+            else
+            {
+                logger->error("[System.hpp] FAILED to get {}", fname);
+            }
+        }
 
-	void onWindowHomePositionChanged(double val);
-	void onWindowPGainChanged(double val);
+        return T();
+    }
 
-	// Method to update ROI center from SDL window
-	void updateROICenter(int x, int y);
+    /**
+     * @brief Gets the frame queue.
+     * 
+     * @return Reference to the frame queue.
+     */
+    TSQueue<VidFrame *> &getFrameQueue();
 
-	// Method to clear ROI display from SDL window
-	void clearROIDisplay();
+    /**
+     * @brief Gets the dispatcher for new frame signals.
+     * 
+     * @return Reference to the dispatcher.
+     */
+    Glib::Dispatcher &signalNewFrame();
 
-	// Get current ROI info for display
-	void getCurrentROI(int &centerX, int &centerY, int &width, int &height) const;
+    /**
+     * @brief Gets the current frame.
+     * 
+     * @return Pointer to the current video frame.
+     */
+    VidFrame *getFrame();
 
-	// Method to set SDL window reference for ROI updates
-	void setSDLWindow(SDLWindow::SDLWin *win);
+    /**
+     * @brief Gets the current frames per second (FPS).
+     * 
+     * @return The current FPS.
+     */
+    double getFPS();
 
-	// Get access to imaging camera
-	ImagingCam *getImagingCam() { return imagingCam.get(); }
+    /**
+     * @brief Updates the center of the region of interest (ROI).
+     * 
+     * @param x X-coordinate of the center.
+     * @param y Y-coordinate of the center.
+     */
+    void updateROICenter(int x, int y);
 
-	// Get current stabilization offset (returns true if stabilization is active)
-	bool getStabilizationOffset(double &offsetX, double &offsetY);
+    /**
+     * @brief Clears the ROI display.
+     */
+    void clearROIDisplay();
 
-	void onGetDepthsClicked();
-	void whenGetDepthsToggled(bool gettingDepths);
-	void whenViewDepthsToggled(bool viewingDepths);
+    /**
+     * @brief Gets the current ROI information.
+     * 
+     * @param centerX Reference to store the X-coordinate of the center.
+     * @param centerY Reference to store the Y-coordinate of the center.
+     * @param width Reference to store the width of the ROI.
+     * @param height Reference to store the height of the ROI.
+     */
+    void getCurrentROI(int &centerX, int &centerY, int &width, int &height) const;
 
-	// Depth mapping data structures
-	struct DepthMapData
-	{
-		std::vector<std::vector<std::pair<double, double>>> depthImage; // max_sharpness, actual_focus_position pairs
-		int width;
-		int height;
-		bool isValid;
+    /**
+     * @brief Sets the SDL window reference for ROI updates.
+     * 
+     * @param win Pointer to the SDL window.
+     */
+    void setSDLWindow(SDLWindow::SDLWin *win);
 
-		DepthMapData() : width(0), height(0), isValid(false) {}
-	};
+    /**
+     * @brief Gets the imaging camera object.
+     * 
+     * @return Pointer to the ImagingCam object.
+     */
+    ImagingCam *getImagingCam() { return imagingCam.get(); }
 
-	DepthMapData currentDepthMap;
+    /**
+     * @brief Gets the current stabilization offset.
+     * 
+     * @param offsetX Reference to store the X-offset.
+     * @param offsetY Reference to store the Y-offset.
+     * @return True if stabilization is active, false otherwise.
+     */
+    bool getStabilizationOffset(double &offsetX, double &offsetY);
+
+    /**
+     * @brief Handles the "Get Depths" button click.
+     */
+    void onGetDepthsClicked();
+
+    /**
+     * @brief Handles toggling of the "Get Depths" condition.
+     * 
+     * @param gettingDepths True if "Get Depths" is active, false otherwise.
+     */
+    void whenGetDepthsToggled(bool gettingDepths);
+
+    /**
+     * @brief Handles toggling of the "View Depths" condition.
+     * 
+     * @param viewingDepths True if "View Depths" is active, false otherwise.
+     */
+    void whenViewDepthsToggled(bool viewingDepths);
+
+    /**
+     * @brief Updates the sharpness graph in the UI.
+     */
+    void updateSharpnessGraph();
 
 private:
-	// Helper method to create stabilizer map with default parameters
-	void createStabiliserMapWithDefaults(const VidFrame &frame);
+    /**
+     * @brief Creates a stabilizer map with default parameters.
+     * 
+     * @param frame Reference to the video frame.
+     */
+    void createStabiliserMapWithDefaults(const VidFrame &frame);
 
-	// Helper method to calculate threshold for target percentage of pixels
-	double calculateThresholdForPercentage(const CVD::Image<unsigned char> &image, double vesselSize, double targetPercentage);
+    /**
+     * @brief Calculates the threshold for a target percentage of pixels.
+     * 
+     * @param image Reference to the image.
+     * @param vesselSize Size of the vessel.
+     * @param targetPercentage Target percentage of pixels.
+     * @return The calculated threshold.
+     */
+    double calculateThresholdForPercentage(const CVD::Image<unsigned char> &image, double vesselSize, double targetPercentage);
 
-	void renderFrame();
-	void releaseFrame();
+    void renderFrame(); ///< Renders the current frame.
+    void releaseFrame(); ///< Releases the current frame.
 
-	void whenLiveViewToggled(bool viewingLive);
+    void whenLiveViewToggled(bool viewingLive); ///< Handles toggling of the live view.
+    void whenStabiliseToggled(bool stabilising); ///< Handles toggling of stabilization.
+    void whenHoldFocusToggled(bool holdingFocus); ///< Handles toggling of hold focus.
+    void when3DStabToggled(bool active); ///< Handles toggling of 3D stabilization.
+    void when2DStabToggled(bool active2); ///< Handles toggling of 2D stabilization.
+    void whenLoadingToggled(bool loading); ///< Handles toggling of loading.
+    void whenSavingToggled(bool saving); ///< Handles toggling of saving.
+    void whenPlayingToggled(bool playing); ///< Handles toggling of playing.
+    void whenSeekingToggled(bool seeking); ///< Handles toggling of seeking.
+    void whenRecordingToggled(bool recording); ///< Handles toggling of recording.
 
-	// void whenMakeMapToggled(bool makingMap); DEPRECATED
-	void whenStabiliseToggled(bool stabilising);
-	// void whenShowMapToggled(bool showingMap); DEPRECATED
+    void onRecorderOperationComplete(RecOpRes res); ///< Handles recorder operation completion.
+    void onWindowFeatureUpdated(std::string fname, double val); ///< Handles feature updates from the window.
+    void onWindowThresholdChanged(double val); ///< Handles threshold changes from the window.
+    void onWindowScaleChanged(double val); ///< Handles scale changes from the window.
+    void onWindowBestFocusChanged(double val); ///< Handles best focus changes from the window.
+    void onWindowPauseClicked(); ///< Handles pause button clicks.
+    void onFindFocusClicked(); ///< Handles find focus button clicks.
+    void onResetClicked(); ///< Handles reset button clicks.
+    void onRecenterClicked(); ///< Handles recenter button clicks.
+    void onWindowEnterClicked(); ///< Handles enter button clicks.
 
-	void whenHoldFocusToggled(bool holdingFocus);
-	void when3DStabToggled(bool active);
-	void when2DStabToggled(bool active2);
+    bool onCloseClicked(const GdkEventAny *event); ///< Handles window close events.
 
-	void whenLoadingToggled(bool loading);
-	void whenSavingToggled(bool saving);
-	void whenPlayingToggled(bool playing);
-	void whenSeekingToggled(bool seeking);
-	void whenRecordingToggled(bool recording);
+    void on_error(); ///< Handles errors.
+    void handleDisconnection(); ///< Handles device disconnections.
 
-	void onRecorderOperationComplete(RecOpRes res);
-	void onWindowFeatureUpdated(std::string fname, double val);
+    struct Private; ///< Private implementation details.
 
-	void onWindowThresholdChanged(double val);
-	void onWindowScaleChanged(double val);
-	void onWindowBestFocusChanged(double val);
-	void onWindowPauseClicked();
-	void onFindFocusClicked();
-	void onResetClicked();
-	void onRecenterClicked();
-	void onWindowEnterClicked();
+    MainWindow window; ///< Main window object.
+    autofocus AF; ///< Autofocus object.
+    Vimba::VimbaSystem &vsys; ///< Vimba system object.
+    Vimba::CameraPtr cam; ///< Camera pointer.
 
-	bool onCloseClicked(const GdkEventAny *event);
+    CVD::ImageRef size; ///< Image size reference.
+    CVD::Image<unsigned int> im; ///< Image object.
 
-	void on_error();
-	void handleDisconnection();
+    struct Private *priv; ///< Private implementation details.
 
-	struct Private;
-	MainWindow window;		  // object from mainwindow.cpp class
-	autofocus AF;			  // object from autofocus.cpp class
-	Vimba::VimbaSystem &vsys; // For interacting with Vimba camera
-	Vimba::CameraPtr cam;	  // For interacting with Vimba camera
+    Glib::Dispatcher sigNewFrame; ///< Dispatcher for new frame signals.
 
-	CVD::ImageRef size;
-	CVD::Image<unsigned int> im;
+    TSQueue<VidFrame *> frameQueue; ///< Queue for video frames.
 
-	struct Private *priv;
+    FrameProcessor frameProcessor; ///< Frame processor object.
 
-	Glib::Dispatcher sigNewFrame;
+    ObjectThread thread; ///< Thread object.
 
-	TSQueue<VidFrame *> frameQueue;
+    std::unique_ptr<Recorder> recorder; ///< Recorder object.
+    VDispatcher<RecOpRes> sRecorderOperationComplete; ///< Dispatcher for recorder operation completion.
 
-	FrameProcessor frameProcessor;
+    Stabiliser stabiliser; ///< Stabilizer object.
+    bool madeMap; ///< Flag indicating whether a map was made.
 
-	ObjectThread thread;
+    bool errorDialogShown; ///< Flag indicating whether an error dialog was shown.
 
-	// Recorder *recorder;
-	std::unique_ptr<Recorder> recorder; // Attempting to fix some memory leakage
-	VDispatcher<RecOpRes> sRecorderOperationComplete;
+    bool tiltedCamDisconnected; ///< Flag for tilted camera disconnection.
+    bool imagingCamDisconnected; ///< Flag for imaging camera disconnection.
+    bool lensDisconnected; ///< Flag for lens disconnection.
 
-	Stabiliser stabiliser; // For running x-y stabilization
-	bool madeMap;
-	bool errorDialogShown = false;
-	// double actualFPS; //TODO: Implement actualFPS instead of using value in box
+    bool usePhaseCorr; ///< Flag for using phase correlation.
 
-	// Flags for disconnection states
-	bool tiltedCamDisconnected = false;
-	bool imagingCamDisconnected = false;
-	bool lensDisconnected = false;
+    PhaseCorrStabiliser2 phaseCorrStabiliser; ///< Phase correlation stabilizer object.
+    bool phaseCorrStabiliserReferenceNotSet; ///< Flag indicating whether the reference frame is set.
 
-	// Add a boolean to enable or disable PhaseCorr usage.
-	bool usePhaseCorr = true;
+    SharpnessAnalyzer sharpnessAnalyzer; ///< Sharpness analyzer object.
+    Glib::Dispatcher sigSharpnessUpdated; ///< Dispatcher for sharpness updates.
+    std::vector<double> currentSharpnessValues; ///< Current sharpness values.
+    bool sharpnessUpdateEnabled; ///< Flag for enabling sharpness updates.
+    std::chrono::time_point<std::chrono::steady_clock> lastSharpnessUpdate; ///< Last sharpness update time.
+    SharpnessGraph sharpnessGraph; ///< Sharpness graph object.
 
-	// Add a PhaseCorrStabiliser2 object
-	PhaseCorrStabiliser2 phaseCorrStabiliser{8, 1.0}; // 1.0 = complete replacement like old stabilizer
-	// Add a boolean to check if the reference frame is set
-	bool phaseCorrStabiliserReferenceNotSet = true;
+    std::unique_ptr<ImagingCam> imagingCam; ///< Imaging camera object.
 
-	// Sharpness analysis components
-	SharpnessAnalyzer sharpnessAnalyzer;
-	Glib::Dispatcher sigSharpnessUpdated;
-	std::vector<double> currentSharpnessValues;
-	bool sharpnessUpdateEnabled;
-	std::chrono::time_point<std::chrono::steady_clock> lastSharpnessUpdate;
-	SharpnessGraph sharpnessGraph;
-
-	// Method to update the sharpness graph in the UI
-	void updateSharpnessGraph();
-
-	// Imaging camera for ROI-based autofocus
-	std::unique_ptr<ImagingCam> imagingCam;
-
-	// Flag to prevent clearing ROI when imaging camera updates best focus
-	bool imagingCamUpdatingFocus = false;
+    bool imagingCamUpdatingFocus; ///< Flag for imaging camera focus updates.
 };
 
 #endif
