@@ -26,63 +26,249 @@ extern bool bNewMoveRel;
 extern int desiredLocBestFocus;
 extern std::atomic<double> mmToMove;
 
+/**
+ * @class autofocus
+ * @brief Handles the autofocusing process using the lens and tilted camera.
+ * 
+ * The autofocus class manages the initialization, running, and computation of the best focus
+ * using various sharpness algorithms and optimization techniques.
+ */
 class autofocus
 { // This class handles autofocusing
 public:
-  // Called by int main()
+  /**
+   * @brief Constructor for the autofocus class.
+   * 
+   * Initializes the lens and tilted camera objects.
+   */
   autofocus();
+
+  /**
+   * @brief Destructor for the autofocus class.
+   * 
+   * Cleans up resources, stops threads, and ensures proper shutdown.
+   */
   ~autofocus();
+
+  /**
+   * @brief Initializes the autofocus system.
+   * 
+   * Sets up the lens and tilted camera, pre-allocates matrices, and initializes benchmark files.
+   * @return True if initialization is successful, false otherwise.
+   */
   bool initialize(); // This was the constructor, but it needs to be called after the GUI is initialized
 
+  /**
+   * @brief Runs the autofocus process.
+   * 
+   * Starts the camera capture thread, computes focus, and handles PID control.
+   */
   void run();
 
-  // thread for capturing video from the tilted camera
+  /**
+   * @brief Captures video from the tilted camera.
+   * 
+   * This method is used by the autofocus thread to continuously capture video frames.
+   */
   void capturevideo();
 
-  // static void crapGUI();
-
-  // computes the location of best-focus
+  /**
+   * @brief Computes the location of the best focus.
+   * 
+   * Uses sharpness algorithms to determine the best focus position.
+   * @param image Input image.
+   * @param imgHeight Height of the image.
+   * @param imgWidth Width of the image.
+   * @return Best focus location.
+   */
   int computeBestFocus(cv::Mat image, int imgHeight, int imgWidth);
+
+  /**
+   * @brief Computes the best focus at reduced resolution.
+   * 
+   * Reduces the image size and applies sharpness algorithms to determine the best focus.
+   * @param image Input image.
+   * @param imgHeight Height of the image.
+   * @param imgWidth Width of the image.
+   * @return Best focus location.
+   */
   double computeBestFocusReduced(cv::Mat image, int imgHeight, int imgWidth);
+
+  /**
+   * @brief Computes the best focus at very reduced resolution.
+   * 
+   * Further reduces the image size and applies sharpness algorithms to determine the best focus.
+   * @param image Input image.
+   * @param imgHeight Height of the image.
+   * @param imgWidth Width of the image.
+   * @return Best focus location.
+   */
   int computeBestFocusVeryReduced(cv::Mat image, int imgHeight, int imgWidth);
+
+  /**
+   * @brief Adjusts the best focus location.
+   * 
+   * Updates the desired focus location based on the given value.
+   * @param val Adjustment value.
+   */
   void adjust_bestFocus(int val);
 
+  /**
+   * @brief Sets the proportional gain for the PID controller.
+   * 
+   * @param gain Proportional gain value.
+   */
   void setPGain(double gain);
+
+  /**
+   * @brief Gets the proportional gain for the PID controller.
+   * 
+   * @return Proportional gain value.
+   */
   double getPGain() const;
 
-  // Add a method to get the lens object
+  /**
+   * @brief Gets the lens object.
+   * 
+   * Provides access to the lens object for external use.
+   * @return Reference to the lens object.
+   */
   lens &getLens() { return lens1; }
+
+  /**
+   * @brief Gets the tilted camera object.
+   * 
+   * Provides access to the tilted camera object for external use.
+   * @return Reference to the tilted camera object.
+   */
   tiltedcam &getTiltedCam() { return tiltedcam1; }
 
   friend class AutofocusTest;
   friend class DeviceCalibrationTest;
 
 private:
-  // computes the sharpness curve along the horizontal of the image using a sharpness algorithm
+  /**
+   * @brief Computes the sharpness curve along the horizontal of the image.
+   * 
+   * Uses a sharpness algorithm to calculate the sharpness curve.
+   * @param image Input image.
+   * @param imgHeight Height of the image.
+   * @param imgWidth Width of the image.
+   * @param kernel Kernel size for the sharpness algorithm.
+   * @return Sharpness curve as a vector of doubles.
+   */
   std::vector<double> computesharpness(cv::Mat image, int imgHeight, int imgWidth, int kernel);
 
-  // computes the sharpness score for a given portion of imagedata
+  /**
+   * @brief Computes the sharpness score using the Roberts Cross operator.
+   * 
+   * @param imagedata Input image data.
+   * @return Sharpness score as a scalar.
+   */
   cv::Scalar robertscross(cv::Mat imagedata);
+
+  /**
+   * @brief Computes the sharpness score using the Tenengrad method.
+   * 
+   * @param imagedata Input image data.
+   * @return Sharpness score as a scalar.
+   */
   cv::Scalar tenengrad(cv::Mat imagedata);
+
+  /**
+   * @brief Computes the sharpness score using the Vollath method.
+   * 
+   * @param imagedata Input image data.
+   * @return Sharpness score as a scalar.
+   */
   cv::Scalar vollath(cv::Mat imagedata);
+
+  /**
+   * @brief Computes the sharpness score using the Canny edge detection method.
+   * 
+   * @param imagedata Input image data.
+   * @return Sharpness score as a scalar.
+   */
   cv::Scalar canny(cv::Mat imagedata);
 
-  // fits a normal curve to the given curve, which avoids local maxima
+  /**
+   * @brief Fits a normal curve to the given sharpness curve.
+   * 
+   * Avoids local maxima and smooths the sharpness curve.
+   * @param sharpnesscurve Input sharpness curve.
+   * @param amplitude Amplitude of the curve.
+   * @param offset Offset of the curve.
+   * @param std_dev_factor Standard deviation factor for the curve.
+   * @return Fitted sharpness curve as a vector of doubles.
+   */
   std::vector<double> fitnormalcurve(std::vector<double> sharpnesscurve, double amplitude, double offset, double std_dev_factor);
+
+  /**
+   * @brief Fits a normal curve to the sharpness curve using brute force.
+   * 
+   * @param sharpnesscurve Input sharpness curve.
+   * @param amplitude Amplitude of the curve.
+   * @param offset Offset of the curve.
+   * @param std_dev_factor Standard deviation factor for the curve.
+   * @return Fitted sharpness curve as a vector of doubles.
+   */
   std::vector<double> fitnormalcurveBruteForce(std::vector<double> sharpnesscurve, double amplitude, double offset, double std_dev_factor);
+
+  /**
+   * @brief Calculates the error with amplitude and offset for the sharpness curve.
+   * 
+   * @param sharpnesscurve Input sharpness curve.
+   * @param mean Mean value of the curve.
+   * @param amplitude Amplitude of the curve.
+   * @param offset Offset of the curve.
+   * @param sigma Standard deviation of the curve.
+   * @return Error value.
+   */
   double calculateErrorWithAmplitudeAndOffset(const std::vector<double> &sharpnesscurve, double mean, double amplitude, double offset, double sigma);
+
+  /**
+   * @brief Computes the normal probability density function.
+   * 
+   * @param x Input value.
+   * @param u Mean value.
+   * @param s Standard deviation.
+   * @return Probability density value.
+   */
   double normpdf(double x, double u, double s); // helper function
 
-  // Center of mass calculation
+  /**
+   * @brief Calculates the center of mass for the given curve.
+   * 
+   * @param curve Input curve.
+   * @return Center of mass value.
+   */
   double findCenterOfMass(const std::vector<double> &curve);
 
+  /**
+   * @brief Stops the autofocus thread.
+   * 
+   * Controls the autofocus, tilted camera, and lens threads.
+   */
   std::atomic<bool> stop_thread; // Controls the autofocus, tilted camera, and lens threads
+
+  /**
+   * @brief Thread for running the autofocus process.
+   */
   std::thread tAutofocus;
 
+  /**
+   * @brief Lens object for controlling the lens.
+   */
   lens lens1;
+
+  /**
+   * @brief Tilted camera object for capturing images.
+   */
   tiltedcam tiltedcam1;
 
-  // Pre-allocated matrices for performance optimization
+  /**
+   * @brief Pre-allocated matrices for performance optimization.
+   */
   cv::Mat blurred_preallocated;
   cv::Mat img_x_preallocated;
   cv::Mat img_y_preallocated;
@@ -92,16 +278,30 @@ private:
   cv::Mat sharpness_float_preallocated;
   cv::Mat imageofinterest_preallocated;
 
-  // Pre-allocated Roberts Cross kernels
+  /**
+   * @brief Pre-allocated Roberts Cross kernels.
+   */
   cv::Mat roberts_kernelx;
   cv::Mat roberts_kernely;
 
-  // For visualization
+  /**
+   * @brief Stores the center of mass for visualization.
+   */
   double lastCenterOfMass = -1.0; // Store center of mass for visualization
 
-  // CSV logging
+  /**
+   * @brief CSV file for logging.
+   */
   std::ofstream csvFile;
+
+  /**
+   * @brief Filename for the CSV file.
+   */
   std::string csvFilename;
+
+  /**
+   * @brief Mutex for thread-safe CSV operations.
+   */
   std::mutex csvMutex; // Thread-safe CSV operations
 };
 

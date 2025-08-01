@@ -1,3 +1,11 @@
+/**
+ * @file thread.hpp
+ * @brief Header file for thread management and synchronization utilities.
+ * 
+ * This file defines interfaces for managing threads, including stopping threads
+ * at predefined points, dispatching signals, and creating objects in dedicated threads.
+ */
+
 #ifndef HVIGTK_THREAD_H
 #define HVIGTK_THREAD_H
 
@@ -8,174 +16,192 @@
 #include <initializer_list>
 #include <queue>
 
+/**
+ * @brief Gets the default thread context for the current thread.
+ * 
+ * Provides access to the Glib main context associated with the current thread.
+ * @return Reference to the Glib main context.
+ */
 Glib::RefPtr<Glib::MainContext> hvigtk_threadcontext();
 
-/*
- * Interface to allow one thread to nicely request another thread to finish at predefined 'stop points'
+/**
+ * @namespace ThreadStopper
+ * @brief Provides utilities for managing thread stopping points and synchronization.
+ * 
+ * The ThreadStopper namespace includes functions for making threads stoppable,
+ * locking and unlocking mutexes, and sending stop requests to threads.
  */
 namespace ThreadStopper
 {
-	/*
-	 * Make the current thread responsive to stop requests. This should be called at the start of the thread routine.
-	 */
-	extern void makeStoppable();
+    /**
+     * @brief Makes the current thread responsive to stop requests.
+     * 
+     * This function should be called at the start of the thread routine.
+     */
+    extern void makeStoppable();
 
-	/*
-	 * Lock a mutex such that it is automatically unlocked when the thread is stopped. Note that the mutex will only be unlocked on a 'stop request' - it will not be unlocked if the thread exits normally or by means other than ThreadStopper::stop.
-	 */
-	extern void lock(Glib::Threads::Mutex &mutex);
+    /**
+     * @brief Locks a mutex and registers it for automatic unlocking on stop requests.
+     * 
+     * @param mutex Mutex to lock.
+     */
+    extern void lock(Glib::Threads::Mutex &mutex);
 
-	/*
-	 * Unlock the mutex and tell ThreadStopper not to automatically unlock it
-	 */
-	extern void unlock(Glib::Threads::Mutex &mutex);
+    /**
+     * @brief Unlocks a mutex and unregisters it from automatic unlocking.
+     * 
+     * @param mutex Mutex to unlock.
+     */
+    extern void unlock(Glib::Threads::Mutex &mutex);
 
-	/*
-	 * Set a stop point at which the current thread will respond to a stop request. A 'condition' variable may optionally be provided which will make the current thread responsive to stop requests while waiting on the condition.
-	 */
-	extern void stopPoint(Glib::Threads::Cond *condition=nullptr);
+    /**
+     * @brief Sets a stop point for the current thread.
+     * 
+     * Makes the thread responsive to stop requests while waiting on the optional condition.
+     * @param condition Optional condition variable for synchronization.
+     */
+    extern void stopPoint(Glib::Threads::Cond *condition = nullptr);
 
-	/*
-	 * Send a stop request to the specified threads. This function will call 'join()' on each of the threads.
-	 */
-	extern void stop(std::initializer_list<Glib::Threads::Thread*> ts);
+    /**
+     * @brief Sends stop requests to the specified threads.
+     * 
+     * This function also calls `join()` on each thread.
+     * @param ts List of threads to stop.
+     */
+    extern void stop(std::initializer_list<Glib::Threads::Thread*> ts);
 
-	/*
-	 * Wait for a thread to finish and clean up any data ThreadStopper may have for it.
-	 */
-	extern void join(Glib::Threads::Thread *thread);
+    /**
+     * @brief Waits for a thread to finish and cleans up its data.
+     * 
+     * @param thread Thread to join.
+     */
+    extern void join(Glib::Threads::Thread *thread);
 };
 
+/**
+ * @class VDispatcher
+ * @brief A thread-safe signal dispatcher for asynchronous communication.
+ * 
+ * The VDispatcher class provides functionality to emit signals and connect
+ * slots for handling dispatched values in a thread-safe manner.
+ * @tparam T Type of the value to dispatch.
+ */
 template <typename T>
 class VDispatcher
 {
-	friend class Connection;
+    friend class Connection;
 
-	class Connection
-	{
-		friend class VDispatcher;
-	public:
-		Connection(VDispatcher<T> &dispatcher, const sigc::connection &connection) :
-			dispatcher(dispatcher),
-			connection(connection)
-		{
-		}
+    /**
+     * @class Connection
+     * @brief Represents a connection to a VDispatcher signal.
+     * 
+     * The Connection class manages the lifecycle of a signal connection,
+     * including disconnection and cleanup.
+     */
+    class Connection
+    {
+        friend class VDispatcher;
+    public:
+        /**
+         * @brief Constructs a Connection object.
+         * 
+         * @param dispatcher Reference to the VDispatcher.
+         * @param connection Signal connection object.
+         */
+        Connection(VDispatcher<T> &dispatcher, const sigc::connection &connection);
 
-		Connection(const Connection &connection) :
-			Connection(connection.dispatcher, connection.connection)
-		{
-		}
+        /**
+         * @brief Copy constructor for Connection.
+         * 
+         * @param connection Connection object to copy.
+         */
+        Connection(const Connection &connection);
 
-		void disconnect()
-		{
-			dispatcher.mutex.lock();
-			dispatcher.nConnections--;
-			if (dispatcher.nConnections == 0)
-			{
-				dispatcher.queue.clear();
-				dispatcher.n = 0;
-			}
-			else
-			{
-				dispatcher.n--;
-				if (dispatcher.n == 0)
-				{
-					dispatcher.queue.pop();
-					dispatcher.n = dispatcher.nConnections;
-				}
-			}
-			dispatcher.mutex.unlock();
-			connection.disconnect();
-		}
+        /**
+         * @brief Disconnects the signal connection.
+         */
+        void disconnect();
 
-		VDispatcher<T> &dispatcher;
-		sigc::connection connection;
-	};
+        VDispatcher<T> &dispatcher; ///< Reference to the VDispatcher.
+        sigc::connection connection; ///< Signal connection object.
+    };
 
 public:
-	VDispatcher() :
-		nConnections(0),
-		n(0),
-		queue(),
-		mutex(),
-		dispatch(hvigtk_threadcontext() )
-	{
-	}
+    /**
+     * @brief Constructs a VDispatcher object.
+     */
+    VDispatcher();
 
-	void emit(const T &v)
-	{
-		mutex.lock();
-		queue.push(v);
-		mutex.unlock();
-		dispatch.emit();
-	}
+    /**
+     * @brief Emits a value to all connected slots.
+     * 
+     * @param v Value to emit.
+     */
+    void emit(const T &v);
 
-	Connection connect(const sigc::slot<void(const T&)>& slot)
-	{
-		mutex.lock();
-		nConnections++;
-		n++;
-		mutex.unlock();
-		Connection out(*this, dispatch.connect([this,slot]()
-		{
-			mutex.lock();
-			T v = queue.front();
-			n--;
-			if (n == 0)
-			{
-				queue.pop();
-				n = nConnections;
-			}
-			mutex.unlock();
-			slot(v);
-		}) );
-		return out;
-	}
+    /**
+     * @brief Connects a slot to the dispatcher.
+     * 
+     * @param slot Slot to connect.
+     * @return Connection object representing the connection.
+     */
+    Connection connect(const sigc::slot<void(const T&)>& slot);
 
 private:
-	int nConnections;
-	int n;
-	std::queue<T> queue;
-	Glib::Threads::Mutex mutex;
-	Glib::Dispatcher dispatch;
+    int nConnections; ///< Number of active connections.
+    int n; ///< Counter for managing the queue.
+    std::queue<T> queue; ///< Queue for storing dispatched values.
+    Glib::Threads::Mutex mutex; ///< Mutex for thread-safe access.
+    Glib::Dispatcher dispatch; ///< Dispatcher for emitting signals.
 };
 
+/**
+ * @class ObjectThread
+ * @brief Manages the creation and execution of objects in a dedicated thread.
+ * 
+ * The ObjectThread class provides functionality to create objects in a separate
+ * thread and manage their lifecycle.
+ */
 class ObjectThread
 {
 public:
-	ObjectThread();
-	~ObjectThread();
+    /**
+     * @brief Constructs an ObjectThread object.
+     */
+    ObjectThread();
 
-	template <class T, typename... As> 
-	T* createObject(As... as)
-	{
-		T *out;
-		loop->get_context()->invoke([this, &out, &as...]() 
-		{
-			mutex.lock();
-			out = new T(as...);
-			_objCreated = true;
-			objCreated.signal();
-			mutex.unlock();
-			return false;
-		});
-		mutex.lock();
-		_objCreated = false;
-		while (!_objCreated)
-			objCreated.wait(mutex);
-		mutex.unlock();
-		return out;
-	}
+    /**
+     * @brief Destroys the ObjectThread object.
+     */
+    ~ObjectThread();
+
+    /**
+     * @brief Creates an object in the thread.
+     * 
+     * @tparam T Type of the object to create.
+     * @tparam As Variadic template for constructor arguments.
+     * @param as Constructor arguments for the object.
+     * @return Pointer to the created object.
+     */
+    template <class T, typename... As> 
+    T* createObject(As... as);
 
 protected:
-	void slot();
-	Glib::Threads::Mutex mutex;
-	Glib::Threads::Cond objCreated;
-	Glib::Threads::Cond started;
-	bool _started, _objCreated;
+    /**
+     * @brief Slot function for the thread.
+     * 
+     * Initializes the thread context and runs the main loop.
+     */
+    void slot();
 
-	Glib::RefPtr<Glib::MainLoop> loop;
-	Glib::Threads::Thread *thread;
+    Glib::Threads::Mutex mutex; ///< Mutex for thread synchronization.
+    Glib::Threads::Cond objCreated; ///< Condition variable for object creation.
+    Glib::Threads::Cond started; ///< Condition variable for thread start.
+    bool _started; ///< Indicates whether the thread has started.
+    bool _objCreated; ///< Indicates whether the object has been created.
+
+    Glib::RefPtr<Glib::MainLoop> loop; ///< Main loop for the thread.
+    Glib::Threads::Thread *thread; ///< Pointer to the thread object.
 };
 
 #endif
