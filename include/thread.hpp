@@ -98,54 +98,86 @@ class VDispatcher
      * The Connection class manages the lifecycle of a signal connection,
      * including disconnection and cleanup.
      */
-    class Connection
-    {
-        friend class VDispatcher;
-    public:
-        /**
-         * @brief Constructs a Connection object.
-         * 
-         * @param dispatcher Reference to the VDispatcher.
-         * @param connection Signal connection object.
-         */
-        Connection(VDispatcher<T> &dispatcher, const sigc::connection &connection);
+	class Connection
+	{
+		friend class VDispatcher;
+	public:
+		Connection(VDispatcher<T> &dispatcher, const sigc::connection &connection) :
+			dispatcher(dispatcher),
+			connection(connection)
+		{
+		}
 
-        /**
-         * @brief Copy constructor for Connection.
-         * 
-         * @param connection Connection object to copy.
-         */
-        Connection(const Connection &connection);
+		Connection(const Connection &connection) :
+			Connection(connection.dispatcher, connection.connection)
+		{
+		}
 
-        /**
-         * @brief Disconnects the signal connection.
-         */
-        void disconnect();
+		void disconnect()
+		{
+			dispatcher.mutex.lock();
+			dispatcher.nConnections--;
+			if (dispatcher.nConnections == 0)
+			{
+				dispatcher.queue.clear();
+				dispatcher.n = 0;
+			}
+			else
+			{
+				dispatcher.n--;
+				if (dispatcher.n == 0)
+				{
+					dispatcher.queue.pop();
+					dispatcher.n = dispatcher.nConnections;
+				}
+			}
+			dispatcher.mutex.unlock();
+			connection.disconnect();
+		}
 
-        VDispatcher<T> &dispatcher; ///< Reference to the VDispatcher.
-        sigc::connection connection; ///< Signal connection object.
-    };
+		VDispatcher<T> &dispatcher;
+		sigc::connection connection;
+	};
 
 public:
-    /**
-     * @brief Constructs a VDispatcher object.
-     */
-    VDispatcher();
+	VDispatcher() :
+		nConnections(0),
+		n(0),
+		queue(),
+		mutex(),
+		dispatch(hvigtk_threadcontext() )
+	{
+	}
 
-    /**
-     * @brief Emits a value to all connected slots.
-     * 
-     * @param v Value to emit.
-     */
-    void emit(const T &v);
+	void emit(const T &v)
+	{
+		mutex.lock();
+		queue.push(v);
+		mutex.unlock();
+		dispatch.emit();
+	}
 
-    /**
-     * @brief Connects a slot to the dispatcher.
-     * 
-     * @param slot Slot to connect.
-     * @return Connection object representing the connection.
-     */
-    Connection connect(const sigc::slot<void(const T&)>& slot);
+	Connection connect(const sigc::slot<void(const T&)>& slot)
+	{
+		mutex.lock();
+		nConnections++;
+		n++;
+		mutex.unlock();
+		Connection out(*this, dispatch.connect([this,slot]()
+		{
+			mutex.lock();
+			T v = queue.front();
+			n--;
+			if (n == 0)
+			{
+				queue.pop();
+				n = nConnections;
+			}
+			mutex.unlock();
+			slot(v);
+		}) );
+		return out;
+	}
 
 private:
     int nConnections; ///< Number of active connections.
@@ -184,7 +216,25 @@ public:
      * @return Pointer to the created object.
      */
     template <class T, typename... As> 
-    T* createObject(As... as);
+	T* createObject(As... as)
+	{
+		T *out;
+		loop->get_context()->invoke([this, &out, &as...]() 
+		{
+			mutex.lock();
+			out = new T(as...);
+			_objCreated = true;
+			objCreated.signal();
+			mutex.unlock();
+			return false;
+		});
+		mutex.lock();
+		_objCreated = false;
+		while (!_objCreated)
+			objCreated.wait(mutex);
+		mutex.unlock();
+		return out;
+	}
 
 protected:
     /**
@@ -197,8 +247,7 @@ protected:
     Glib::Threads::Mutex mutex; ///< Mutex for thread synchronization.
     Glib::Threads::Cond objCreated; ///< Condition variable for object creation.
     Glib::Threads::Cond started; ///< Condition variable for thread start.
-    bool _started; ///< Indicates whether the thread has started.
-    bool _objCreated; ///< Indicates whether the object has been created.
+	bool _started, _objCreated; ///< Flags for thread and object creation status.
 
     Glib::RefPtr<Glib::MainLoop> loop; ///< Main loop for the thread.
     Glib::Threads::Thread *thread; ///< Pointer to the thread object.

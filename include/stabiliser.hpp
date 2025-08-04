@@ -68,8 +68,7 @@ struct compit {
  * @brief Represents an abstract pixel with coordinates and color.
  */
 struct AbsPixel {
-    unsigned short int x; ///< X-coordinate of the pixel.
-    unsigned short int y; ///< Y-coordinate of the pixel.
+    unsigned short int x, y; ///< X- and Y-coordinate of the pixel.
     uint32_t color; ///< Color of the pixel.
 };
 

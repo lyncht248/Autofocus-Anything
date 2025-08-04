@@ -23,7 +23,7 @@
 #include "sdlwincommon.hpp"
 
 namespace Vimba = AVT::VmbAPI;
-
+class System;
 /**
  * @class FrameProcessor
  * @brief Handles frame processing and stabilization in the system.
@@ -244,6 +244,9 @@ public:
      */
     double getFPS();
 
+	void onWindowHomePositionChanged(double val);
+	void onWindowPGainChanged(double val);
+
     /**
      * @brief Updates the center of the region of interest (ROI).
      * 
@@ -309,10 +312,18 @@ public:
      */
     void whenViewDepthsToggled(bool viewingDepths);
 
-    /**
-     * @brief Updates the sharpness graph in the UI.
-     */
-    void updateSharpnessGraph();
+	// Depth mapping data structures
+	struct DepthMapData
+	{
+		std::vector<std::vector<std::pair<double, double>>> depthImage; // max_sharpness, actual_focus_position pairs
+		int width;
+		int height;
+		bool isValid;
+
+		DepthMapData() : width(0), height(0), isValid(false) {}
+	};
+
+	DepthMapData currentDepthMap;
 
 private:
     /**
@@ -388,16 +399,21 @@ private:
     Stabiliser stabiliser; ///< Stabilizer object.
     bool madeMap; ///< Flag indicating whether a map was made.
 
-    bool errorDialogShown; ///< Flag indicating whether an error dialog was shown.
+	bool errorDialogShown = false; ///< Flag indicating whether an error dialog was shown.
 
-    bool tiltedCamDisconnected; ///< Flag for tilted camera disconnection.
-    bool imagingCamDisconnected; ///< Flag for imaging camera disconnection.
-    bool lensDisconnected; ///< Flag for lens disconnection.
+	// Flags for disconnection states
+	bool tiltedCamDisconnected = false;
+	bool imagingCamDisconnected = false;
+	bool lensDisconnected = false;
 
-    bool usePhaseCorr; ///< Flag for using phase correlation.
+	// Add a boolean to enable or disable PhaseCorr usage.
+	bool usePhaseCorr = true;
 
-    PhaseCorrStabiliser2 phaseCorrStabiliser; ///< Phase correlation stabilizer object.
-    bool phaseCorrStabiliserReferenceNotSet; ///< Flag indicating whether the reference frame is set.
+
+	// Add a PhaseCorrStabiliser2 object
+	PhaseCorrStabiliser2 phaseCorrStabiliser{8, 1.0}; // 1.0 = complete replacement like old stabilizer
+	// Add a boolean to check if the reference frame is set
+	bool phaseCorrStabiliserReferenceNotSet = true;
 
     SharpnessAnalyzer sharpnessAnalyzer; ///< Sharpness analyzer object.
     Glib::Dispatcher sigSharpnessUpdated; ///< Dispatcher for sharpness updates.
@@ -406,9 +422,12 @@ private:
     std::chrono::time_point<std::chrono::steady_clock> lastSharpnessUpdate; ///< Last sharpness update time.
     SharpnessGraph sharpnessGraph; ///< Sharpness graph object.
 
+	// Method to update the sharpness graph in the UI
+	void updateSharpnessGraph();
+
     std::unique_ptr<ImagingCam> imagingCam; ///< Imaging camera object.
 
-    bool imagingCamUpdatingFocus; ///< Flag for imaging camera focus updates.
+	bool imagingCamUpdatingFocus = false; ///< Flag for imaging camera focus updates.
 };
 
 #endif

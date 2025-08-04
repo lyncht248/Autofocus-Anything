@@ -146,6 +146,7 @@ public:
      * 
      * Initializes the main window and its components.
      */
+    struct Private;
     MainWindow();
 
     /**
@@ -219,6 +220,8 @@ public:
      */
     void displayMessageError(const std::string &msg);
 
+    void displayWarningMessage(const std::string &msg);
+
     /**
      * @brief Renders a frame on the display.
      * 
@@ -231,7 +234,7 @@ public:
      * 
      * @param values Vector of sharpness values.
      */
-    void updateSharpnessGraph(const std::vector<double> &values);
+
 
     using SignalFrameDrawn = sigc::signal<void()>;
     SignalFrameDrawn signalFrameDrawn();
@@ -317,6 +320,9 @@ public:
 
     using SignalPGainChanged = sigc::signal<void(double)>;
     SignalPGainChanged signalPGainChanged();
+
+    void updateSharpnessGraph(const std::vector<double> &values);
+
 
 protected:
     /**
@@ -438,6 +444,9 @@ private:
 
     Gtk::Label sharpnessLabel;
     SharpnessGraph sharpnessGraph;
+
+    // Sophia: Added file title label
+    Gtk::Label fileTitle;
 };
 
 #endif

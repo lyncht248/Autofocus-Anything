@@ -7,6 +7,9 @@
 #include <chrono>
 #include <functional>
 
+
+class System; // Forward declaration
+
 /**
  * @class ImagingCam
  * @brief Handles camera operations including ROI sharpness monitoring, focus search, and depth mapping.
@@ -93,6 +96,14 @@ public:
      * @return True if depth mapping is active, false otherwise.
      */
     bool isDepthMappingActive() const { return m_depthMappingActive.load(); }
+
+
+
+    // Callback functions for GUI integration
+    using HoldFocusCallback = std::function<void(bool)>;
+    using BestFocusCallback = std::function<void(int)>;
+    using SearchCompleteCallback = std::function<void(bool)>;
+
 
     /**
      * @brief Sets the callback function for Hold Focus mode updates.
@@ -257,3 +268,4 @@ private:
     BestFocusCallback m_bestFocusCallback;
     SearchCompleteCallback m_searchCompleteCallback;
 };
+

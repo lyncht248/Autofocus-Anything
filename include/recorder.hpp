@@ -115,6 +115,9 @@ public:
      */
     void clearFrames();
 
+
+	void setBufferFrameRate();
+    
     /**
      * @brief Connects the Recorder to a signal dispatcher for operation completion.
      * 
@@ -164,8 +167,7 @@ private:
     bool buffering; ///< Indicates whether the Recorder is buffering frames.
     std::vector<VidFrame*> frames; ///< Buffer for storing frames.
     VDispatcher<std::tuple<Operation, bool> > *sigOperationComplete; ///< Signal dispatcher for operation completion.
-    VDispatcher<std::string> sigOperationSave; ///< Signal dispatcher for saving operations.
-    VDispatcher<std::string> sigOperationLoad; ///< Signal dispatcher for loading operations.
+    VDispatcher<std::string> sigOperationSave, sigOperationLoad;; ///< Signal dispatcher for saving and loading operations.
     VDispatcher<std::pair<int, int> > sigBuffer; ///< Signal dispatcher for buffering operations.
 
     Glib::Threads::Mutex mutex; ///< Mutex for thread-safe access to frames.
