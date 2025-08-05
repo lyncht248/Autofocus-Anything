@@ -6,3 +6,5 @@ build/
 .cache/
 .directory
 output/*
+docs/html/
+docs/latex/
