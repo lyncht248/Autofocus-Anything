@@ -1,3 +1,12 @@
+/**
+ * @file recorder.hpp
+ * @brief Declares the `Recorder` class for managing video frame operations.
+ * 
+ * This file provides the declaration of the `Recorder` class, which handles recording,
+ * buffering, and playback of video frames. It includes methods for saving, loading,
+ * and clearing frames, as well as managing signals for system interaction.
+ */
+
 #ifndef HVIGTK_RECORDER_H
 #define HVIGTK_RECORDER_H
 

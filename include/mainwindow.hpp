@@ -1,3 +1,8 @@
+/**
+ * @file mainwindow.hpp
+ * @brief Defines the MainWindow class for managing the main application GUI and its components.
+ */
+
 #ifndef HVIGTK_MAINWINDOW_H
 #define HVIGTK_MAINWINDOW_H
 

@@ -1,3 +1,12 @@
+/**
+ * @file imagingcam.hpp
+ * @brief Declares the `ImagingCam` class for managing camera operations.
+ * 
+ * This file provides the declaration of the `ImagingCam` class, which integrates with the `System`
+ * object to handle camera functionalities such as ROI sharpness monitoring, focus search, and depth
+ * mapping. It includes thread-safe methods for updating camera parameters and performing image analysis.
+ */
+
 #pragma once
 #include <opencv2/opencv.hpp>
 #include <vector>

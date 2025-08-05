@@ -1,3 +1,13 @@
+/**
+ * @file tiltedcam.hpp
+ * @brief Declares the `tiltedcam` class for managing ZWO ASI camera operations.
+ * 
+ * This file provides the declaration of the `tiltedcam` class, which handles initialization,
+ * configuration, and video capture for a ZWO ASI camera mounted in a tilted position. It includes
+ * methods for setting camera properties, starting and stopping capture threads, and retrieving
+ * captured frames.
+ */
+
 #ifndef TILTEDCAM_H
 #define TILTEDCAM_H
 

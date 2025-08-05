@@ -22,24 +22,57 @@
  * https://gist.github.com/bradley219/5373998
  */
 
+
+
+/**
+ * @file pid.hpp
+ * @brief Defines the `PID` class for implementing a PID controller.
+ * 
+ * This file provides the declaration of the `PID` class, which calculates the manipulated variable
+ * based on proportional, integral, and derivative gains. It is designed to control systems with
+ * feedback loops.
+ */
+
+
 #pragma once
 #ifndef _PID_H_
 #define _PID_H_
 
+/**
+ * @class PID
+ * @brief A class for implementing a PID controller.
+ *
+ * This class provides methods to calculate the manipulated variable based on
+ * proportional, integral, and derivative gains.
+ */
 class PIDImpl;
 class PID
 {
 public:
-    // Kp -  proportional gain
-    // Ki -  Integral gain
-    // Kd -  derivative gain
-    // dt -  loop interval time
-    // max - maximum value of manipulated variable
-    // min - minimum value of manipulated variable
+    /**
+     * @brief Constructor for the PID class.
+     *
+     * @param dt Loop interval time.
+     * @param max Maximum value of the manipulated variable.
+     * @param min Minimum value of the manipulated variable.
+     * @param Kp Proportional gain.
+     * @param Kd Derivative gain.
+     * @param Ki Integral gain.
+     */
     PID(double dt, double max, double min, double Kp, double Kd, double Ki);
 
-    // Returns the manipulated variable given a setpoint and current process value
+    /**
+     * @brief Calculates the manipulated variable given a setpoint and current process value.
+     *
+     * @param setpoint The desired setpoint.
+     * @param pv The current process value.
+     * @return The manipulated variable.
+     */
     double calculate(double setpoint, double pv);
+
+    /**
+     * @brief Destructor for the PID class.
+     */
     ~PID();
 
 private:

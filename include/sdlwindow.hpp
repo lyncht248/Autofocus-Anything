@@ -1,3 +1,12 @@
+/**
+ * @file sdlwindow.hpp
+ * @brief Declares the `SDLWindow` namespace for managing SDL windows and rendering operations.
+ * 
+ * This file provides the declaration of the `SDLWindow` namespace, which includes functions for
+ * creating, managing, and rendering SDL windows. It also handles depth map data, user interactions,
+ * and thread-safe operations.
+ */
+
 #ifndef SDLWINDOW_H
 #define SDLWINDOW_H
 

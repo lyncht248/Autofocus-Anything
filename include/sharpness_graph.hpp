@@ -1,3 +1,12 @@
+/**
+ * @file sharpness_graph.hpp
+ * @brief Declares the `SharpnessGraph` class for visualizing sharpness values.
+ * 
+ * This file provides the declaration of the `SharpnessGraph` class, which is a custom GTK drawing
+ * area designed to display sharpness values as a graph. It includes methods for updating values,
+ * scaling, and handling dynamic redraws.
+ */
+
 #pragma once
 #include <gtkmm.h>
 #include <vector>
