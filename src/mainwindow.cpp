@@ -744,7 +744,11 @@ MainWindow::MainWindow() : Gtk::Window(),
 	priv->controlGrid.attach(priv->space4[9], 20, 0);
 	priv->controlGrid.attach(priv->verticalSeparator4, 21, 0, 1, 4);
 	priv->controlGrid.attach(priv->space4[10], 22, 0);
-	priv->controlGrid.attach(loadSaveLabel, 23, 2, 2, 1);
+
+
+
+
+	priv->controlGrid.attach(loadSaveLabel, 23, 4, 2);
 
 	priv->controlGrid.attach(priv->fileTitle, 23, 4, 2);
 	priv->controlGrid.attach(fileLoadButton, 23, 3);
@@ -860,7 +864,13 @@ void MainWindow::displayMessageFPS(const std::string &msg)
 
 void MainWindow::displayMessageLoadSave(const std::string &msg)
 {
-	loadSaveLabel.set_text(msg);
+	// If the message is empty, show the file title
+    loadSaveLabel.set_text(msg);
+    if (!msg.empty()) {
+        priv->fileTitle.hide();
+    } else {
+        fileTitle.show();
+    }
 }
 
 void MainWindow::displayMessageError(const std::string &msg)
@@ -1610,6 +1620,8 @@ void MainWindow::onLoadButtonClicked()
 		}
 		loading.setValue(true);
 	}
+
+
 }
 
 void MainWindow::onSaveButtonClicked()
