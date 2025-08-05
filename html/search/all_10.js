@@ -1,0 +1,22 @@
+var searchData=
+[
+  ['phase_5fmultiplier_473',['PHASE_MULTIPLIER',['../Stage_8h.html#a45210785ceee1fac5a2ce320605a9766',1,'Stage.h']]],
+  ['phasecorr2_5fstabiliser_2ehpp_474',['phasecorr2_stabiliser.hpp',['../phasecorr2__stabiliser_8hpp.html',1,'']]],
+  ['phasecorr_5fstabiliser_2ehpp_475',['phasecorr_stabiliser.hpp',['../phasecorr__stabiliser_8hpp.html',1,'']]],
+  ['phasecorrstabiliser_476',['PhaseCorrStabiliser',['../classPhaseCorrStabiliser.html',1,'PhaseCorrStabiliser'],['../classPhaseCorrStabiliser.html#aee2a8124858fd2bd4a82ad98c3453db3',1,'PhaseCorrStabiliser::PhaseCorrStabiliser()']]],
+  ['phasecorrstabiliser2_477',['PhaseCorrStabiliser2',['../classPhaseCorrStabiliser2.html',1,'PhaseCorrStabiliser2'],['../classPhaseCorrStabiliser2.html#ad9a3899b408651823c0dde745682ac2a',1,'PhaseCorrStabiliser2::PhaseCorrStabiliser2()']]],
+  ['pid_478',['pid',['../structSDLWindow_1_1SDLWin.html#a4b2eb839c268d63e32f11d6b59a076a7',1,'SDLWindow::SDLWin']]],
+  ['pid_479',['PID',['../classPID.html#a479dbda7fd4436165001daf0f8f4ef6a',1,'PID::PID()'],['../classPID.html',1,'PID']]],
+  ['pid_2ehpp_480',['pid.hpp',['../pid_8hpp.html',1,'']]],
+  ['pixels_481',['pixels',['../structChain.html#a44ded8bd2a2e0ea68fffbff95b1d8c7b',1,'Chain']]],
+  ['pixelsize_482',['PixelSize',['../struct__ASI__CAMERA__INFO.html#a11bf1f68ffcc957defe0c6b17d7e31f9',1,'_ASI_CAMERA_INFO']]],
+  ['pixf_483',['pixf',['../structFrame.html#a79bcc4f579f1c358ba6ca4272becd0c3',1,'Frame']]],
+  ['pop_484',['pop',['../classTSQueue.html#a212b2f87d7b26c11f0b54a7d32b990c3',1,'TSQueue']]],
+  ['postnotification_485',['postNotification',['../classNotificationCenter.html#a490160e022f11fc3d2858ec20217ffb5',1,'NotificationCenter']]],
+  ['predraw_486',['predraw',['../classStabiliser.html#acbc9210df4bb89c755b2ff60c58db3fc',1,'Stabiliser']]],
+  ['processed_487',['processed',['../classFrameProcessor.html#a63807a7936910ad0f7c39ad6b23cf8d0',1,'FrameProcessor']]],
+  ['processframe_488',['processFrame',['../classFrameProcessor.html#a9f46de5f1bf6c63cf361255fcb15ff03',1,'FrameProcessor']]],
+  ['processorthread_489',['processorThread',['../classFrameProcessor.html#a7e863d27af6c1a19125a1883d7128235',1,'FrameProcessor']]],
+  ['push_490',['push',['../classTSQueue.html#a9420f7e2537a5cf9894ffcabd6a9726e',1,'TSQueue']]],
+  ['putframe_491',['putFrame',['../classRecorder.html#a83d534ade6b5f07bdee86ebaaf79409d',1,'Recorder']]]
+];

@@ -1,0 +1,24 @@
+var searchData=
+[
+  ['calc_5fnum_5fneighbours_891',['calc_num_neighbours',['../classStabiliser.html#ae8381c93304f9388285b5393785310f7',1,'Stabiliser']]],
+  ['calculate_892',['calculate',['../classPID.html#ad4ff293634c61ac1688e6425fc63a831',1,'PID']]],
+  ['calibrate_893',['calibrate',['../classAxis.html#a6394c1978d4fbaddac3420763b267189',1,'Axis']]],
+  ['capturevideo_894',['capturevideo',['../classautofocus.html#a6bc9841564ed23be641c6f993d4426ad',1,'autofocus']]],
+  ['chain_895',['Chain',['../structChain.html#a2d0a3ba99af01718bacff6aaae1f2560',1,'Chain']]],
+  ['child_5fmain_896',['child_main',['../namespaceSDLWindow.html#ae439c466a06e65c3d9a974088d709991',1,'SDLWindow']]],
+  ['clear_897',['clear',['../classTSQueue.html#a8f3feaa9a94fd065c169319451e01c08',1,'TSQueue']]],
+  ['cleardepthmapdata_898',['clearDepthMapData',['../namespaceSDLWindow.html#a6411d9e17ceba20f53d3ce026582114a',1,'SDLWindow']]],
+  ['clearframes_899',['clearFrames',['../classRecorder.html#a754c0dabe0c9ce60a19aad80187cc189',1,'Recorder']]],
+  ['clearroidisplay_900',['clearROIDisplay',['../classSystem.html#af68bded3a4a6423fd19c95d0ea5a0e9b',1,'System']]],
+  ['click_901',['click',['../classStabiliser.html#aab989a9bc4e079c8605cc1d4753aa1d0',1,'Stabiliser']]],
+  ['computebestfocus_902',['computeBestFocus',['../classautofocus.html#ae57855f24db9f35e95d10a61be57c26a',1,'autofocus']]],
+  ['computebestfocusreduced_903',['computeBestFocusReduced',['../classautofocus.html#acefbbc49cfd0f1fa6c7db9e80b8ed746',1,'autofocus']]],
+  ['computebestfocusveryreduced_904',['computeBestFocusVeryReduced',['../classautofocus.html#a324ca24e49dd7735fee465b5bcd9d918',1,'autofocus']]],
+  ['computeshift_905',['computeShift',['../classPhaseCorrStabiliser.html#a1ce7bb485c30400b8e87c28afca19b94',1,'PhaseCorrStabiliser::computeShift()'],['../classPhaseCorrStabiliser2.html#a60a85b24cd4147c7e912d247296d6b62',1,'PhaseCorrStabiliser2::computeShift()']]],
+  ['condition_906',['Condition',['../classCondition.html#a3a3d9152ae7e3b52b99bb335d55e0935',1,'Condition']]],
+  ['connect_907',['connect',['../classVDispatcher.html#a9969ea0e27ea5b0fe21c4085a421c0f1',1,'VDispatcher']]],
+  ['connectto_908',['connectTo',['../classRecorder.html#a783da80f88591cf6be4928e117f72b44',1,'Recorder']]],
+  ['countframes_909',['countFrames',['../classRecorder.html#a41f9a0a6499ed0df396423e562862c35',1,'Recorder']]],
+  ['createframe_910',['createFrame',['../namespaceSDLWindow.html#aa3373ddfb9ff83a86e26ff8fac7f7940',1,'SDLWindow']]],
+  ['createobject_911',['createObject',['../classObjectThread.html#a73500db22b36fd0ea4a7d66ffcdc7210',1,'ObjectThread']]]
+];

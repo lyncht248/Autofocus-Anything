@@ -1,0 +1,13 @@
+digraph "FrameProcessor"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="FrameProcessor",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black",tooltip="Handles frame processing and stabilization in the system."];
+  Node2 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" released\nstabQueue" ,fontname="Helvetica"];
+  Node2 [label="TSQueue\< VidFrame * \>",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classTSQueue.html",tooltip=" "];
+  Node3 -> Node1 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" system" ,fontname="Helvetica"];
+  Node3 [label="System",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$classSystem.html",tooltip="Forward declaration for the System class."];
+  Node4 -> Node3 [dir="back",color="darkorchid3",fontsize="10",style="dashed",label=" currentDepthMap" ,fontname="Helvetica"];
+  Node4 [label="System::DepthMapData",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$structSystem_1_1DepthMapData.html",tooltip="Represents depth mapping data."];
+}

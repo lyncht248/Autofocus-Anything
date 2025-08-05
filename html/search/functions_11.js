@@ -1,0 +1,19 @@
+var searchData=
+[
+  ['raise_1071',['raise',['../namespaceSDLWindow.html#af03bf5ae6b8800417bd1d4b5211885a5',1,'SDLWindow']]],
+  ['readsettings_1072',['readSettings',['../classXeryon.html#a87e6e0ed40206eaf34dcffbe7b6c50f3',1,'Xeryon']]],
+  ['receivedata_1073',['receiveData',['../classAxis.html#a74927a9d561d508ad92ad860c7b73486',1,'Axis']]],
+  ['recompute_5fchains_1074',['recompute_chains',['../classStabiliser.html#ab591d61c14e344267e6efa12d5474b34',1,'Stabiliser']]],
+  ['recorder_1075',['Recorder',['../classRecorder.html#ac8eb0297b2efd914a59f51e3fb12db5c',1,'Recorder']]],
+  ['registerlistener_1076',['registerListener',['../classNotificationCenter.html#abfa5c4b442c5abdfc42322977305cef0',1,'NotificationCenter']]],
+  ['releaseframe_1077',['releaseFrame',['../classFrameProcessor.html#ae3978714864bab907a53600405849af5',1,'FrameProcessor']]],
+  ['removerenderfilter_1078',['removeRenderFilter',['../classMainWindow.html#a4d56e7dfb97d90db8e0ec74e4c3c0e93',1,'MainWindow']]],
+  ['renderframe_1079',['renderFrame',['../classMainWindow.html#a02b0c1532571babc2c525d9e2349c50d',1,'MainWindow']]],
+  ['renderframeg8_1080',['renderFrameG8',['../namespaceSDLWindow.html#a18055052e0148fcf98aa8150ceb8f2f8',1,'SDLWindow']]],
+  ['reset_1081',['reset',['../classPhaseCorrStabiliser.html#a4bcd2bc33e70cbe600d63b0df059728a',1,'PhaseCorrStabiliser::reset()'],['../classXeryon.html#aef71bb9ed941b36963c66883a591300c',1,'Xeryon::reset()'],['../classPhaseCorrStabiliser2.html#a26b8b4f4e093d8fd6a9506597cb9458b',1,'PhaseCorrStabiliser2::reset()'],['../classAxis.html#a3f61562445d100eeff1eaf98e648e058',1,'Axis::reset()']]],
+  ['resetraster_1082',['resetRaster',['../classFrameProcessor.html#a79fca5daf93e1537918d10476f9829cd',1,'FrameProcessor']]],
+  ['resetzoom_1083',['resetZoom',['../classFrameProcessor.html#a57e543129a5ca95974ea75ed541973bd',1,'FrameProcessor::resetZoom()'],['../namespaceSDLWindow.html#afef4dfa36a163e96df2207379c3563d5',1,'SDLWindow::resetZoom()']]],
+  ['returntostart_1084',['returnToStart',['../classlens.html#a76e5876354aca719edfb1bf56bcafc39',1,'lens']]],
+  ['rotationstage_1085',['RotationStage',['../classRotationStage.html#a7e5460426330f2e531e06f14e9e12e37',1,'RotationStage']]],
+  ['run_1086',['run',['../classautofocus.html#a3295f9ed31dbd788ff06d99804be5b0f',1,'autofocus']]]
+];

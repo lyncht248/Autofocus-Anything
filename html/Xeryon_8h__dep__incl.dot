@@ -1,0 +1,16 @@
+digraph "include/Xeryon.h"
+{
+ // LATEX_PDF_SIZE
+  edge [fontname="Helvetica",fontsize="10",labelfontname="Helvetica",labelfontsize="10"];
+  node [fontname="Helvetica",fontsize="10",shape=record];
+  Node1 [label="include/Xeryon.h",height=0.2,width=0.4,color="black", fillcolor="grey75", style="filled", fontcolor="black",tooltip=" "];
+  Node1 -> Node2 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node2 [label="include/Axis.h",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$Axis_8h.html",tooltip=" "];
+  Node2 -> Node1 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node1 -> Node3 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node3 [label="include/lens.hpp",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$lens_8hpp.html",tooltip="Provides an interface for controlling the Xeryon piezo motor lens actuator."];
+  Node3 -> Node4 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node4 [label="include/autofocus.hpp",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$autofocus_8hpp.html",tooltip="Defines the autofocus class for managing the autofocusing process using the lens and tilted camera."];
+  Node4 -> Node5 [dir="back",color="midnightblue",fontsize="10",style="solid",fontname="Helvetica"];
+  Node5 [label="include/system.hpp",height=0.2,width=0.4,color="black", fillcolor="white", style="filled",URL="$system_8hpp.html",tooltip="Declares the System class and related components for managing the application."];
+}
