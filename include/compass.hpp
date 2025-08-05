@@ -1,3 +1,11 @@
+/**
+ * @file compass.hpp
+ * @brief Provides functionality to convert a 2D direction vector into compass-like directions.
+ * 
+ * This file contains the implementation of the `direction_to_compass` function, which maps a 2D vector to compass directions
+ * represented as `CVD::ImageRef` objects. The function uses trigonometric calculations to determine the direction.
+ */
+
 // -*- c++ -*-
 
 #ifndef COMPASS_H

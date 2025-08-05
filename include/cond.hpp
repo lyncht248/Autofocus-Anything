@@ -1,3 +1,12 @@
+/**
+ * @file cond.hpp
+ * @brief Defines the `Condition` and `OpCondition` classes for managing and combining conditions.
+ * 
+ * This file provides the implementation of the `Condition` class, which represents a toggleable condition
+ * that emits signals based on its state. It also includes the `OpCondition` class for creating composite
+ * conditions using logical operators.
+ */
+
 #ifndef HVIGTK_COND_H
 #define HVIGTK_COND_H
 

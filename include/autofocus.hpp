@@ -1,3 +1,8 @@
+/**
+ * @file autofocus.hpp
+ * @brief Defines the autofocus class for managing the autofocusing process using the lens and tilted camera.
+ */
+
 #ifndef AUTOFOCUS_H
 #define AUTOFOCUS_H
 

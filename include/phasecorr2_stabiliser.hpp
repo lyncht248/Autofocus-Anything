@@ -8,6 +8,15 @@
 // Reference: M. Guizar-Sicairos, S. T. Thurman, and J. R. Fienup. "Efficient subpixel image registration algorithms." Optics Letters 33 (2), 156–158 (2008). DOI: 10.1364/OL.33.000156.
 // =============================================
 
+/**
+ * @file phasecorr2_stabiliser.hpp
+ * @brief Implements efficient sub-pixel phase correlation for image stabilization.
+ * 
+ * This file provides a lightweight translation-only image stabilizer
+ * using cached reference FFT, sub-pixel peak refinement, and optional
+ * exponential rolling reference updates.
+ */
+
 #ifndef PHASECORR2_STABILISER_HPP
 #define PHASECORR2_STABILISER_HPP
 

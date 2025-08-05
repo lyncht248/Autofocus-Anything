@@ -1,3 +1,12 @@
+/**
+ * @file sharpness_analyzer.hpp
+ * @brief Declares the `SharpnessAnalyzer` class for analyzing image sharpness.
+ * 
+ * This file provides the declaration of the `SharpnessAnalyzer` class, which computes horizontal
+ * sharpness profiles for image frames. It supports analysis using OpenCV Mat objects and raw data
+ * pointers, and includes methods for retrieving computed sharpness values.
+ */
+
 #pragma once
 #include <opencv2/opencv.hpp>
 #include <vector>

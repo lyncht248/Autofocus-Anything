@@ -1,3 +1,12 @@
+/**
+ * @file system.hpp
+ * @brief Declares the `System` class and related components for managing the application.
+ * 
+ * This file provides the declaration of the `System` class, which oversees the application's
+ * GUI, frame processing, camera operations, and stabilization components. It also includes
+ * supporting classes and namespaces for handling frames, signals, and system interactions.
+ */
+
 #ifndef HVIGTK_SYSTEM_H
 #define HVIGTK_SYSTEM_H
 
@@ -312,14 +321,25 @@ public:
      */
     void whenViewDepthsToggled(bool viewingDepths);
 
-	// Depth mapping data structures
+	/**
+	 * @struct DepthMapData
+	 * @brief Represents depth mapping data.
+	 *
+	 * This structure contains information about depth mapping, including sharpness values,
+	 * focus positions, dimensions, and validity status.
+	 */
 	struct DepthMapData
 	{
-		std::vector<std::vector<std::pair<double, double>>> depthImage; // max_sharpness, actual_focus_position pairs
-		int width;
-		int height;
-		bool isValid;
+		std::vector<std::vector<std::pair<double, double>>> depthImage; /**< Pairs of max sharpness and actual focus position. */
+		int width; /**< Width of the depth map. */
+		int height; /**< Height of the depth map. */
+		bool isValid; /**< Indicates whether the depth map is valid. */
 
+		/**
+		 * @brief Default constructor for DepthMapData.
+		 *
+		 * Initializes the depth map with default values.
+		 */
 		DepthMapData() : width(0), height(0), isValid(false) {}
 	};
 

@@ -17,6 +17,15 @@
 #define DEFAULT_NUM_TRACKERS 600
 
 /**
+ * @file stabiliser.hpp
+ * @brief Declares the `Stabiliser` class and related structures for frame stabilization.
+ * 
+ * This file provides the declaration of the `Stabiliser` class, which includes methods for
+ * stabilizing frames, creating vessel maps, and analyzing vessel structures. It also defines
+ * supporting structures such as `Chain`, `compit`, and `AbsPixel` for vessel tracking and visualization.
+ */
+
+/**
  * @struct Chain
  * @brief Represents a chain of connected pixels in the vessel map.
  * 
