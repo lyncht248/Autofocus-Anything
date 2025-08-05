@@ -64,7 +64,7 @@ public:
     void returnToStart();
 
     // Sophia
-    void loadSettings(const std::string& 'config/lens_settings.txt');
+   // void loadSettings(const std::string& 'config/lens_settings.txt');
 
     /**
      * @brief Sets a new return position
@@ -143,7 +143,7 @@ private:
     Axis* axis;         ///< Pointer to the axis object for lens control
     
     double currentLensLoc; ///< Current position of the lens in mm
-  //  double returnPosition = -9.1; ///< Return position in mm (default: -9.1)
+    double returnPosition = -9.1; ///< Return position in mm (default: -9.1)
 
     std::thread tLens;           ///< Thread for lens control
     std::atomic<bool> stop_thread; ///< Flag to signal thread termination
@@ -151,8 +151,8 @@ private:
 
     
     int outOfBoundsOnceOnly = 0; ///< Counter to limit out-of-bounds error notifications
-  //  const double MIN_POSITION = -14.9; ///< Minimum allowed position in mm (right limit)
- //   const double MAX_POSITION = 0.0;   ///< Maximum allowed position in mm (left limit)
+    const double MIN_POSITION = -14.9; ///< Minimum allowed position in mm (right limit)
+    const double MAX_POSITION = 0.0;   ///< Maximum allowed position in mm (left limit)
 
     std::ofstream logFile;           ///< File stream for position logging
     const std::string outputDir = "../output";  ///< Directory for log files

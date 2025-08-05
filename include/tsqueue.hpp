@@ -34,14 +34,6 @@ public:
 		hasItems(),
 		isEmpty(),
 		limit(limit)
-		{
-			
-		}
-		queue(),
-		mutex(),
-		hasItems(),
-		isEmpty(),
-		limit(limit)
 	{
 	}
 
