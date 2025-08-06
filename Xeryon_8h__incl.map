@@ -1,8 +1,8 @@
 <map id="include/Xeryon.h" name="include/Xeryon.h">
-<area shape="rect" id="node1" title=" " alt="" coords="137,5,268,32"/>
-<area shape="rect" id="node2" href="$Distance_8h.html" title=" " alt="" coords="5,80,96,107"/>
-<area shape="rect" id="node3" href="$Axis_8h.html" title=" " alt="" coords="171,80,234,107"/>
-<area shape="rect" id="node4" href="$Stage_8h.html" title=" " alt="" coords="37,155,107,181"/>
+<area shape="rect" id="node1" title="Defines the Xeryon class for managing motion control systems and axes (Xeryon SDK)." alt="" coords="137,5,268,32"/>
+<area shape="rect" id="node2" href="$Distance_8h.html" title="Provides the Distance class for unit conversion and arithmetic operations (Xeryon SDK)." alt="" coords="5,80,96,107"/>
+<area shape="rect" id="node3" href="$Axis_8h.html" title="Defines the Axis class for controlling and managing motion axes in the Xeryon system (Xeryon SDK)." alt="" coords="171,80,234,107"/>
+<area shape="rect" id="node4" href="$Stage_8h.html" title="Defines the Stage class hierarchy for managing linear and rotational stages (Xeryon SDK)." alt="" coords="37,155,107,181"/>
 <area shape="rect" id="node10" title=" " alt="" coords="259,80,301,107"/>
 <area shape="rect" id="node11" title=" " alt="" coords="325,80,389,107"/>
 <area shape="rect" id="node12" title=" " alt="" coords="413,80,475,107"/>

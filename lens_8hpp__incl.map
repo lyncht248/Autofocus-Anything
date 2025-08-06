@@ -4,10 +4,10 @@
 <area shape="rect" id="node3" title=" " alt="" coords="13,155,77,181"/>
 <area shape="rect" id="node4" title=" " alt="" coords="302,80,375,107"/>
 <area shape="rect" id="node5" title=" " alt="" coords="400,80,491,107"/>
-<area shape="rect" id="node6" href="$Xeryon_8h.html" title=" " alt="" coords="197,80,277,107"/>
-<area shape="rect" id="node7" href="$Distance_8h.html" title=" " alt="" coords="101,155,192,181"/>
-<area shape="rect" id="node8" href="$Axis_8h.html" title=" " alt="" coords="419,155,482,181"/>
-<area shape="rect" id="node9" href="$Stage_8h.html" title=" " alt="" coords="242,229,313,256"/>
+<area shape="rect" id="node6" href="$Xeryon_8h.html" title="Defines the Xeryon class for managing motion control systems and axes (Xeryon SDK)." alt="" coords="197,80,277,107"/>
+<area shape="rect" id="node7" href="$Distance_8h.html" title="Provides the Distance class for unit conversion and arithmetic operations (Xeryon SDK)." alt="" coords="101,155,192,181"/>
+<area shape="rect" id="node8" href="$Axis_8h.html" title="Defines the Axis class for controlling and managing motion axes in the Xeryon system (Xeryon SDK)." alt="" coords="419,155,482,181"/>
+<area shape="rect" id="node9" href="$Stage_8h.html" title="Defines the Stage class hierarchy for managing linear and rotational stages (Xeryon SDK)." alt="" coords="242,229,313,256"/>
 <area shape="rect" id="node15" title=" " alt="" coords="216,155,259,181"/>
 <area shape="rect" id="node16" title=" " alt="" coords="283,155,344,181"/>
 <area shape="rect" id="node11" title=" " alt="" coords="476,229,535,256"/>

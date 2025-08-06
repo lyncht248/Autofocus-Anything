@@ -1,5 +1,5 @@
 <map id="Graphical Class Hierarchy" name="Graphical Class Hierarchy">
-<area shape="rect" id="node1" href="$classStage.html" title=" " alt="" coords="5,31,64,57"/>
-<area shape="rect" id="node2" href="$classLinearStage.html" title=" " alt="" coords="120,5,219,32"/>
-<area shape="rect" id="node3" href="$classRotationStage.html" title=" " alt="" coords="112,56,227,83"/>
+<area shape="rect" id="node1" href="$classStage.html" title="Base class for managing stages, including linear and rotational types (Xeryon SDK)." alt="" coords="5,31,64,57"/>
+<area shape="rect" id="node2" href="$classLinearStage.html" title="Represents a linear stage with specific encoder resolution and speed multiplier (Xeryon SDK)." alt="" coords="120,5,219,32"/>
+<area shape="rect" id="node3" href="$classRotationStage.html" title="Represents a rotational stage with encoder counts per revolution (Xeryon SDK)." alt="" coords="112,56,227,83"/>
 </map>

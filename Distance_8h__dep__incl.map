@@ -1,8 +1,8 @@
 <map id="include/Distance.h" name="include/Distance.h">
-<area shape="rect" id="node1" title=" " alt="" coords="89,5,231,32"/>
+<area shape="rect" id="node1" title="Provides the Distance class for unit conversion and arithmetic operations (Xeryon SDK)." alt="" coords="89,5,231,32"/>
 <area shape="rect" id="node2" href="$lens_8hpp.html" title="Provides an interface for controlling the Xeryon piezo motor lens actuator." alt="" coords="24,155,152,181"/>
-<area shape="rect" id="node5" href="$Xeryon_8h.html" title=" " alt="" coords="157,80,288,107"/>
+<area shape="rect" id="node5" href="$Xeryon_8h.html" title="Defines the Xeryon class for managing motion control systems and axes (Xeryon SDK)." alt="" coords="157,80,288,107"/>
 <area shape="rect" id="node3" href="$autofocus_8hpp.html" title="Defines the autofocus class for managing the autofocusing process using the lens and tilted camera." alt="" coords="5,229,171,256"/>
 <area shape="rect" id="node4" href="$system_8hpp.html" title="Declares the System class and related components for managing the application." alt="" coords="13,304,163,331"/>
-<area shape="rect" id="node6" href="$Axis_8h.html" title=" " alt="" coords="177,155,290,181"/>
+<area shape="rect" id="node6" href="$Axis_8h.html" title="Defines the Axis class for controlling and managing motion axes in the Xeryon system (Xeryon SDK)." alt="" coords="177,155,290,181"/>
 </map>
