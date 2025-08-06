@@ -30,7 +30,7 @@ while(1)
 
 /**
  * @file ASICamera2.h
- * @brief Header file for ASI Camera SDK, providing API definitions and camera control functionalities.
+ * @brief Header file for ASI Camera SDK, providing API definitions and camera control functionalities (Xeryon SDK).
  */
  
 #ifndef ASICAMERA2_H
