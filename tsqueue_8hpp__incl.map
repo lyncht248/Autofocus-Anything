@@ -1,0 +1,10 @@
+<map id="include/tsqueue.hpp" name="include/tsqueue.hpp">
+<area shape="rect" id="node1" title="Thread&#45;safe queue implementation with optional size limit." alt="" coords="65,5,219,32"/>
+<area shape="rect" id="node2" title=" " alt="" coords="5,155,87,181"/>
+<area shape="rect" id="node3" title=" " alt="" coords="111,155,173,181"/>
+<area shape="rect" id="node4" href="$thread_8hpp.html" title="Header file for thread management and synchronization utilities." alt="" coords="231,80,323,107"/>
+<area shape="rect" id="node5" title=" " alt="" coords="515,155,636,181"/>
+<area shape="rect" id="node6" title=" " alt="" coords="660,155,797,181"/>
+<area shape="rect" id="node7" title=" " alt="" coords="198,155,355,181"/>
+<area shape="rect" id="node8" title=" " alt="" coords="380,155,491,181"/>
+</map>

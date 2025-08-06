@@ -1,0 +1,6 @@
+<map id="FrameProcessor" name="FrameProcessor">
+<area shape="rect" id="node1" title="Handles frame processing and stabilization in the system." alt="" coords="96,199,223,225"/>
+<area shape="rect" id="node2" href="$classTSQueue.html" title=" " alt="" coords="5,95,188,121"/>
+<area shape="rect" id="node3" href="$classSystem.html" title="Forward declaration for the System class." alt="" coords="212,95,283,121"/>
+<area shape="rect" id="node4" href="$structSystem_1_1DepthMapData.html" title="Represents depth mapping data." alt="" coords="159,5,336,32"/>
+</map>

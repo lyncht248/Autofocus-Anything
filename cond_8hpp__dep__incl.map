@@ -1,0 +1,6 @@
+<map id="include/cond.hpp" name="include/cond.hpp">
+<area shape="rect" id="node1" title="Defines the Condition and OpCondition classes for managing and combining conditions." alt="" coords="127,5,259,32"/>
+<area shape="rect" id="node2" href="$mainwindow_8hpp.html" title="Defines the MainWindow class for managing the main application GUI and its components." alt="" coords="38,80,221,107"/>
+<area shape="rect" id="node4" href="$system_8hpp.html" title="Declares the System class and related components for managing the application." alt="" coords="133,229,283,256"/>
+<area shape="rect" id="node3" href="$autofocus_8hpp.html" title="Defines the autofocus class for managing the autofocusing process using the lens and tilted camera." alt="" coords="5,155,171,181"/>
+</map>

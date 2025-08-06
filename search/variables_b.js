@@ -1,0 +1,19 @@
+var searchData=
+[
+  ['max_5fdepth_5fheight_1293',['MAX_DEPTH_HEIGHT',['../structSDLWindow_1_1SDLWin.html#a917653e94630966058d5dafe112693a3',1,'SDLWindow::SDLWin']]],
+  ['max_5fdepth_5fwidth_1294',['MAX_DEPTH_WIDTH',['../structSDLWindow_1_1SDLWin.html#a9463129987812371db33af4e6624d8b1',1,'SDLWindow::SDLWin']]],
+  ['maxheight_1295',['MaxHeight',['../struct__ASI__CAMERA__INFO.html#a65ce5ab3130ed4ff1a95711d04e8ec6e',1,'_ASI_CAMERA_INFO']]],
+  ['maxvalue_1296',['MaxValue',['../struct__ASI__CONTROL__CAPS.html#a350e25714bf0b9de03c242711c59302d',1,'_ASI_CONTROL_CAPS']]],
+  ['maxwidth_1297',['MaxWidth',['../struct__ASI__CAMERA__INFO.html#a0e10aaea9147f8562b1376ac563d63d8',1,'_ASI_CAMERA_INFO']]],
+  ['mcmd_1298',['mcmd',['../structSDLWindow_1_1SDLWin.html#ae78121df814042ca0e0c6d26fb881a13',1,'SDLWindow::SDLWin']]],
+  ['mechanicalshutter_1299',['MechanicalShutter',['../struct__ASI__CAMERA__INFO.html#a50db3d1e0dad85d39b7e8d07f45332d3',1,'_ASI_CAMERA_INFO']]],
+  ['minvalue_1300',['MinValue',['../struct__ASI__CONTROL__CAPS.html#a391421d3046834ea000261e4218d0e27',1,'_ASI_CONTROL_CAPS']]],
+  ['mmtomove_1301',['mmToMove',['../autofocus_8hpp.html#a0585ebf04fac4b265303f46164dee5bb',1,'autofocus.hpp']]],
+  ['mre_1302',['mre',['../structSDLWindow_1_1SDLWin.html#ab7d8755820827fe0582197ad03dc625f',1,'SDLWindow::SDLWin']]],
+  ['muser_1303',['muser',['../structSDLWindow_1_1SDLWin.html#a3c13e3f12a5ebcd15644768c7e2e9082',1,'SDLWindow::SDLWin']]],
+  ['mutex_1304',['mutex',['../structSDLWindow_1_1SDLWin.html#a69a8aacb9084d507f158426cb6e05265',1,'SDLWindow::SDLWin::mutex()'],['../classFrameProcessor.html#a4ff0f75c3d01bade3059ba71d55f22d2',1,'FrameProcessor::mutex()'],['../classObjectThread.html#af566f1fb9f6bffe7c68e070942668cee',1,'ObjectThread::mutex()']]],
+  ['my_5fcompass_1305',['my_compass',['../classVesselEdgel.html#a38be46748baa7456b232c2c0db0e6123',1,'VesselEdgel']]],
+  ['my_5fdirection_1306',['my_direction',['../classVesselEdgel.html#af35f936270492f13e93e4f38aebd76ed',1,'VesselEdgel']]],
+  ['my_5fposition_1307',['my_position',['../classVesselEdgel.html#a6b65d0bbcf343ee01808f7821c46e9e4',1,'VesselEdgel']]],
+  ['my_5fprofile_1308',['my_profile',['../classVesselEdgel.html#a969d51192a1ac4f117fb12632d77a6ef',1,'VesselEdgel']]]
+];

@@ -1,0 +1,11 @@
+<map id="include/main.hpp" name="include/main.hpp">
+<area shape="rect" id="node1" title="Header file for the main application logic." alt="" coords="183,5,318,32"/>
+<area shape="rect" id="node2" href="$sdlwincommon_8hpp.html" title="Common definitions and structures for SDL window management." alt="" coords="5,155,155,181"/>
+<area shape="rect" id="node6" title=" " alt="" coords="276,80,343,107"/>
+<area shape="rect" id="node7" title=" " alt="" coords="367,80,449,107"/>
+<area shape="rect" id="node8" href="$sdlwindow_8hpp.html" title="Declares the SDLWindow namespace for managing SDL windows and rendering operations." alt="" coords="133,80,251,107"/>
+<area shape="rect" id="node3" title=" " alt="" coords="117,229,176,256"/>
+<area shape="rect" id="node4" title=" " alt="" coords="201,229,285,256"/>
+<area shape="rect" id="node5" title=" " alt="" coords="35,229,93,256"/>
+<area shape="rect" id="node9" title=" " alt="" coords="281,155,343,181"/>
+</map>

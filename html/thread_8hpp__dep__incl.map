@@ -1,0 +1,6 @@
+<map id="include/thread.hpp" name="include/thread.hpp">
+<area shape="rect" id="node1" title="Header file for thread management and synchronization utilities." alt="" coords="126,5,269,32"/>
+<area shape="rect" id="node2" href="$recorder_8hpp.html" title="Declares the Recorder class for managing video frame operations." alt="" coords="5,80,160,107"/>
+<area shape="rect" id="node3" href="$system_8hpp.html" title="Declares the System class and related components for managing the application." alt="" coords="123,155,272,181"/>
+<area shape="rect" id="node4" href="$tsqueue_8hpp.html" title="Thread&#45;safe queue implementation with optional size limit." alt="" coords="235,80,389,107"/>
+</map>

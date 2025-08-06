@@ -1,0 +1,6 @@
+<map id="TSQueue::pop" name="TSQueue::pop">
+<area shape="rect" id="node1" title="Pops an element from the queue." alt="" coords="5,56,117,83"/>
+<area shape="rect" id="node2" href="$namespaceThreadStopper.html#a8778e0f0aef9014b716ecdacad8ee3af" title="Locks a mutex and registers it for automatic unlocking on stop requests." alt="" coords="183,5,335,32"/>
+<area shape="rect" id="node3" href="$namespaceThreadStopper.html#a074ce0c2a461c55992e0be7e6a0bb4c8" title="Sets a stop point for the current thread." alt="" coords="165,56,352,83"/>
+<area shape="rect" id="node4" href="$namespaceThreadStopper.html#ad157e5fbb417a481de8419524571e480" title="Unlocks a mutex and unregisters it from automatic unlocking." alt="" coords="175,107,343,133"/>
+</map>

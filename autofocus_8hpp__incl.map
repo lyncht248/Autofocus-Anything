@@ -1,0 +1,40 @@
+<map id="include/autofocus.hpp" name="include/autofocus.hpp">
+<area shape="rect" id="node1" title="Defines the autofocus class for managing the autofocusing process using the lens and tilted camera." alt="" coords="524,5,689,32"/>
+<area shape="rect" id="node2" title=" " alt="" coords="5,80,163,107"/>
+<area shape="rect" id="node3" title=" " alt="" coords="187,80,333,107"/>
+<area shape="rect" id="node4" title=" " alt="" coords="117,155,190,181"/>
+<area shape="rect" id="node5" title=" " alt="" coords="215,155,305,181"/>
+<area shape="rect" id="node6" title=" " alt="" coords="859,80,933,107"/>
+<area shape="rect" id="node7" title=" " alt="" coords="957,80,1032,107"/>
+<area shape="rect" id="node8" href="$mainwindow_8hpp.html" title="Defines the MainWindow class for managing the main application GUI and its components." alt="" coords="1239,80,1371,107"/>
+<area shape="rect" id="node22" href="$lens_8hpp.html" title="Provides an interface for controlling the Xeryon piezo motor lens actuator." alt="" coords="459,80,536,107"/>
+<area shape="rect" id="node23" title=" " alt="" coords="535,155,601,181"/>
+<area shape="rect" id="node24" title=" " alt="" coords="607,229,671,256"/>
+<area shape="rect" id="node36" href="$tiltedcam_8hpp.html" title="Declares the tiltedcam class for managing ZWO ASI camera operations." alt="" coords="672,80,784,107"/>
+<area shape="rect" id="node38" title=" " alt="" coords="865,155,929,181"/>
+<area shape="rect" id="node9" title=" " alt="" coords="1314,229,1395,256"/>
+<area shape="rect" id="node10" title=" " alt="" coords="1660,155,1815,181"/>
+<area shape="rect" id="node11" title=" " alt="" coords="939,229,1063,256"/>
+<area shape="rect" id="node12" href="$cond_8hpp.html" title="Defines the Condition and OpCondition classes for managing and combining conditions." alt="" coords="1186,155,1267,181"/>
+<area shape="rect" id="node15" title=" " alt="" coords="1839,155,2006,181"/>
+<area shape="rect" id="node16" title=" " alt="" coords="953,155,1111,181"/>
+<area shape="rect" id="node17" href="$vidframe_8hpp.html" title="Data structures for video frames." alt="" coords="1527,155,1636,181"/>
+<area shape="rect" id="node20" href="$sharpness__graph_8hpp.html" title="Declares the SharpnessGraph class for visualizing sharpness values." alt="" coords="1343,155,1503,181"/>
+<area shape="rect" id="node13" title=" " alt="" coords="1088,229,1155,256"/>
+<area shape="rect" id="node14" title=" " alt="" coords="1179,229,1290,256"/>
+<area shape="rect" id="node18" title=" " alt="" coords="1522,229,1625,256"/>
+<area shape="rect" id="node19" title=" " alt="" coords="1649,229,1871,256"/>
+<area shape="rect" id="node21" title=" " alt="" coords="1419,229,1482,256"/>
+<area shape="rect" id="node25" href="$Xeryon_8h.html" title=" " alt="" coords="380,155,460,181"/>
+<area shape="rect" id="node26" href="$Distance_8h.html" title=" " alt="" coords="201,229,292,256"/>
+<area shape="rect" id="node27" href="$Axis_8h.html" title=" " alt="" coords="519,229,582,256"/>
+<area shape="rect" id="node28" href="$Stage_8h.html" title=" " alt="" coords="377,304,447,331"/>
+<area shape="rect" id="node34" title=" " alt="" coords="316,229,359,256"/>
+<area shape="rect" id="node35" title=" " alt="" coords="383,229,444,256"/>
+<area shape="rect" id="node30" title=" " alt="" coords="685,304,744,331"/>
+<area shape="rect" id="node31" title=" " alt="" coords="768,304,827,331"/>
+<area shape="rect" id="node32" title=" " alt="" coords="472,304,523,331"/>
+<area shape="rect" id="node33" title=" " alt="" coords="547,304,661,331"/>
+<area shape="rect" id="node29" title=" " alt="" coords="381,379,443,405"/>
+<area shape="rect" id="node37" href="$ASICamera2_8h.html" title=" " alt="" coords="727,155,841,181"/>
+</map>

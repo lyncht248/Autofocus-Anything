@@ -1,0 +1,6 @@
+<map id="SDLWindow::SDLWin" name="SDLWindow::SDLWin">
+<area shape="rect" id="node1" title="Structure for managing SDL window state and operations." alt="" coords="54,213,209,240"/>
+<area shape="rect" id="node2" href="$unionSDLWindow_1_1ldata__t.html" title="Union for storing various lightweight data types used in SDL window operations." alt="" coords="5,95,156,121"/>
+<area shape="rect" id="node3" href="$classSystem.html" title="Forward declaration for the System class." alt="" coords="180,95,251,121"/>
+<area shape="rect" id="node4" href="$structSystem_1_1DepthMapData.html" title="Represents depth mapping data." alt="" coords="127,5,304,32"/>
+</map>

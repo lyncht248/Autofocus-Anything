@@ -1,0 +1,5 @@
+<map id="include/tiltedcam.hpp" name="include/tiltedcam.hpp">
+<area shape="rect" id="node1" title="Declares the tiltedcam class for managing ZWO ASI camera operations." alt="" coords="7,5,169,32"/>
+<area shape="rect" id="node2" href="$autofocus_8hpp.html" title="Defines the autofocus class for managing the autofocusing process using the lens and tilted camera." alt="" coords="5,80,171,107"/>
+<area shape="rect" id="node3" href="$system_8hpp.html" title="Declares the System class and related components for managing the application." alt="" coords="13,155,163,181"/>
+</map>

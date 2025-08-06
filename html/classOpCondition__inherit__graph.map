@@ -1,0 +1,4 @@
+<map id="OpCondition" name="OpCondition">
+<area shape="rect" id="node1" title="Represents a composite condition formed by combining two conditions with an operator." alt="" coords="5,80,108,107"/>
+<area shape="rect" id="node2" href="$classCondition.html" title="Represents a condition that can be toggled and emits signals based on its state." alt="" coords="15,5,99,32"/>
+</map>

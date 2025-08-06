@@ -1,0 +1,5 @@
+<map id="include/mainwindow.hpp" name="include/mainwindow.hpp">
+<area shape="rect" id="node1" title="Defines the MainWindow class for managing the main application GUI and its components." alt="" coords="57,5,239,32"/>
+<area shape="rect" id="node2" href="$autofocus_8hpp.html" title="Defines the autofocus class for managing the autofocusing process using the lens and tilted camera." alt="" coords="5,80,171,107"/>
+<area shape="rect" id="node3" href="$system_8hpp.html" title="Declares the System class and related components for managing the application." alt="" coords="73,155,223,181"/>
+</map>

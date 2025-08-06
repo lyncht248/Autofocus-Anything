@@ -1,0 +1,8 @@
+<map id="include/sdlwindow.hpp" name="include/sdlwindow.hpp">
+<area shape="rect" id="node1" title="Declares the SDLWindow namespace for managing SDL windows and rendering operations." alt="" coords="103,5,273,32"/>
+<area shape="rect" id="node2" title=" " alt="" coords="5,155,64,181"/>
+<area shape="rect" id="node3" title=" " alt="" coords="194,155,278,181"/>
+<area shape="rect" id="node4" title=" " alt="" coords="282,80,345,107"/>
+<area shape="rect" id="node5" href="$sdlwincommon_8hpp.html" title="Common definitions and structures for SDL window management." alt="" coords="57,80,207,107"/>
+<area shape="rect" id="node6" title=" " alt="" coords="103,155,161,181"/>
+</map>

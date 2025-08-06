@@ -1,0 +1,5 @@
+<map id="include/framefilter.hpp" name="include/framefilter.hpp">
+<area shape="rect" id="node1" title="Abstract base class for frame filters." alt="" coords="59,5,229,32"/>
+<area shape="rect" id="node2" href="$stabiliser_8hpp.html" title="Declares the Stabiliser class and related structures for frame stabilization." alt="" coords="5,80,165,107"/>
+<area shape="rect" id="node3" href="$system_8hpp.html" title="Declares the System class and related components for managing the application." alt="" coords="69,155,219,181"/>
+</map>

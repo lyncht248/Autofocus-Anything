@@ -1,0 +1,5 @@
+<map id="include/vesseledgel.hpp" name="include/vesseledgel.hpp">
+<area shape="rect" id="node1" title="Header file for the VesselEdgel class." alt="" coords="5,5,184,32"/>
+<area shape="rect" id="node2" href="$stabiliser_8hpp.html" title="Declares the Stabiliser class and related structures for frame stabilization." alt="" coords="15,80,175,107"/>
+<area shape="rect" id="node3" href="$system_8hpp.html" title="Declares the System class and related components for managing the application." alt="" coords="20,155,169,181"/>
+</map>

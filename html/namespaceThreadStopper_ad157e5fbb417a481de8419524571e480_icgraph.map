@@ -1,0 +1,5 @@
+<map id="ThreadStopper::unlock" name="ThreadStopper::unlock">
+<area shape="rect" id="node1" title="Unlocks a mutex and unregisters it from automatic unlocking." alt="" coords="232,31,400,57"/>
+<area shape="rect" id="node2" href="$classTSQueue.html#a212b2f87d7b26c11f0b54a7d32b990c3" title="Pops an element from the queue." alt="" coords="39,5,151,32"/>
+<area shape="rect" id="node3" href="$classTSQueue.html#a605039b45a3e905a4e395fe964d477e6" title="Waits until the queue becomes empty." alt="" coords="5,56,184,83"/>
+</map>

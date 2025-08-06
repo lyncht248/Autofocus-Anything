@@ -1,0 +1,4 @@
+<map id="Stabiliser" name="Stabiliser">
+<area shape="rect" id="node1" title="Provides functionality for stabilizing frames and analyzing vessel structures." alt="" coords="12,80,95,107"/>
+<area shape="rect" id="node2" href="$classFrameFilter.html" title="Abstract base class for applying filters to video frames." alt="" coords="5,5,101,32"/>
+</map>

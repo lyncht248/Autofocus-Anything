@@ -1,0 +1,7 @@
+<map id="include/sdlwincommon.hpp" name="include/sdlwincommon.hpp">
+<area shape="rect" id="node1" title="Common definitions and structures for SDL window management." alt="" coords="110,5,310,32"/>
+<area shape="rect" id="node2" href="$main_8hpp.html" title="Header file for the main application logic." alt="" coords="80,155,214,181"/>
+<area shape="rect" id="node3" href="$sdlwinchild_8hpp.html" title="Header file for SDL child process management." alt="" coords="25,80,200,107"/>
+<area shape="rect" id="node4" href="$sdlwindow_8hpp.html" title="Declares the SDLWindow namespace for managing SDL windows and rendering operations." alt="" coords="224,80,393,107"/>
+<area shape="rect" id="node5" href="$system_8hpp.html" title="Declares the System class and related components for managing the application." alt="" coords="418,80,567,107"/>
+</map>

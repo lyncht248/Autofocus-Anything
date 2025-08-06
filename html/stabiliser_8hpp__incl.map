@@ -1,0 +1,12 @@
+<map id="include/stabiliser.hpp" name="include/stabiliser.hpp">
+<area shape="rect" id="node1" title="Declares the Stabiliser class and related structures for frame stabilization." alt="" coords="258,5,418,32"/>
+<area shape="rect" id="node2" title=" " alt="" coords="5,155,108,181"/>
+<area shape="rect" id="node3" title=" " alt="" coords="312,155,415,181"/>
+<area shape="rect" id="node4" title=" " alt="" coords="196,80,259,107"/>
+<area shape="rect" id="node5" title=" " alt="" coords="283,80,326,107"/>
+<area shape="rect" id="node6" title=" " alt="" coords="350,80,393,107"/>
+<area shape="rect" id="node7" title=" " alt="" coords="417,80,561,107"/>
+<area shape="rect" id="node8" href="$vesseledgel_8hpp.html" title="Header file for the VesselEdgel class." alt="" coords="43,80,171,107"/>
+<area shape="rect" id="node9" href="$framefilter_8hpp.html" title="Abstract base class for frame filters." alt="" coords="636,80,755,107"/>
+<area shape="rect" id="node10" title=" " alt="" coords="618,155,773,181"/>
+</map>
