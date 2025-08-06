@@ -1,5 +1,15 @@
+/**
+ * @file Distance.h
+ * @brief Provides the Distance class for unit conversion and arithmetic operations (Xeryon SDK).
+ */
+
 #ifndef DISTANCE_H
 #define DISTANCE_H
+
+/** 
+ * @class Distance
+ * @brief Represents a distance value with support for unit conversion and arithmetic operations (Xeryon SDK).
+ */
 
 class Distance
 {

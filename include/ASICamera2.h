@@ -27,6 +27,12 @@ while(1)
 
 
 ***************************************************/
+
+/**
+ * @file ASICamera2.h
+ * @brief Header file for ASI Camera SDK, providing API definitions and camera control functionalities.
+ */
+ 
 #ifndef ASICAMERA2_H
 #define ASICAMERA2_H
 
@@ -118,6 +124,9 @@ typedef enum ASI_BOOL{
 	ASI_TRUE
 }ASI_BOOL;
 
+/** @struct _ASI_CAMERA_INFO
+ *  @brief Contains information about an ASI camera, including properties and capabilities (Xeryon SDK).
+ */
 typedef struct _ASI_CAMERA_INFO
 {
 	char Name[64]; //the name of the camera, you can display this to the UI
@@ -173,6 +182,9 @@ typedef enum ASI_CONTROL_TYPE{ //Control type//
 
 }ASI_CONTROL_TYPE;
 
+/** @struct _ASI_CONTROL_CAPS
+ *  @brief Describes the capabilities of a camera control, including range and default values (Xeryon SDK).
+ */
 typedef struct _ASI_CONTROL_CAPS
 {
 	char Name[64]; //the name of the Control like Exposure, Gain etc..
@@ -198,11 +210,18 @@ typedef struct _ASI_ID{
 	unsigned char id[8];
 }ASI_ID;
 
+/** @struct _ASI_ID
+ *  @brief Represents the unique identifier for an ASI camera (Xeryon SDK).
+ */
 typedef ASI_ID ASI_SN;
 
 typedef struct _ASI_SUPPORTED_MODE{
 	ASI_CAMERA_MODE SupportedCameraMode[16];// this array will content with the support camera mode type.ASI_MODE_END is the end of supported camera mode
 }ASI_SUPPORTED_MODE;
+
+/** @struct _ASI_SUPPORTED_MODE
+ *  @brief Lists the supported camera modes for trigger functionality (Xeryon SDK).
+ */
 
 #ifndef __cplusplus
 #define ASI_CONTROL_TYPE int

@@ -1,3 +1,8 @@
+/**
+ * @file Xeryon.h
+ * @brief Defines the Xeryon class for managing motion control systems and axes (Xeryon SDK).
+ */
+
 #ifndef _XERYON_H
 #define _XERYON_H
 
@@ -16,6 +21,10 @@
 class Axis;
 class Stage;
 
+/**
+ * @class Xeryon
+ * @brief Represents the Xeryon motion control system, managing axes and communication (Xeryon SDK).
+ */
 class Xeryon
 {
 public:

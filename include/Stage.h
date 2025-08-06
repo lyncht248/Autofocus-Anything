@@ -1,3 +1,8 @@
+/**
+ * @file Stage.h
+ * @brief Defines the Stage class hierarchy for managing linear and rotational stages (Xeryon SDK).
+ */
+
 #ifndef _STAGE_H
 #define _STAGE_H
 
@@ -10,6 +15,10 @@ const double PHASE_MULTIPLIER = 182;
 class Stage
 {
     public:
+        /**
+         * @class Stage
+         * @brief Base class for managing stages, including linear and rotational types (Xeryon SDK).
+         */
         Stage(const char * encoderResolutionCommand, double encoderResolution, double speedMultiplier) :
             encoderResolutionCommand_(encoderResolutionCommand), encoderResolution_(encoderResolution),
             speedMultiplier_(speedMultiplier), amplitudeMultiplier_(AMPLITUDE_MULTIPLIER),
@@ -34,6 +43,10 @@ class Stage
 class LinearStage : public Stage
 {
     public:
+        /**
+         * @class LinearStage
+         * @brief Represents a linear stage with specific encoder resolution and speed multiplier (Xeryon SDK).
+         */
         LinearStage(const char * encoderResolutionCommand, double encoderResolution, double speedMultiplier) :
             Stage(encoderResolutionCommand, encoderResolution, speedMultiplier) { }
         bool isLinear() const { return true; }
@@ -42,6 +55,10 @@ class LinearStage : public Stage
 class RotationStage : public Stage
 {
     public:
+        /**
+         * @class RotationStage
+         * @brief Represents a rotational stage with encoder counts per revolution (Xeryon SDK).
+         */
         RotationStage(const char * encoderResolutionCommand, double encoderResolution, double speedMultiplier, double encCountsPerRev) :
             Stage(encoderResolutionCommand, encoderResolution, speedMultiplier), encCountsPerRev_(encCountsPerRev) { }
         bool isLinear() const { return false; }

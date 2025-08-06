@@ -1,3 +1,13 @@
+/**
+ * @file Axis.h
+ * @brief Defines the Axis class for controlling and managing motion axes in the Xeryon system (Xeryon SDK).
+ */
+
+/**
+ * @class Axis
+ * @brief Represents a motion axis in the Xeryon system, providing control and status functionalities (Xeryon SDK).
+ */
+
 #ifndef _AXIS_H
 #define _AXIS_H
 
