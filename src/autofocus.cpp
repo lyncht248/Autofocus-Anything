@@ -76,7 +76,7 @@ std::string csvFilename;
 std::ofstream csvFile;
 
 // Add P gain as a member variable with default value
-double Kp = 0.0020; // HAS BEEN 0.005 FOR A LONG TIME
+double Kp = 0.0023; // HAS BEEN 0.005 FOR A LONG TIME
 
 std::atomic<double> currentMeasuredFocus{
     0.0}; // Current actual measured focus position
