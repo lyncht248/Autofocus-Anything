@@ -107,6 +107,7 @@ set(SOURCES
     ${CMAKE_SOURCE_DIR}/src/sharpness_analyzer.cpp
     ${CMAKE_SOURCE_DIR}/src/sharpness_graph.cpp
     ${CMAKE_SOURCE_DIR}/src/imagingcam.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings.cpp
 )
 
 # Add the executable with source files

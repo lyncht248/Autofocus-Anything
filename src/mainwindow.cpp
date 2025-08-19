@@ -346,6 +346,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 						   recenterButton("Recenter"),
 						   fileLoadButton("Load"),
 						   fileSaveButton("Save"),
+						   settingsButton("Settings"),
 						   frameRateEntry(),
 						   enterButton("Enter"),
 						   liveToggle(),
@@ -394,7 +395,8 @@ MainWindow::MainWindow() : Gtk::Window(),
 						   getDepthsToggle(),
 						   viewDepthsToggle(),
 						   viewDepthsActive(),
-						   getDepthsActive()
+						   getDepthsActive(),
+						   settings("/home/sophia/repos/Autofocus-Anything/config/general_settings.txt") // Initialize settings object
 {
 	// set_default_size(1700,200);
 	set_title("HVI-GTK " HVIGTK_VERSION_STR);
@@ -525,6 +527,14 @@ MainWindow::MainWindow() : Gtk::Window(),
 	fileSaveButton.set_tooltip_text("Save frames to this location");
 	fileSaveButton.set_sensitive(false);
 	fileSaveButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onSaveButtonClicked));
+
+// TODO Settings button
+	settingsButton.signal_clicked().connect([this]() {
+		Gtk::MessageDialog dialog(*this, "Settings Popup", false, Gtk::MESSAGE_INFO, Gtk::BUTTONS_OK, true);
+		dialog.set_secondary_text("This is a settings popup window.");
+		dialog.run();
+	});
+
 
 	stabiliseToggle.set_sensitive(true);
 	// showMapToggle.set_sensitive(false);
@@ -748,12 +758,15 @@ MainWindow::MainWindow() : Gtk::Window(),
 
 
 
+
 	priv->controlGrid.attach(loadSaveLabel, 23, 4, 2);
 
 	priv->controlGrid.attach(priv->fileTitle, 23, 4, 2);
 	priv->controlGrid.attach(fileLoadButton, 23, 3);
 
 	priv->controlGrid.attach(fileSaveButton, 24, 3);
+
+	priv->controlGrid.attach(settingsButton, 25, 3); // New position next to fileSaveButton
 
 	priv->controlGrid.attach(priv->space4[11], 25, 0);
 
@@ -762,6 +775,10 @@ MainWindow::MainWindow() : Gtk::Window(),
 
 	priv->controlGrid.attach(priv->sharpnessLabel, 23, 0, 2, 1);
 	priv->controlGrid.attach(priv->sharpnessGraph, 23, 1, 2, 2);
+
+
+
+	// settingsButton.show();
 
 	priv->controlFrame.add(priv->controlGrid);
 
@@ -796,6 +813,9 @@ MainWindow::MainWindow() : Gtk::Window(),
 	priv->sharpnessLabel.set_text("Focus Profile");
 	priv->sharpnessLabel.set_justify(Gtk::Justification::JUSTIFY_CENTER);
 	priv->sharpnessLabel.set_halign(Gtk::Align::ALIGN_CENTER);
+
+	// Load settings from the file
+	settings.load();
 }
 
 // double MainWindow::getFrameRateScaleValue() const
@@ -1932,4 +1952,42 @@ void MainWindow::whenViewDepthsToggled(bool viewingDepths)
 	{
 		logger->info("[MainWindow::whenViewDepthsToggled] View Depths toggled to {}", viewingDepths);
 	}
+}
+
+void MainWindow::openSettingsDialog() {
+    // Create a dialog to display and edit settings
+    Gtk::Dialog dialog("Settings", *this);
+
+    Gtk::Box *contentArea = dialog.get_content_area();
+
+    Gtk::Label returnPositionLabel("Return Position:");
+    Gtk::Entry returnPositionEntry;
+    returnPositionEntry.set_text(std::to_string(settings.getReturnPosition()));
+
+    Gtk::Label minPositionLabel("Min Position:");
+    Gtk::Entry minPositionEntry;
+    minPositionEntry.set_text(std::to_string(settings.getMinPosition()));
+
+    Gtk::Label maxPositionLabel("Max Position:");
+    Gtk::Entry maxPositionEntry;
+    maxPositionEntry.set_text(std::to_string(settings.getMaxPosition()));
+
+    contentArea->pack_start(returnPositionLabel);
+    contentArea->pack_start(returnPositionEntry);
+    contentArea->pack_start(minPositionLabel);
+    contentArea->pack_start(minPositionEntry);
+    contentArea->pack_start(maxPositionLabel);
+    contentArea->pack_start(maxPositionEntry);
+
+    dialog.add_button("Save", Gtk::RESPONSE_OK);
+    dialog.add_button("Cancel", Gtk::RESPONSE_CANCEL);
+
+    dialog.show_all_children();
+
+    if (dialog.run() == Gtk::RESPONSE_OK) {
+        settings.setReturnPosition(std::stod(returnPositionEntry.get_text()));
+        settings.setMinPosition(std::stod(minPositionEntry.get_text()));
+        settings.setMaxPosition(std::stod(maxPositionEntry.get_text()));
+        settings.save();
+    }
 }

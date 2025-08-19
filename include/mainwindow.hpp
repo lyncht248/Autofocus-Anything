@@ -15,6 +15,7 @@
 #include "sigc++/connection.h"
 #include "vidframe.hpp"
 #include "sharpness_graph.hpp"
+#include "settings.hpp"
 
 /**
  * @class ScaleWidget
@@ -410,10 +411,12 @@ private:
     void whenGetDepthsToggled(bool gettingDepths);
     void whenViewDepthsToggled(bool viewingDepths);
 
+    void openSettingsDialog(); // Add a method to open the settings dialog
+
     struct Private *priv;
 
     ScaleWidget gainScale, exposeScale, gammaScale, frameSlider, waitScale, recordingSizeScale, bestFocusScale, homePositionScale, pGainScale;
-    Gtk::Button recordButton, backToStartButton, pauseButton, playButton, fileLoadButton, fileSaveButton, resetButton, enterButton, recenterButton;
+    Gtk::Button recordButton, backToStartButton, pauseButton, playButton, fileLoadButton, fileSaveButton, settingsButton, resetButton, enterButton, recenterButton;
     Gtk::ToggleButton getDepthsToggle;
     Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle, holdFocusToggle, threedStabToggle, twodStabToggle, findFocusToggle, viewDepthsToggle;
     Gtk::Label fpsLabel, loadSaveLabel, errorLabel, outOfBoundsWarningLabel;
@@ -452,6 +455,10 @@ private:
 
     // Sophia: Added file title label
     Gtk::Label fileTitle;
+
+    // Gtk::Button settingsButton; // Add a button for settings
+
+    Settings settings; // Add a Settings object to manage application settings
 };
 
 #endif
