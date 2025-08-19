@@ -274,3 +274,12 @@ target_link_libraries(pid_tuning_standalone
     autofocus_lib
     pthread
 )
+
+# Create a library target for settings
+add_library(settings_lib STATIC ${CMAKE_SOURCE_DIR}/src/settings.cpp)
+
+# Link settings_lib to relevant targets
+target_link_libraries(lens_test PRIVATE settings_lib)
+target_link_libraries(autofocus_test PRIVATE settings_lib)
+target_link_libraries(new_device_calibration PRIVATE settings_lib)
+target_link_libraries(pid_tuning_standalone PRIVATE settings_lib)

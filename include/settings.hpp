@@ -15,9 +15,6 @@ public:
     // Save settings to the file
     void save() const;
 
-    // Get a setting value
-    double get(const std::string& key) const;
-
     // Set a setting value
     void set(const std::string& key, double value);
 

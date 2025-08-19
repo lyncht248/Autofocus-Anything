@@ -8,27 +8,39 @@
 #include <filesystem>
 #include <fmt/chrono.h>
 #include <iomanip>
-#include <iostream>
-#include <sstream>
+#include <filesystem>
+#include <fstream>
+#include <stdexcept>
+#include "settings.hpp"
 
-bool bLensLogFlag = 0;
+bool bLensLogFlag = 1;
 
-lens::lens() : stop_thread(false), controller(nullptr), axis(nullptr) {
-  // Comment out CSV file initialization
-  /*
-  // Create output directory and initialize CSV file
-  if (createOutputDirectory()) {
-      logFile.open(logFilePath, std::ios::out);
-      if (logFile.is_open()) {
-          // Write header row
-          logFile << "timestamp,DPOS,EPOS,Desired Lens Position" << std::endl;
-          if (bLensLogFlag)
-              logger->info("[lens::lens] CSV log file initialized at {}",
-  logFilePath); } else { logger->error("[lens::lens] Failed to open log file at
-  {}", logFilePath);
-      }
-  }
-  */
+lens::lens() : stop_thread(false), controller(nullptr), axis(nullptr), settings("") {
+    try {
+        // Load settings during construction
+        settings.load();
+        MIN_POSITION = settings.getMinPosition();
+        MAX_POSITION = settings.getMaxPosition();
+        returnPosition = settings.getReturnPosition();
+    } catch (const std::exception& e) {
+        std::cerr << "[lens::lens] Error loading settings: " << e.what() << std::endl;
+        throw; // Rethrow exception to indicate critical failure
+    }
+    // Comment out CSV file initialization
+    /*
+    // Create output directory and initialize CSV file
+    if (createOutputDirectory()) {
+        logFile.open(logFilePath, std::ios::out);
+        if (logFile.is_open()) {
+            // Write header row
+            logFile << "timestamp,DPOS,EPOS,Desired Lens Position" << std::endl;
+            if (bLensLogFlag)
+                logger->info("[lens::lens] CSV log file initialized at {}", logFilePath);
+        } else {
+            logger->error("[lens::lens] Failed to open log file at {}", logFilePath);
+        }
+    }
+    */
 }
 
 // Comment out createOutputDirectory method
@@ -219,12 +231,12 @@ bool lens::initialize() {
   // wait 0.5s
   usleep(500000);
 
-  // For some reason INDX causes LLIM to be set to -10mm, so we need to set it
-  // manually.
-  axis->setSetting("LLIM", -14.9_mm);
+    // For some reason INDX causes LLIM to be set to -10mm, so we need to set it manually.
+    axis->setSetting("LLIM", Distance(MIN_POSITION, Distance::MM));
+    axis->setSetting("HLIM", Distance(MAX_POSITION, Distance::MM));
 
-  axis->setDPOS(-9.1_mm);
-  currentLensLoc = -9.1;
+    axis->setDPOS(Distance(returnPosition, Distance::MM));
+    currentLensLoc = returnPosition;
 
   // wait for 0.5s
   usleep(500000);
@@ -442,4 +454,8 @@ double lens::getDesiredLensPosition() {
 double lens::getLensPosition() {
   Distance epos = axis->getEPOS();
   return epos(Distance::MM);
+}
+
+const Settings& lens::getSettings() const {
+    return settings;
 }

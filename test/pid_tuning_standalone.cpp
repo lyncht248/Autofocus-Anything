@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
     
     // Move lens to start position
     std::cout << "Moving lens to starting position..." << std::endl;
-    lensController.setDesiredLensPosition(-9.1);
+    lensController.setDesiredLensPosition(lensController.getSettings().getReturnPosition());
     std::this_thread::sleep_for(std::chrono::seconds(2));
     
     // Scale factor for image processing
@@ -264,7 +264,7 @@ int main(int argc, char **argv) {
         std::cout << "  Overshoot detected: " << (result.hasOvershoot ? "Yes" : "No") << std::endl;
         
         // Reset lens position and wait between tests
-        lensController.setDesiredLensPosition(-9.1);
+        lensController.setDesiredLensPosition(lensController.getSettings().getReturnPosition());
         std::this_thread::sleep_for(std::chrono::seconds(3));
     }
     

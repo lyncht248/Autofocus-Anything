@@ -1,8 +1,11 @@
 #include "settings.hpp"
 #include <fstream>
 #include <stdexcept>
+#include <algorithm> // For std::remove
 
-Settings::Settings(const std::string& filePath) : filePath(filePath) {}
+const std::string DEFAULT_SETTINGS_PATH = "/home/sophia/repos/Autofocus-Anything/config/general_settings.txt";
+
+Settings::Settings(const std::string& filePath) : filePath(filePath.empty() ? DEFAULT_SETTINGS_PATH : filePath) {}
 
 void Settings::load() {
     std::ifstream file(filePath);
@@ -10,10 +13,18 @@ void Settings::load() {
         throw std::runtime_error("Failed to open settings file: " + filePath);
     }
 
-    std::string key;
-    double value;
-    while (file >> key >> value) {
-        settings[key] = value;
+    std::string line;
+    while (std::getline(file, line)) {
+        // Remove spaces and handle key = value; format
+        line.erase(std::remove(line.begin(), line.end(), ' '), line.end());
+        size_t equalsPos = line.find('=');
+        size_t semicolonPos = line.find(';');
+
+        if (equalsPos != std::string::npos && semicolonPos != std::string::npos) {
+            std::string key = line.substr(0, equalsPos);
+            double value = std::stod(line.substr(equalsPos + 1, semicolonPos - equalsPos - 1));
+            settings[key] = value;
+        }
     }
 
     file.close();
@@ -32,28 +43,32 @@ void Settings::save() const {
     file.close();
 }
 
-double Settings::get(const std::string& key) const {
-    auto it = settings.find(key);
+double Settings::getReturnPosition() const {
+    auto it = settings.find("returnPosition");
     if (it == settings.end()) {
-        throw std::runtime_error("Setting not found: " + key);
+        throw std::runtime_error("Setting not found: returnPosition");
+    }
+    return it->second;
+}
+
+double Settings::getMinPosition() const {
+    auto it = settings.find("MIN_POSITION");
+    if (it == settings.end()) {
+        throw std::runtime_error("Setting not found: MIN_POSITION");
+    }
+    return it->second;
+}
+
+double Settings::getMaxPosition() const {
+    auto it = settings.find("MAX_POSITION");
+    if (it == settings.end()) {
+        throw std::runtime_error("Setting not found: MAX_POSITION");
     }
     return it->second;
 }
 
 void Settings::set(const std::string& key, double value) {
     settings[key] = value;
-}
-
-double Settings::getReturnPosition() const {
-    return get("returnPosition");
-}
-
-double Settings::getMinPosition() const {
-    return get("MIN_POSITION");
-}
-
-double Settings::getMaxPosition() const {
-    return get("MAX_POSITION");
 }
 
 void Settings::setReturnPosition(double value) {

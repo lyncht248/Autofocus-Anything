@@ -15,6 +15,7 @@
 #include <filesystem>
 #include "Xeryon.h"
 #include "Distance.h"
+#include "settings.hpp" // Include Settings header
 
 /**
  * @class lens
@@ -62,9 +63,6 @@ public:
      * @throws std::exception If the movement command fails.
      */
     void returnToStart();
-
-    // Sophia
-   // void loadSettings(const std::string& 'config/lens_settings.txt');
 
     /**
      * @brief Sets a new return position
@@ -123,6 +121,15 @@ public:
      */
     void mov_abs(double mmToMoveTo);
     
+    /**
+     * @brief Gets the Settings object
+     * 
+     * Provides access to the Settings object for retrieving configuration values.
+     * 
+     * @return Reference to the Settings object
+     */
+    const Settings& getSettings() const;
+    
 private:
     /**
      * @brief Thread function for lens control
@@ -139,20 +146,21 @@ private:
      */
     bool createOutputDirectory();
     
+
     Xeryon* controller; ///< Pointer to the Xeryon controller object
     Axis* axis;         ///< Pointer to the axis object for lens control
     
     double currentLensLoc; ///< Current position of the lens in mm
-    double returnPosition = -9.1; ///< Return position in mm (default: -9.1)
+    double returnPosition; ///< Return position in mm, configurable via settings text file default = -9.1
 
     std::thread tLens;           ///< Thread for lens control
     std::atomic<bool> stop_thread; ///< Flag to signal thread termination
 
-
+    Settings settings; ///< Settings object to manage configuration
     
     int outOfBoundsOnceOnly = 0; ///< Counter to limit out-of-bounds error notifications
-    const double MIN_POSITION = -14.9; ///< Minimum allowed position in mm (right limit)
-    const double MAX_POSITION = 0.0;   ///< Maximum allowed position in mm (left limit)
+    double MIN_POSITION; ///< Minimum allowed position in mm (right limit), configurable via settings (default = -14.9)
+    double MAX_POSITION; ///< Maximum allowed position in mm (left limit), configurable via settings (default = 0.0)
 
     std::ofstream logFile;           ///< File stream for position logging
     const std::string outputDir = "../output";  ///< Directory for log files
