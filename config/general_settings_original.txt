@@ -1,0 +1,28 @@
+
+MIN_POSITION = -14.9;
+MAX_POSITION = 0.0;
+returnPosition = -9.1;
+
+
+Kp = 0.0020;
+Kd = 0.00005;
+
+
+% FREQ = 90000;
+% FRQ2 = 87000;
+
+
+% PROP = 90;
+% PRO2 = 35;
+
+
+
+% K_p proportional gain constant in autofocus.cpp
+% K_d derivative gain constant in autofocus.cpp 
+
+% Xeryon Internal Settings
+% FREQ1 the higher frequency for when lens is nearby target in lens.cpp and settings_default.txt
+% FREQ2 the lower frequency for when lens is far from target in lens.cpp
+% PROP1 the lower gain constant for when lens is far in lens.cpp
+% PROP2 the higher gain constant for when lens is close in lens.cpp
+

@@ -1,0 +1,4 @@
+
+MIN_POSITION = -14.9;
+MAX_POSITION = 0.0;
+returnPosition = -9.1;
