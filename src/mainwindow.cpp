@@ -396,7 +396,7 @@ MainWindow::MainWindow() : Gtk::Window(),
 						   viewDepthsToggle(),
 						   viewDepthsActive(),
 						   getDepthsActive(),
-						   settings("/home/sophia/repos/Autofocus-Anything/config/general_settings.txt") // Initialize settings object
+						   settings("") // Use default settings path from settings.cpp
 {
 	// set_default_size(1700,200);
 	set_title("HVI-GTK " HVIGTK_VERSION_STR);
@@ -528,14 +528,66 @@ MainWindow::MainWindow() : Gtk::Window(),
 	fileSaveButton.set_sensitive(false);
 	fileSaveButton.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onSaveButtonClicked));
 
-// TODO Settings button
-	settingsButton.signal_clicked().connect([this]() {
-		Gtk::MessageDialog dialog(*this, "Settings Popup", false, Gtk::MESSAGE_INFO, Gtk::BUTTONS_OK, true);
-		dialog.set_secondary_text("This is a settings popup window.");
-		dialog.run();
-	});
+settingsButton.signal_clicked().connect([this]() {
+    Gtk::Dialog dialog("Settings", *this);
 
+    // Add input fields for returnPosition, MIN_POSITION, and MAX_POSITION
+    Gtk::Box* contentArea = dialog.get_content_area();
 
+    Gtk::Label returnPositionLabel("Return Position:");
+    Gtk::Scale returnPositionSlider(Gtk::ORIENTATION_HORIZONTAL);
+    returnPositionSlider.set_range(settings.getMinPosition(), settings.getMaxPosition());
+    returnPositionSlider.set_value(settings.getReturnPosition());
+    returnPositionSlider.set_digits(2); // Set precision to 2 decimal places
+
+    // Spin button for minPosition
+    Gtk::Label minPositionLabel("Min Position:");
+    Gtk::SpinButton minPositionSpin;
+    minPositionSpin.set_range(-100.0, 100.0); // Adjust range as needed
+    minPositionSpin.set_value(settings.getMinPosition());
+    minPositionSpin.set_increments(0.1, 1.0); // Enable +/- buttons with step increments
+    minPositionSpin.set_digits(2); // Allow 2 decimal places for MIN_POSITION
+
+    // Spin button for maxPosition
+    Gtk::Label maxPositionLabel("Max Position:");
+    Gtk::SpinButton maxPositionSpin;
+    maxPositionSpin.set_range(-100.0, 100.0); // Adjust range as needed
+    maxPositionSpin.set_value(settings.getMaxPosition());
+    maxPositionSpin.set_increments(0.1, 1.0); // Enable +/- buttons with step increments
+    maxPositionSpin.set_digits(2); // Allow 2 decimal places for MAX_POSITION
+
+    // Add widgets to the dialog
+    contentArea->pack_start(returnPositionLabel);
+    contentArea->pack_start(returnPositionSlider);
+    contentArea->pack_start(minPositionLabel);
+    contentArea->pack_start(minPositionSpin);
+    contentArea->pack_start(maxPositionLabel);
+    contentArea->pack_start(maxPositionSpin);
+
+    dialog.add_button("Cancel", Gtk::RESPONSE_CANCEL);
+    dialog.add_button("Save", Gtk::RESPONSE_OK);
+
+    dialog.show_all_children();
+
+    if (dialog.run() == Gtk::RESPONSE_OK) {
+        // Save updated values to settings
+        settings.setReturnPosition(returnPositionSlider.get_value());
+        settings.setMinPosition(minPositionSpin.get_value());
+        settings.setMaxPosition(maxPositionSpin.get_value());
+
+        // Optionally save settings to file
+        settings.save();
+    }
+
+    // Connect signals to update the returnPositionSlider range dynamically
+    minPositionSpin.signal_value_changed().connect([&]() {
+        returnPositionSlider.set_range(minPositionSpin.get_value(), maxPositionSpin.get_value());
+    });
+
+    maxPositionSpin.signal_value_changed().connect([&]() {
+        returnPositionSlider.set_range(minPositionSpin.get_value(), maxPositionSpin.get_value());
+    });
+});
 	stabiliseToggle.set_sensitive(true);
 	// showMapToggle.set_sensitive(false);
 	// showMapToggle.signal_clicked();
@@ -1943,51 +1995,4 @@ void MainWindow::whenGetDepthsToggled(bool gettingDepths)
 			logger->info("[MainWindow::whenGetDepthsToggled] Get Depths toggled off - clearing depth mapping");
 		}
 	}
-}
-
-void MainWindow::whenViewDepthsToggled(bool viewingDepths)
-{
-	// Implementation of whenViewDepthsToggled
-	if (bMainWindowLogFlag)
-	{
-		logger->info("[MainWindow::whenViewDepthsToggled] View Depths toggled to {}", viewingDepths);
-	}
-}
-
-void MainWindow::openSettingsDialog() {
-    // Create a dialog to display and edit settings
-    Gtk::Dialog dialog("Settings", *this);
-
-    Gtk::Box *contentArea = dialog.get_content_area();
-
-    Gtk::Label returnPositionLabel("Return Position:");
-    Gtk::Entry returnPositionEntry;
-    returnPositionEntry.set_text(std::to_string(settings.getReturnPosition()));
-
-    Gtk::Label minPositionLabel("Min Position:");
-    Gtk::Entry minPositionEntry;
-    minPositionEntry.set_text(std::to_string(settings.getMinPosition()));
-
-    Gtk::Label maxPositionLabel("Max Position:");
-    Gtk::Entry maxPositionEntry;
-    maxPositionEntry.set_text(std::to_string(settings.getMaxPosition()));
-
-    contentArea->pack_start(returnPositionLabel);
-    contentArea->pack_start(returnPositionEntry);
-    contentArea->pack_start(minPositionLabel);
-    contentArea->pack_start(minPositionEntry);
-    contentArea->pack_start(maxPositionLabel);
-    contentArea->pack_start(maxPositionEntry);
-
-    dialog.add_button("Save", Gtk::RESPONSE_OK);
-    dialog.add_button("Cancel", Gtk::RESPONSE_CANCEL);
-
-    dialog.show_all_children();
-
-    if (dialog.run() == Gtk::RESPONSE_OK) {
-        settings.setReturnPosition(std::stod(returnPositionEntry.get_text()));
-        settings.setMinPosition(std::stod(minPositionEntry.get_text()));
-        settings.setMaxPosition(std::stod(maxPositionEntry.get_text()));
-        settings.save();
-    }
 }

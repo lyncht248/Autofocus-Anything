@@ -5,6 +5,7 @@
 
 const std::string DEFAULT_SETTINGS_PATH = "/home/sophia/repos/Autofocus-Anything/config/general_settings.txt";
 
+
 Settings::Settings(const std::string& filePath) : filePath(filePath.empty() ? DEFAULT_SETTINGS_PATH : filePath) {}
 
 void Settings::load() {

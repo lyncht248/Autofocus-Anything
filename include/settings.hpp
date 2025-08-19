@@ -9,6 +9,7 @@ public:
     // Constructor
     Settings(const std::string& filePath);
 
+
     // Load settings from the file
     void load();
 
