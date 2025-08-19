@@ -1,4 +1,3 @@
-
-MIN_POSITION = -14.9;
+returnPosition = -10.97;
 MAX_POSITION = 0.0;
-returnPosition = -9.1;
+MIN_POSITION = -14.9;

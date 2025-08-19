@@ -17,7 +17,7 @@ void Settings::load() {
     std::string line;
     while (std::getline(file, line)) {
         // Remove spaces and handle key = value; format
-        line.erase(std::remove(line.begin(), line.end(), ' '), line.end());
+       // line.erase(std::remove(line.begin(), line.end(), ' '), line.end());
         size_t equalsPos = line.find('=');
         size_t semicolonPos = line.find(';');
 
