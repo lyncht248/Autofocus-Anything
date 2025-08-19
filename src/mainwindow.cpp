@@ -582,10 +582,12 @@ settingsButton.signal_clicked().connect([this]() {
     // Connect signals to update the returnPositionSlider range dynamically
     minPositionSpin.signal_value_changed().connect([&]() {
         returnPositionSlider.set_range(minPositionSpin.get_value(), maxPositionSpin.get_value());
+        returnPositionSlider.queue_draw(); // Redraw the slider to reflect the updated range
     });
 
     maxPositionSpin.signal_value_changed().connect([&]() {
         returnPositionSlider.set_range(minPositionSpin.get_value(), maxPositionSpin.get_value());
+        returnPositionSlider.queue_draw(); // Redraw the slider to reflect the updated range
     });
 });
 	stabiliseToggle.set_sensitive(true);
@@ -1996,3 +1998,13 @@ void MainWindow::whenGetDepthsToggled(bool gettingDepths)
 		}
 	}
 }
+
+void MainWindow::whenViewDepthsToggled(bool viewingDepths)
+{
+	// Implementation of whenViewDepthsToggled
+	if (bMainWindowLogFlag)
+	{
+		logger->info("[MainWindow::whenViewDepthsToggled] View Depths toggled to {}", viewingDepths);
+	}
+}
+
