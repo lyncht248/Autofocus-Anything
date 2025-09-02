@@ -76,7 +76,7 @@ std::string csvFilename;
 std::ofstream csvFile;
 
 // Add P gain as a member variable with default value
-double Kp = 0.0023; // HAS BEEN 0.005 FOR A LONG TIME
+double Kp = 0.0022; // HAS BEEN 0.005 FOR A LONG TIME
 
 std::atomic<double> currentMeasuredFocus{
     0.0}; // Current actual measured focus position
@@ -555,16 +555,15 @@ void autofocus::run() {
               0.15 + (errorMagnitude - 3.0) * (1.0 - 0.15) / (100.0 - 3.0);
         }
 
-        // // Apply directional multiplier for negative errors (locBestFocus <
-        // desired)
+        // Apply directional multiplier for downward moves (positive errors)
         double effectiveKp = Kp;
-        // if (currentError > 0)
-        // {
-        //   effectiveKp *= 1.3; // 30% more aggressive when moving in positive
-        //   direction
-        // }
+        if (currentError > 0) {
+          // Moving toward more positive values (340→320, 320→300) - these were
+          // slower
+          effectiveKp *= 1.2; // 20% more aggressive for downward moves
+        }
 
-        double pSignal = Kp * currentError * pScaleFactor;
+        double pSignal = effectiveKp * currentError * pScaleFactor;
 
         // Calculate derivative using filtered measurement
         double filteredCurrentError =

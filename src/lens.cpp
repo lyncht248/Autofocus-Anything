@@ -4,43 +4,44 @@
 #include "logfile.hpp"
 #include "main.hpp"
 #include "notificationCenter.hpp"
+#include "settings.hpp"
 #include "system.hpp"
 #include <filesystem>
 #include <fmt/chrono.h>
-#include <iomanip>
-#include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <stdexcept>
-#include "settings.hpp"
 
 bool bLensLogFlag = 1;
 
-lens::lens() : stop_thread(false), controller(nullptr), axis(nullptr), settings("") {
-    try {
-        // Load settings during construction
-        settings.load();
-        MIN_POSITION = settings.getMinPosition();
-        MAX_POSITION = settings.getMaxPosition();
-        returnPosition = settings.getReturnPosition();
-    } catch (const std::exception& e) {
-        std::cerr << "[lens::lens] Error loading settings: " << e.what() << std::endl;
-        throw; // Rethrow exception to indicate critical failure
-    }
-    // Comment out CSV file initialization
-    /*
-    // Create output directory and initialize CSV file
-    if (createOutputDirectory()) {
-        logFile.open(logFilePath, std::ios::out);
-        if (logFile.is_open()) {
-            // Write header row
-            logFile << "timestamp,DPOS,EPOS,Desired Lens Position" << std::endl;
-            if (bLensLogFlag)
-                logger->info("[lens::lens] CSV log file initialized at {}", logFilePath);
-        } else {
-            logger->error("[lens::lens] Failed to open log file at {}", logFilePath);
-        }
-    }
-    */
+lens::lens()
+    : stop_thread(false), controller(nullptr), axis(nullptr), settings("") {
+  try {
+    // Load settings during construction
+    settings.load();
+    MIN_POSITION = settings.getMinPosition();
+    MAX_POSITION = settings.getMaxPosition();
+    returnPosition = settings.getReturnPosition();
+  } catch (const std::exception &e) {
+    std::cerr << "[lens::lens] Error loading settings: " << e.what()
+              << std::endl;
+    throw; // Rethrow exception to indicate critical failure
+  }
+  // Comment out CSV file initialization
+  /*
+  // Create output directory and initialize CSV file
+  if (createOutputDirectory()) {
+      logFile.open(logFilePath, std::ios::out);
+      if (logFile.is_open()) {
+          // Write header row
+          logFile << "timestamp,DPOS,EPOS,Desired Lens Position" << std::endl;
+          if (bLensLogFlag)
+              logger->info("[lens::lens] CSV log file initialized at {}",
+  logFilePath); } else { logger->error("[lens::lens] Failed to open log file at
+  {}", logFilePath);
+      }
+  }
+  */
 }
 
 // Comment out createOutputDirectory method
@@ -119,10 +120,9 @@ bool lens::initialize() {
   axis->sendCommand("ENBL", 1);
   axis->sendCommand("RSET", 1);
   // wait for 0.5s
-  usleep(500000);
   axis->sendCommand("ENBL", 1);
   axis->findIndex();
-  // wait for 0.5s
+  //    wait for 0.5s
   usleep(500000);
   axis->sendCommand("ENBL", 1);
 
@@ -138,21 +138,19 @@ bool lens::initialize() {
   axis->sendCommand("POLI", 40); // ms delay between EPOS samples. Dropping this
                                  // too low interrupts DPOS updates !!
 
-  //  axis->sendCommand("FREQ", 87000);
-  //  axis->sendCommand("FRQ2", 85000);
-  //  axis->sendCommand("HFRQ", 89000);
-  //  axis->sendCommand("LFRQ", 83000);
+  // axis->sendCommand("FREQ", 87000);
+  // axis->sendCommand("FRQ2", 85000);
+  // axis->sendCommand("HFRQ", 89000);
+  // axis->sendCommand("LFRQ", 83000);
 
   // Increasing the frequencies to reduce judder. Above 90.5kHz, the lens locks
   // up.
-  // axis->sendCommand("FREQ", 90500);
   axis->sendCommand("FREQ", 90500);
   axis->sendCommand("FRQ2", 88000);
   axis->sendCommand("HFRQ", 92000);
   axis->sendCommand("LFRQ", 87000);
-  // axis->sendCommand("LLIM",-15);
-  // axis->sendCommand("HLIM",15);
-  axis->sendCommand("HLIM", 0); // Set a soft limit of 0mm
+  // axis->sendCommand("HLIM", 0);
+  //  axis->sendCommand("HLIM", 0); // Set a soft limit of 0mm
 
   // These are the proportional gains for the controller. When we turn the Freq
   // up, we need to turn these down a bit axis->sendCommand("PROP",120);
@@ -231,15 +229,16 @@ bool lens::initialize() {
   // wait 0.5s
   usleep(500000);
 
-    // For some reason INDX causes LLIM to be set to -10mm, so we need to set it manually.
-    axis->setSetting("LLIM", Distance(MIN_POSITION, Distance::MM));
-    axis->setSetting("HLIM", Distance(MAX_POSITION, Distance::MM));
+  // enable the lens
+  axis->sendCommand("ENBL", 1);
 
-    axis->setDPOS(Distance(returnPosition, Distance::MM));
-    currentLensLoc = returnPosition;
-
-  // wait for 0.5s
+  // set LLIM to -15mm
+  axis->setSetting("LLIM", -12000); // units are encoder counts
+  axis->setSetting("HLIM", 0);      // keep upper at 0 mm
   usleep(500000);
+
+  axis->setDPOS(Distance(returnPosition, Distance::MM));
+  currentLensLoc = returnPosition;
 
   // wait for 0.5s
   usleep(500000);
@@ -318,9 +317,15 @@ void lens::mov_abs(double mmToMoveTo) {
       double actualPos = epos(Distance::MM);
 
       if (bLensLogFlag) {
-        logger->info("[lens::mov_abs] Moved to absolute position: {}mm, Actual "
-                     "position: {}mm",
-                     mmToMoveTo, actualPos);
+        auto now = std::chrono::high_resolution_clock::now();
+        auto timestamp_ms =
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                now.time_since_epoch())
+                .count() /
+            1000.0;
+        logger->info("[lens::mov_abs] Moved to absolute position: {}mm, "
+                     "Timestamp: {:.3f}ms",
+                     mmToMoveTo, timestamp_ms);
       }
 
       // Update the current lens location
@@ -456,6 +461,27 @@ double lens::getLensPosition() {
   return epos(Distance::MM);
 }
 
-const Settings& lens::getSettings() const {
-    return settings;
+const Settings &lens::getSettings() const { return settings; }
+
+void lens::reloadSettings() {
+  try {
+    // Reload settings from file
+    settings.load();
+
+    // Update internal member variables with new values
+    MIN_POSITION = settings.getMinPosition();
+    MAX_POSITION = settings.getMaxPosition();
+    returnPosition = settings.getReturnPosition();
+
+    if (bLensLogFlag) {
+      logger->info("[lens::reloadSettings] Settings reloaded - MIN_POSITION: "
+                   "{}mm, MAX_POSITION: {}mm, returnPosition: {}mm",
+                   MIN_POSITION, MAX_POSITION, returnPosition);
+    }
+  } catch (const std::exception &e) {
+    if (bLensLogFlag) {
+      logger->error("[lens::reloadSettings] Error reloading settings: {}",
+                    e.what());
+    }
+  }
 }

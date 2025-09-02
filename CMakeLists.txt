@@ -80,8 +80,6 @@ add_library(xeryon_lib
 # Set C++11 standard for Xeryon library (required for std::future, etc.)
 target_compile_features(xeryon_lib PUBLIC cxx_std_11)
 
-# Copy settings file from config directory
-configure_file(${CMAKE_SOURCE_DIR}/config/settings_default.txt ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
 
 # Define source files
 set(SOURCES
@@ -119,8 +117,6 @@ configure_file(${CMAKE_SOURCE_DIR}/lib/VimbaGigETL.cti ${CMAKE_BINARY_DIR}/Vimba
 #target_compile_options(hvi-gtk PRIVATE -Wall -Wextra)
 target_link_libraries(hvi-gtk ${GTKMM_LIBRARIES} ${TOON_LIBRARIES} ${OpenCV_LIBS} ${SDL_LIBRARIES} ${SDL2TTF_LIBRARIES} ${FMT_LIBRARIES} ${SPDLOG_LIBRARIES} cvd VimbaCPP rt pthread xeryon_lib ${CMAKE_SOURCE_DIR}/lib/libASICamera2.a -lusb-1.0)
 
-# Copy settings file to build directory
-configure_file(${CMAKE_SOURCE_DIR}/config/settings_default.txt ${CMAKE_BINARY_DIR}/settings_default.txt COPYONLY)
 
 # Add Google Test
 include(FetchContent)
