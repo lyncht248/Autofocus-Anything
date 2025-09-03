@@ -522,31 +522,20 @@ MainWindow::MainWindow()
     returnPositionSlider.set_value(settings.getReturnPosition());
     returnPositionSlider.set_digits(2); // Set precision to 2 decimal places
 
-    // Spin button for minPosition
-    Gtk::Label minPositionLabel("Min Position:");
-    Gtk::SpinButton minPositionSpin;
-    minPositionSpin.set_range(-100.0, 100.0); // Adjust range as needed
-    minPositionSpin.set_value(settings.getMinPosition());
-    minPositionSpin.set_increments(
-        0.1, 1.0);                 // Enable +/- buttons with step increments
-    minPositionSpin.set_digits(2); // Allow 2 decimal places for MIN_POSITION
+    // Spin button for Kp
+    Gtk::Label kpLabel("Kp:");
+    Gtk::SpinButton kpSpin;
+    kpSpin.set_range(0.0, 0.1); // Adjust range as needed
+    kpSpin.set_value(settings.getKp()); // Read Kp value from settings
 
-    // Spin button for maxPosition
-    Gtk::Label maxPositionLabel("Max Position:");
-    Gtk::SpinButton maxPositionSpin;
-    maxPositionSpin.set_range(-100.0, 100.0); // Adjust range as needed
-    maxPositionSpin.set_value(settings.getMaxPosition());
-    maxPositionSpin.set_increments(
-        0.1, 1.0);                 // Enable +/- buttons with step increments
-    maxPositionSpin.set_digits(2); // Allow 2 decimal places for MAX_POSITION
+    kpSpin.set_increments(0.0001, 0.1); // Enable +/- buttons with step increments
+    kpSpin.set_digits(4); // Allow 4 decimal places for Kp
 
     // Add widgets to the dialog
     contentArea->pack_start(returnPositionLabel);
     contentArea->pack_start(returnPositionSlider);
-    contentArea->pack_start(minPositionLabel);
-    contentArea->pack_start(minPositionSpin);
-    contentArea->pack_start(maxPositionLabel);
-    contentArea->pack_start(maxPositionSpin);
+    contentArea->pack_start(kpLabel);
+    contentArea->pack_start(kpSpin);
 
     dialog.add_button("Cancel", Gtk::RESPONSE_CANCEL);
     dialog.add_button("Save", Gtk::RESPONSE_OK);
@@ -556,30 +545,17 @@ MainWindow::MainWindow()
     if (dialog.run() == Gtk::RESPONSE_OK) {
       // Save updated values to settings
       settings.setReturnPosition(returnPositionSlider.get_value());
-      settings.setMinPosition(minPositionSpin.get_value());
-      settings.setMaxPosition(maxPositionSpin.get_value());
+
+      settings.setKp(kpSpin.get_value());
 
       // Optionally save settings to file
       settings.save();
 
       // Emit signal to notify that settings have changed
       sigSettingsChanged.emit();
+      sigPGainChanged.emit(kpSpin.get_value());
     }
 
-    // Connect signals to update the returnPositionSlider range dynamically
-    minPositionSpin.signal_value_changed().connect([&]() {
-      returnPositionSlider.set_range(minPositionSpin.get_value(),
-                                     maxPositionSpin.get_value());
-      returnPositionSlider
-          .queue_draw(); // Redraw the slider to reflect the updated range
-    });
-
-    maxPositionSpin.signal_value_changed().connect([&]() {
-      returnPositionSlider.set_range(minPositionSpin.get_value(),
-                                     maxPositionSpin.get_value());
-      returnPositionSlider
-          .queue_draw(); // Redraw the slider to reflect the updated range
-    });
   });
   stabiliseToggle.set_sensitive(true);
   // showMapToggle.set_sensitive(false);

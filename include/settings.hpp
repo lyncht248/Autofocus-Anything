@@ -23,11 +23,13 @@ public:
     double getReturnPosition() const;
     double getMinPosition() const;
     double getMaxPosition() const;
+    double getKp() const;
 
     // Setters for specific settings
     void setReturnPosition(double value);
     void setMinPosition(double value);
     void setMaxPosition(double value);
+    void setKp(double value);
 
 private:
     std::string filePath;
