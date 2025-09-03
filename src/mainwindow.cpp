@@ -530,7 +530,16 @@ MainWindow::MainWindow()
 
     kpSpin.set_increments(0.0001, 0.1); // Enable +/- buttons with step increments
     kpSpin.set_digits(4); // Allow 4 decimal places for Kp
-    kpLabel.set_tooltip_text("Proportional gain constant");
+    kpLabel.set_tooltip_text("Proportional gain constant (autofocus)");
+
+    // Spin button for Kd
+    Gtk::Label kdLabel("Kd:");
+    Gtk::SpinButton kdSpin;
+    kdSpin.set_range(0.0, 0.1); //
+    kdSpin.set_value(settings.getKd()); // Read Kd value from settings
+    kdSpin.set_increments(0.00001, 0.1); // Enable +/- buttons with step increments
+    kdSpin.set_digits(5); // Allow 5 decimal places for Kd
+    kdLabel.set_tooltip_text("Derivative gain constant (autofocus)");
 
     // Spin button for higher frequency (FREQ)
     Gtk::Label FREQLabel("FREQ:");
@@ -573,6 +582,9 @@ MainWindow::MainWindow()
     contentArea->pack_start(returnPositionSlider);
     contentArea->pack_start(kpLabel);
     contentArea->pack_start(kpSpin);
+    
+    contentArea->pack_start(kdLabel);
+    contentArea->pack_start(kdSpin);
 
     contentArea->pack_start(FREQLabel);
     contentArea->pack_start(FREQSpin);
@@ -593,6 +605,7 @@ MainWindow::MainWindow()
       settings.setReturnPosition(returnPositionSlider.get_value());
 
       settings.setKp(kpSpin.get_value());
+      settings.setKd(kdSpin.get_value());
 
       settings.setFreq(FREQSpin.get_value());
       settings.setFRQ2(FRQ2Spin.get_value());
