@@ -26,6 +26,8 @@
 
 #include "opencv2/highgui/highgui.hpp"
 
+#include "settings.hpp"
+
 // Global variables
 
 // 0.0057 mm per pixel is the average!!!!
@@ -76,12 +78,26 @@ std::string csvFilename;
 std::ofstream csvFile;
 
 // Add P gain as a member variable with default value
-double Kp = 0.0022; // HAS BEEN 0.005 FOR A LONG TIME
+// double Kp = 0.0022; // HAS BEEN 0.005 FOR A LONG TIME
+
 
 std::atomic<double> currentMeasuredFocus{
     0.0}; // Current actual measured focus position
 
-autofocus::autofocus() : lens1(), tiltedcam1(), stop_thread(false) {}
+autofocus::autofocus() : lens1(), tiltedcam1(), stop_thread(false), settings("")  {
+
+
+try {
+    // Load settings during construction
+    settings.load();
+    Kp = settings.getKp();
+  } catch (const std::exception &e) {
+    std::cerr << "[lens::lens] Error loading settings: " << e.what()
+              << std::endl;
+    throw; // Rethrow exception to indicate critical failure
+  }
+
+}
 
 bool autofocus::initialize() {
   bool bLensInit = lens1.initialize();

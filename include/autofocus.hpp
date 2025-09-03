@@ -19,6 +19,8 @@
 #include <thread>
 #include <mutex>
 
+#include "settings.hpp"
+
 // extern unsigned char* img_read_buf; // Video capture. Accessed by T1.
 // extern unsigned char* img_transfer_buf; // Transfer. Accessed by T1 and T2.
 // extern unsigned char* img_calc_buf; // Calculation. Accessed by T2.
@@ -308,6 +310,13 @@ private:
    * @brief Mutex for thread-safe CSV operations.
    */
   std::mutex csvMutex; // Thread-safe CSV operations
+
+  /**
+   * @brief Proportional gain for the PID controller.
+   */
+  double Kp;
+
+  Settings settings; ///< Settings object to manage configuration
 };
 
 #endif // AUTOFOCUS_H

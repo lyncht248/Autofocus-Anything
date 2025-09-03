@@ -469,8 +469,8 @@ void lens::reloadSettings() {
     settings.load();
 
     // Update internal member variables with new values
-    MIN_POSITION = settings.getMinPosition();
-    MAX_POSITION = settings.getMaxPosition();
+    // MIN_POSITION = settings.getMinPosition();
+    // MAX_POSITION = settings.getMaxPosition();
     returnPosition = settings.getReturnPosition();
 
     if (bLensLogFlag) {
