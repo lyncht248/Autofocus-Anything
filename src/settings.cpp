@@ -93,6 +93,38 @@ double Settings::getKp() const {
   return it->second;
 }
 
+double Settings::getFreq() const {
+  auto it = settings.find("FREQ");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: FREQ");
+  }
+  return it->second;
+}
+
+double Settings::getFRQ2() const {
+  auto it = settings.find("FRQ2");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: FRQ2");
+  }
+  return it->second;
+}
+
+double Settings::getPROP() const {
+  auto it = settings.find("PROP");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: PROP");
+  }
+  return it->second;
+}
+
+double Settings::getPRO2() const {
+  auto it = settings.find("PRO2");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: PRO2");
+  }
+  return it->second;
+}
+
 
 void Settings::set(const std::string &key, double value) {
   settings[key] = value;
@@ -105,3 +137,10 @@ void Settings::setMinPosition(double value) { set("MIN_POSITION", value); }
 void Settings::setMaxPosition(double value) { set("MAX_POSITION", value); }
 
 void Settings::setKp(double value) { set("Kp", value); }
+
+void Settings::setFreq(double value) { set("FREQ", value); }
+
+void Settings::setFRQ2(double value) { set("FRQ2", value); }
+
+void Settings::setPROP(double value) { set("PROP", value); }
+void Settings::setPRO2(double value) { set("PRO2", value); }
