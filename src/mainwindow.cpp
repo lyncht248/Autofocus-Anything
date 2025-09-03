@@ -530,12 +530,58 @@ MainWindow::MainWindow()
 
     kpSpin.set_increments(0.0001, 0.1); // Enable +/- buttons with step increments
     kpSpin.set_digits(4); // Allow 4 decimal places for Kp
+    kpLabel.set_tooltip_text("Proportional gain constant");
+
+    // Spin button for higher frequency (FREQ)
+    Gtk::Label FREQLabel("FREQ:");
+    Gtk::SpinButton FREQSpin;
+    FREQSpin.set_range(1, 100000); // Adjust range as needed
+    FREQSpin.set_value(settings.getFreq()); // Read FREQ value from settings
+    FREQSpin.set_increments(50, 100); // Enable +/- buttons with step increments
+    FREQSpin.set_digits(0); // No decimal places for FREQ
+    FREQLabel.set_tooltip_text("Higher frequency (when lens is nearby target)");
+
+    // Spin button for lower frequency (FRQ2)
+    Gtk::Label FRQ2Label("FRQ2:");
+    Gtk::SpinButton FRQ2Spin;
+    FRQ2Spin.set_range(1, 100000); // Adjust range as needed
+    FRQ2Spin.set_value(settings.getFRQ2()); // Read FRQ2 value from settings
+    FRQ2Spin.set_increments(50, 100); // Enable +/- buttons with step increments
+    FRQ2Spin.set_digits(0); // No decimal places for FRQ2
+    FRQ2Label.set_tooltip_text("Lower frequency (when lens is far from target)");
+
+    // Spin button for lower gain constant in lens
+    Gtk::Label PROPLabel("PROP:");
+    Gtk::SpinButton PROPSpin;
+    PROPSpin.set_range(0.0, 100); // Adjust range as needed
+    PROPSpin.set_value(settings.getPROP()); // Read PROP value from settings
+    PROPSpin.set_increments(5, 10); // Enable +/- buttons with step increments
+    PROPSpin.set_digits(0); // Allow 4 decimal places for PROP
+    PROPLabel.set_tooltip_text("Lower gain constant (when lens is far)");
+
+    // Spin button for higher gain constant in lens
+    Gtk::Label PRO2Label("PRO2:");
+    Gtk::SpinButton PRO2Spin;
+    PRO2Spin.set_range(0.0, 100); // Adjust range as needed
+    PRO2Spin.set_value(settings.getPRO2()); // Read PRO2 value from settings
+    PRO2Spin.set_increments(5, 10); // Enable +/- buttons with step increments
+    PRO2Spin.set_digits(0); // No decimal places for PRO2
+    PRO2Label.set_tooltip_text("Higher gain constant (when lens is close)");
 
     // Add widgets to the dialog
     contentArea->pack_start(returnPositionLabel);
     contentArea->pack_start(returnPositionSlider);
     contentArea->pack_start(kpLabel);
     contentArea->pack_start(kpSpin);
+
+    contentArea->pack_start(FREQLabel);
+    contentArea->pack_start(FREQSpin);
+    contentArea->pack_start(FRQ2Label);
+    contentArea->pack_start(FRQ2Spin);
+    contentArea->pack_start(PROPLabel);
+    contentArea->pack_start(PROPSpin);
+    contentArea->pack_start(PRO2Label);
+    contentArea->pack_start(PRO2Spin);
 
     dialog.add_button("Cancel", Gtk::RESPONSE_CANCEL);
     dialog.add_button("Save", Gtk::RESPONSE_OK);
@@ -548,7 +594,12 @@ MainWindow::MainWindow()
 
       settings.setKp(kpSpin.get_value());
 
-      // Optionally save settings to file
+      settings.setFreq(FREQSpin.get_value());
+      settings.setFRQ2(FRQ2Spin.get_value());
+      settings.setPROP(PROPSpin.get_value());
+      settings.setPRO2(PRO2Spin.get_value());
+
+      // Save settings to file
       settings.save();
 
       // Emit signal to notify that settings have changed
