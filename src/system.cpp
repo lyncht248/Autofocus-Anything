@@ -2142,4 +2142,7 @@ void System::onWindowSettingsChanged() {
 
   // Reload the lens settings to apply the new values immediately
   AF.getLens().reloadSettings();
+
+  // Reload autofocus to update Kd value
+  AF.reloadSettings();
 }
