@@ -1,3 +1,4 @@
-returnPosition=-10.74
-MAX_POSITION=0
 MIN_POSITION=-15
+MAX_POSITION=0
+Kp=0.0022
+returnPosition=-10.74

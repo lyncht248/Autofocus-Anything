@@ -3,6 +3,8 @@
 #include <fstream>
 #include <stdexcept>
 
+#include <iostream>
+
 const std::string DEFAULT_SETTINGS_PATH = "../config/general_settings.txt";
 
 Settings::Settings(const std::string &filePath)
@@ -13,6 +15,8 @@ void Settings::load() {
   if (!file.is_open()) {
     throw std::runtime_error("Failed to open settings file: " + filePath);
   }
+
+  std::cout << "Loading settings from " << filePath << std::endl;
 
   std::string line;
   while (std::getline(file, line)) {
@@ -81,6 +85,15 @@ double Settings::getMaxPosition() const {
   return it->second;
 }
 
+double Settings::getKp() const {
+  auto it = settings.find("Kp");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: Kp");
+  }
+  return it->second;
+}
+
+
 void Settings::set(const std::string &key, double value) {
   settings[key] = value;
 }
@@ -90,3 +103,5 @@ void Settings::setReturnPosition(double value) { set("returnPosition", value); }
 void Settings::setMinPosition(double value) { set("MIN_POSITION", value); }
 
 void Settings::setMaxPosition(double value) { set("MAX_POSITION", value); }
+
+void Settings::setKp(double value) { set("Kp", value); }
