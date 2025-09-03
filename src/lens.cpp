@@ -22,6 +22,10 @@ lens::lens()
     MIN_POSITION = settings.getMinPosition();
     MAX_POSITION = settings.getMaxPosition();
     returnPosition = settings.getReturnPosition();
+    FREQ = settings.getFreq();
+    FRQ2 = settings.getFRQ2();
+    PROP = settings.getPROP();
+    PRO2 = settings.getPRO2();
   } catch (const std::exception &e) {
     std::cerr << "[lens::lens] Error loading settings: " << e.what()
               << std::endl;
@@ -145,8 +149,13 @@ bool lens::initialize() {
 
   // Increasing the frequencies to reduce judder. Above 90.5kHz, the lens locks
   // up.
-  axis->sendCommand("FREQ", 90500);
-  axis->sendCommand("FRQ2", 88000);
+  //axis->sendCommand("FREQ", 90500);
+ // axis->sendCommand("FRQ2", 88000);
+  axis->sendCommand("FREQ", FREQ);
+  axis->sendCommand("FRQ2", FRQ2);
+
+
+
   axis->sendCommand("HFRQ", 92000);
   axis->sendCommand("LFRQ", 87000);
   // axis->sendCommand("HLIM", 0);
@@ -155,8 +164,12 @@ bool lens::initialize() {
   // These are the proportional gains for the controller. When we turn the Freq
   // up, we need to turn these down a bit axis->sendCommand("PROP",120);
   // axis->sendCommand("PRO2",40);
-  axis->sendCommand("PROP", 70);
-  axis->sendCommand("PRO2", 30);
+
+
+  //axis->sendCommand("PROP", 70);
+  //axis->sendCommand("PRO2", 30);
+  axis->sendCommand("PROP", PROP);
+  axis->sendCommand("PRO2", PRO2);
 
   // axis->sendCommand("MPRO",250);
   // axis->sendCommand("INTF",15);
@@ -472,11 +485,14 @@ void lens::reloadSettings() {
     // MIN_POSITION = settings.getMinPosition();
     // MAX_POSITION = settings.getMaxPosition();
     returnPosition = settings.getReturnPosition();
+    FREQ = settings.getFreq();
+    FRQ2 = settings.getFRQ2();
+    PROP = settings.getPROP();
+    PRO2 = settings.getPRO2();
 
     if (bLensLogFlag) {
-      logger->info("[lens::reloadSettings] Settings reloaded - MIN_POSITION: "
-                   "{}mm, MAX_POSITION: {}mm, returnPosition: {}mm",
-                   MIN_POSITION, MAX_POSITION, returnPosition);
+      logger->info("[lens::reloadSettings] Settings reloaded - returnPosition: {}mm, FREQ: {}Hz, FRQ2: {}Hz, PROP: {}, PRO2: {}",
+                   returnPosition, FREQ, FRQ2, PROP, PRO2);
     }
   } catch (const std::exception &e) {
     if (bLensLogFlag) {

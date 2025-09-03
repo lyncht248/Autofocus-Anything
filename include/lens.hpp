@@ -179,6 +179,14 @@ private:
   double MAX_POSITION; ///< Maximum allowed position in mm (left limit),
                        ///< configurable via settings (default = 0.0)
 
+  double FREQ;  ///< Frequency setting for the lens controller, configurable via
+                ///< settings
+  double FRQ2;  ///< Secondary frequency setting for the lens controller,
+                ///< configurable via settings
+  double PROP;  ///< Lower gain constant for the lens controller,
+  double PRO2;  ///< Higher gain constant for the lens controller,
+                ///< configurable via settings
+
   std::ofstream logFile; ///< File stream for position logging
   const std::string outputDir = "../output"; ///< Directory for log files
   const std::string logFilePath =
