@@ -79,6 +79,16 @@ public:
    */
   void capturevideo();
 
+    /**
+   * @brief Reloads settings from the settings file
+   *
+   * Updates the derivative gain with the current
+   * value from the settings file. This allows runtime updates without
+   * restarting.
+   */
+  void reloadSettings();
+
+
   /**
    * @brief Computes the location of the best focus.
    * 
@@ -315,6 +325,11 @@ private:
    * @brief Proportional gain for the PID controller.
    */
   double Kp;
+
+  /**
+   * @brief Derivative gain for the PID controller.
+   */
+  double Kd;
 
   Settings settings; ///< Settings object to manage configuration
 };

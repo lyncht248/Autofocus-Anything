@@ -91,6 +91,8 @@ try {
     // Load settings during construction
     settings.load();
     Kp = settings.getKp();
+    Kd = settings.getKd();
+
   } catch (const std::exception &e) {
     std::cerr << "[lens::lens] Error loading settings: " << e.what()
               << std::endl;
@@ -307,7 +309,10 @@ void autofocus::run() {
   // double Kp = 0.0012;   this has to be set as a member variable now
   double Ki = 0.0;
   // double Kd = 0.00005;
-  double Kd = 0.00005; // Changed from 0.0 to add a small derivative term
+
+
+ //  double Kd = 0.00005; // Changed from 0.0 to add a small derivative term
+
 
   // PD variables for manual calculation and logging
   double filteredPreviousError = 0.0;
@@ -1576,4 +1581,26 @@ double autofocus::findCenterOfMass(const std::vector<double> &curve) {
   }
 
   return totalWeight > 0 ? (weightedSum / totalWeight) : curve.size() / 2.0;
+}
+
+void autofocus::reloadSettings() {
+  try {
+    // Reload settings from file
+    settings.load();
+
+    // Update internal member variables with new values
+    // MIN_POSITION = settings.getMinPosition();
+    // MAX_POSITION = settings.getMaxPosition();
+    Kd = settings.getKd();
+
+    if (bAutofocusLogFlag) {
+      logger->info("[autofocus::reloadSettings] Settings reloaded - Kd: {}",
+                   Kd);
+    }
+  } catch (const std::exception &e) {
+    if (bAutofocusLogFlag) {
+      logger->error("[autofocus::reloadSettings] Error reloading settings: {}",
+                    e.what());
+    }
+  }
 }
