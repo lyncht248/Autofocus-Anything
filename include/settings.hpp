@@ -24,6 +24,7 @@ public:
     double getMinPosition() const;
     double getMaxPosition() const;
     double getKp() const;
+    double getKd() const;
     double getFreq() const;
     double getFRQ2() const;
     double getPROP() const;
@@ -34,6 +35,7 @@ public:
     void setMinPosition(double value);
     void setMaxPosition(double value);
     void setKp(double value);
+    void setKd(double value);
     void setFreq(double value);
     void setFRQ2(double value);
     void setPROP(double value);
