@@ -346,6 +346,14 @@ protected:
    */
   virtual void on_show() override;
 
+  /**
+   * @brief Handles enter key press events (connects to enter button).
+   *
+   * @param event Pointer to the GdkEventKey structure containing event data.
+   * @return True if the event was handled, false otherwise.
+   */
+  bool on_key_press_event(GdkEventKey *event) override;
+
   bool _on_state_event(GdkEventWindowState *window_state_event);
 
 private:

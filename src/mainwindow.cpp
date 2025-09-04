@@ -559,23 +559,23 @@ MainWindow::MainWindow()
     FRQ2Spin.set_digits(0); // No decimal places for FRQ2
     FRQ2Label.set_tooltip_text("Lower frequency (when lens is far from target)");
 
-    // Spin button for lower gain constant in lens
+    // Spin button for higher gain constant in lens
     Gtk::Label PROPLabel("PROP:");
     Gtk::SpinButton PROPSpin;
     PROPSpin.set_range(0.0, 100); // Adjust range as needed
     PROPSpin.set_value(settings.getPROP()); // Read PROP value from settings
     PROPSpin.set_increments(5, 10); // Enable +/- buttons with step increments
     PROPSpin.set_digits(0); // Allow 4 decimal places for PROP
-    PROPLabel.set_tooltip_text("Lower gain constant (when lens is far)");
+    PROPLabel.set_tooltip_text("Higher gain constant (when lens is far)");
 
-    // Spin button for higher gain constant in lens
+    // Spin button for lower gain constant in lens
     Gtk::Label PRO2Label("PRO2:");
     Gtk::SpinButton PRO2Spin;
     PRO2Spin.set_range(0.0, 100); // Adjust range as needed
     PRO2Spin.set_value(settings.getPRO2()); // Read PRO2 value from settings
     PRO2Spin.set_increments(5, 10); // Enable +/- buttons with step increments
     PRO2Spin.set_digits(0); // No decimal places for PRO2
-    PRO2Label.set_tooltip_text("Higher gain constant (when lens is close)");
+    PRO2Label.set_tooltip_text("Lower gain constant (when lens is close)");
 
     // Add widgets to the dialog
     contentArea->pack_start(returnPositionLabel);
@@ -1881,4 +1881,12 @@ void MainWindow::whenViewDepthsToggled(bool viewingDepths) {
         "[MainWindow::whenViewDepthsToggled] View Depths toggled to {}",
         viewingDepths);
   }
+}
+
+bool MainWindow::on_key_press_event(GdkEventKey *event) {
+  if (event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter) {
+    enterButton.clicked(); // Simulate a click on the enterButton
+    return true; // Event handled
+  }
+  return Gtk::Window::on_key_press_event(event); // Pass other events to the base class
 }
