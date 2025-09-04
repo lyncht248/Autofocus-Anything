@@ -357,7 +357,7 @@ protected:
   bool _on_state_event(GdkEventWindowState *window_state_event);
 
 private:
-  const std::string DEFAULT_HVI_PATH = "/home/hvi/Desktop/HVI-data";
+  const std::string DEFAULT_HVI_PATH = std::string(std::getenv("HOME")) + "/Desktop/HVI-data";
   std::string current_file_path = DEFAULT_HVI_PATH;
 
   /*
