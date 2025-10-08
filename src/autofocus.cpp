@@ -80,14 +80,13 @@ std::ofstream csvFile;
 // Add P gain as a member variable with default value
 // double Kp = 0.0022; // HAS BEEN 0.005 FOR A LONG TIME
 
-
 std::atomic<double> currentMeasuredFocus{
     0.0}; // Current actual measured focus position
 
-autofocus::autofocus() : lens1(), tiltedcam1(), stop_thread(false), settings("")  {
+autofocus::autofocus()
+    : lens1(), tiltedcam1(), stop_thread(false), settings("") {
 
-
-try {
+  try {
     // Load settings during construction
     settings.load();
     Kp = settings.getKp();
@@ -98,7 +97,6 @@ try {
               << std::endl;
     throw; // Rethrow exception to indicate critical failure
   }
-
 }
 
 bool autofocus::initialize() {
@@ -310,9 +308,7 @@ void autofocus::run() {
   double Ki = 0.0;
   // double Kd = 0.00005;
 
-
- //  double Kd = 0.00005; // Changed from 0.0 to add a small derivative term
-
+  //  double Kd = 0.00005; // Changed from 0.0 to add a small derivative term
 
   // PD variables for manual calculation and logging
   double filteredPreviousError = 0.0;
@@ -537,7 +533,7 @@ void autofocus::run() {
                 static_cast<int>(std::round(locBestFocusDouble));
             previous = desiredLocBestFocus;
           } else if (bFindFocus) {
-            desiredLocBestFocus = 330;
+            desiredLocBestFocus = 300;
             previous = static_cast<int>(std::round(locBestFocusDouble));
             if (bAutofocusLogFlag) {
               logger->info("[autofocus::run] Set desiredLocBestFocus back to "
@@ -581,7 +577,7 @@ void autofocus::run() {
         if (currentError > 0) {
           // Moving toward more positive values (340→320, 320→300) - these were
           // slower
-          effectiveKp *= 1.2; // 20% more aggressive for downward moves
+          effectiveKp *= 1.0; // 20% more aggressive for downward moves
         }
 
         double pSignal = effectiveKp * currentError * pScaleFactor;

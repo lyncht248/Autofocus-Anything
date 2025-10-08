@@ -525,56 +525,59 @@ MainWindow::MainWindow()
     // Spin button for Kp
     Gtk::Label kpLabel("Kp:");
     Gtk::SpinButton kpSpin;
-    kpSpin.set_range(0.0, 0.1); // Adjust range as needed
+    kpSpin.set_range(0.0, 0.1);         // Adjust range as needed
     kpSpin.set_value(settings.getKp()); // Read Kp value from settings
 
-    kpSpin.set_increments(0.0001, 0.1); // Enable +/- buttons with step increments
-    kpSpin.set_digits(4); // Allow 4 decimal places for Kp
+    kpSpin.set_increments(0.0001,
+                          0.1); // Enable +/- buttons with step increments
+    kpSpin.set_digits(4);       // Allow 4 decimal places for Kp
     kpLabel.set_tooltip_text("Proportional gain constant (autofocus)");
 
     // Spin button for Kd
     Gtk::Label kdLabel("Kd:");
     Gtk::SpinButton kdSpin;
-    kdSpin.set_range(0.0, 0.1); //
+    kdSpin.set_range(0.0, 0.1);         //
     kdSpin.set_value(settings.getKd()); // Read Kd value from settings
-    kdSpin.set_increments(0.00001, 0.1); // Enable +/- buttons with step increments
-    kdSpin.set_digits(5); // Allow 5 decimal places for Kd
+    kdSpin.set_increments(0.00001,
+                          0.1); // Enable +/- buttons with step increments
+    kdSpin.set_digits(5);       // Allow 5 decimal places for Kd
     kdLabel.set_tooltip_text("Derivative gain constant (autofocus)");
 
     // Spin button for higher frequency (FREQ)
     Gtk::Label FREQLabel("FREQ:");
     Gtk::SpinButton FREQSpin;
-    FREQSpin.set_range(1, 100000); // Adjust range as needed
+    FREQSpin.set_range(1, 100000);          // Adjust range as needed
     FREQSpin.set_value(settings.getFreq()); // Read FREQ value from settings
     FREQSpin.set_increments(50, 100); // Enable +/- buttons with step increments
-    FREQSpin.set_digits(0); // No decimal places for FREQ
+    FREQSpin.set_digits(0);           // No decimal places for FREQ
     FREQLabel.set_tooltip_text("Higher frequency (when lens is nearby target)");
 
     // Spin button for lower frequency (FRQ2)
     Gtk::Label FRQ2Label("FRQ2:");
     Gtk::SpinButton FRQ2Spin;
-    FRQ2Spin.set_range(1, 100000); // Adjust range as needed
+    FRQ2Spin.set_range(1, 100000);          // Adjust range as needed
     FRQ2Spin.set_value(settings.getFRQ2()); // Read FRQ2 value from settings
     FRQ2Spin.set_increments(50, 100); // Enable +/- buttons with step increments
-    FRQ2Spin.set_digits(0); // No decimal places for FRQ2
-    FRQ2Label.set_tooltip_text("Lower frequency (when lens is far from target)");
+    FRQ2Spin.set_digits(0);           // No decimal places for FRQ2
+    FRQ2Label.set_tooltip_text(
+        "Lower frequency (when lens is far from target)");
 
     // Spin button for lower gain constant in lens
     Gtk::Label PROPLabel("PROP:");
     Gtk::SpinButton PROPSpin;
-    PROPSpin.set_range(0.0, 100); // Adjust range as needed
+    PROPSpin.set_range(0.0, 100);           // Adjust range as needed
     PROPSpin.set_value(settings.getPROP()); // Read PROP value from settings
     PROPSpin.set_increments(5, 10); // Enable +/- buttons with step increments
-    PROPSpin.set_digits(0); // Allow 4 decimal places for PROP
+    PROPSpin.set_digits(0);         // Allow 4 decimal places for PROP
     PROPLabel.set_tooltip_text("Lower gain constant (when lens is far)");
 
     // Spin button for higher gain constant in lens
     Gtk::Label PRO2Label("PRO2:");
     Gtk::SpinButton PRO2Spin;
-    PRO2Spin.set_range(0.0, 100); // Adjust range as needed
+    PRO2Spin.set_range(0.0, 100);           // Adjust range as needed
     PRO2Spin.set_value(settings.getPRO2()); // Read PRO2 value from settings
     PRO2Spin.set_increments(5, 10); // Enable +/- buttons with step increments
-    PRO2Spin.set_digits(0); // No decimal places for PRO2
+    PRO2Spin.set_digits(0);         // No decimal places for PRO2
     PRO2Label.set_tooltip_text("Higher gain constant (when lens is close)");
 
     // Add widgets to the dialog
@@ -582,7 +585,7 @@ MainWindow::MainWindow()
     contentArea->pack_start(returnPositionSlider);
     contentArea->pack_start(kpLabel);
     contentArea->pack_start(kpSpin);
-    
+
     contentArea->pack_start(kdLabel);
     contentArea->pack_start(kdSpin);
 
@@ -619,7 +622,6 @@ MainWindow::MainWindow()
       sigSettingsChanged.emit();
       sigPGainChanged.emit(kpSpin.get_value());
     }
-
   });
   stabiliseToggle.set_sensitive(true);
   // showMapToggle.set_sensitive(false);
@@ -1309,7 +1311,7 @@ void MainWindow::onFindFocusToggled() {
 
     // Make best focus scale active
     bestFocusScale.set_sensitive(true);
-    bestFocusScale.setValue(330); // Set default best focus value to 320
+    bestFocusScale.setValue(300); // Set default best focus value to 320
 
     // Start the find focus process
     imgcount = 0;
