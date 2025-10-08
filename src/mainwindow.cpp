@@ -562,7 +562,7 @@ MainWindow::MainWindow()
     FRQ2Label.set_tooltip_text(
         "Lower frequency (when lens is far from target)");
 
-    // Spin button for lower gain constant in lens
+    // Spin button for higher gain constant in lens
     Gtk::Label PROPLabel("PROP:");
     Gtk::SpinButton PROPSpin;
     PROPSpin.set_range(0.0, 100);           // Adjust range as needed
@@ -571,7 +571,7 @@ MainWindow::MainWindow()
     PROPSpin.set_digits(0);         // Allow 4 decimal places for PROP
     PROPLabel.set_tooltip_text("Lower gain constant (when lens is far)");
 
-    // Spin button for higher gain constant in lens
+    // Spin button for lower gain constant in lens
     Gtk::Label PRO2Label("PRO2:");
     Gtk::SpinButton PRO2Spin;
     PRO2Spin.set_range(0.0, 100);           // Adjust range as needed
@@ -1883,4 +1883,13 @@ void MainWindow::whenViewDepthsToggled(bool viewingDepths) {
         "[MainWindow::whenViewDepthsToggled] View Depths toggled to {}",
         viewingDepths);
   }
+}
+
+bool MainWindow::on_key_press_event(GdkEventKey *event) {
+  if (event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter) {
+    enterButton.clicked(); // Simulate a click on the enterButton
+    return true;           // Event handled
+  }
+  return Gtk::Window::on_key_press_event(
+      event); // Pass other events to the base class
 }
