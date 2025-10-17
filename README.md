@@ -50,6 +50,12 @@ sudo make autofocus_test   # builds the specific test target
 ```
 
 
+## Documentation
+
+📚 **API Documentation**: [Doxygen Documentation](https://lyncht248.github.io/Autofocus-Anything/)
+
+Complete API reference with detailed class documentation, method signatures, and code examples.
+
 ## File Structure
 
 ```

@@ -20,12 +20,12 @@
 #include "cairomm/surface.h"
 #include "cond.hpp"
 #include "framefilter.hpp"
-#include "imagingcam.hpp"
 #include "logfile.hpp"
 #include "mainwindow.hpp"
 #include "phasecorr2_stabiliser.hpp"
 #include "recorder.hpp"
 #include "sdlwincommon.hpp"
+#include "sensorfusion.hpp"
 #include "sharpness_analyzer.hpp"
 #include "sharpness_graph.hpp"
 #include "stabiliser.hpp"
@@ -288,11 +288,11 @@ public:
   void setSDLWindow(SDLWindow::SDLWin *win);
 
   /**
-   * @brief Gets the imaging camera object.
+   * @brief Gets the sensor fusion object.
    *
-   * @return Pointer to the ImagingCam object.
+   * @return Pointer to the SensorFusion object.
    */
-  ImagingCam *getImagingCam() { return imagingCam.get(); }
+  SensorFusion *getSensorFusion() { return sensorFusion.get(); }
 
   /**
    * @brief Gets the current stabilization offset.
@@ -440,7 +440,7 @@ private:
 
   // Flags for disconnection states
   bool tiltedCamDisconnected = false;
-  bool imagingCamDisconnected = false;
+  bool sensorFusionDisconnected = false;
   bool lensDisconnected = false;
 
   // Add a boolean to enable or disable PhaseCorr usage.
@@ -463,10 +463,10 @@ private:
   // Method to update the sharpness graph in the UI
   void updateSharpnessGraph();
 
-  std::unique_ptr<ImagingCam> imagingCam; ///< Imaging camera object.
+  std::unique_ptr<SensorFusion> sensorFusion; ///< Sensor fusion object.
 
-  bool imagingCamUpdatingFocus =
-      false; ///< Flag for imaging camera focus updates.
+  bool sensorFusionUpdatingFocus =
+      false; ///< Flag for sensor fusion focus updates.
 };
 
 #endif

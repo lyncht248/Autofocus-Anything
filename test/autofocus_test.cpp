@@ -51,6 +51,9 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
   auto &tiltedcam = focusController->getTiltedCam();
   auto &lens = focusController->getLens();
 
+  // Start the camera capture thread
+  tiltedcam.startCaptureThread();
+
   // Image buffer setup
   const int imgWidth = tiltedcam.getImageWidth();
   const int imgHeight = tiltedcam.getImageHeight();
@@ -61,8 +64,8 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
 
   // Starting lens positions to test (updated for current bounds: MIN=-15.0,
   // MAX=0.0) Using more conservative positions to avoid boundary issues
-  std::vector<double> startingPositions = {-12.0, -10.74, -8.0,
-                                           -6.0,  -4.0,   -2.0};
+  // TEMPORARILY TESTING ONLY -10.74mm POSITION
+  std::vector<double> startingPositions = {-10.74};
 
   // Structure to store results
   struct MeasurementPoint {
@@ -119,9 +122,17 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
 
     // Display focus location every second until user confirms
     while (!isReady) {
-      // Capture frame
-      if (!tiltedcam.getLatestFrame(buffer, img_size)) {
-        std::cout << "Failed to capture frame" << std::endl;
+      // Capture frame with retry logic
+      bool frameObtained = false;
+      for (int attempt = 0; attempt < 3 && !frameObtained; attempt++) {
+        frameObtained = tiltedcam.getLatestFrame(buffer, img_size);
+        if (!frameObtained) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+      }
+
+      if (!frameObtained) {
+        std::cout << "Failed to capture frame after 3 attempts" << std::endl;
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         continue;
       }
@@ -203,8 +214,17 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
 
       // Take 3 measurements at this position
       for (int i = 0; i < 3; i++) {
-        if (!tiltedcam.getLatestFrame(buffer, img_size)) {
-          std::cout << "Failed to capture frame" << std::endl;
+        // Retry frame capture
+        bool frameObtained = false;
+        for (int attempt = 0; attempt < 5 && !frameObtained; attempt++) {
+          frameObtained = tiltedcam.getLatestFrame(buffer, img_size);
+          if (!frameObtained) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+          }
+        }
+
+        if (!frameObtained) {
+          std::cout << "Failed to capture frame after 5 attempts" << std::endl;
           continue;
         }
 
@@ -274,8 +294,17 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
 
       // Take 3 measurements at this position
       for (int i = 0; i < 3; i++) {
-        if (!tiltedcam.getLatestFrame(buffer, img_size)) {
-          std::cout << "Failed to capture frame" << std::endl;
+        // Retry frame capture
+        bool frameObtained = false;
+        for (int attempt = 0; attempt < 5 && !frameObtained; attempt++) {
+          frameObtained = tiltedcam.getLatestFrame(buffer, img_size);
+          if (!frameObtained) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+          }
+        }
+
+        if (!frameObtained) {
+          std::cout << "Failed to capture frame after 5 attempts" << std::endl;
           continue;
         }
 

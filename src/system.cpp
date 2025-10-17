@@ -5,11 +5,11 @@
 #include "VimbaCPP/Include/Frame.h"
 #include "VimbaCPP/Include/SharedPointerDefines.h"
 #include "autofocus.hpp"
-#include "imagingcam.hpp"
 #include "main.hpp"
 #include "notificationCenter.hpp"
 #include "phasecorr2_stabiliser.hpp"
 #include "sdlwindow.hpp"
+#include "sensorfusion.hpp"
 #include "sharpness_analyzer.hpp"
 #include "sharpness_graph.hpp"
 #include "thread.hpp"
@@ -579,7 +579,7 @@ void FrameProcessor::processFrame() // What to do with each frame received from
         pthread_mutex_unlock(&childwin->mutex);
 
         // Set the ROI size first
-        system.getImagingCam()->setROISize(roiSizePixels, roiSizePixels);
+        system.getSensorFusion()->setROISize(roiSizePixels, roiSizePixels);
 
         // Then set the center
         system.updateROICenter(imageX, imageY);
@@ -590,7 +590,7 @@ void FrameProcessor::processFrame() // What to do with each frame received from
                        "focus search at ({}, {}) with ROI size {}x{}",
                        imageX, imageY, roiSizePixels, roiSizePixels);
         }
-        system.getImagingCam()->startROIFocusSearch();
+        system.getSensorFusion()->startROIFocusSearch();
       } else {
         pthread_mutex_unlock(&childwin->mutex);
       }
@@ -737,7 +737,7 @@ System::System(int argc, char **argv)
       sharpnessAnalyzer(), sigSharpnessUpdated(), currentSharpnessValues(),
       sharpnessUpdateEnabled(true),
       lastSharpnessUpdate(std::chrono::steady_clock::now()),
-      imagingCam(std::make_unique<ImagingCam>(*this)) {
+      sensorFusion(std::make_unique<SensorFusion>(*this)) {
   if (bSystemLogFlag) {
     logger->info("[System::System] constructor beginning");
   }
@@ -755,7 +755,7 @@ System::System(int argc, char **argv)
 
   NotificationCenter::instance().registerListener(
       "ImagingCamDisconnected", [&]() {
-        imagingCamDisconnected = true;
+        sensorFusionDisconnected = true;
         handleDisconnection();
       });
 
@@ -898,25 +898,25 @@ System::System(int argc, char **argv)
       sigc::mem_fun(*this, &System::updateSharpnessGraph));
 
   // Set up imaging camera callbacks for GUI integration
-  if (getImagingCam()) {
-    getImagingCam()->setHoldFocusCallback([this](bool enabled) {
+  if (getSensorFusion()) {
+    getSensorFusion()->setHoldFocusCallback([this](bool enabled) {
       // Use a dispatcher to safely update GUI from another thread
       Glib::signal_idle().connect_once(
           [this, enabled]() { window.setHoldFocus(enabled); });
     });
 
-    getImagingCam()->setBestFocusCallback([this](int position) {
+    getSensorFusion()->setBestFocusCallback([this](int position) {
       // Use a dispatcher to safely update GUI from another thread
       Glib::signal_idle().connect_once([this, position]() {
-        imagingCamUpdatingFocus =
+        sensorFusionUpdatingFocus =
             true; // Prevent ROI clearing during imaging camera update
         window.setBestFocusScaleValue(static_cast<double>(position));
-        imagingCamUpdatingFocus = false; // Reset flag
+        sensorFusionUpdatingFocus = false; // Reset flag
       });
     });
 
     // Add the new search complete callback
-    getImagingCam()->setSearchCompleteCallback([this](bool successful) {
+    getSensorFusion()->setSearchCompleteCallback([this](bool successful) {
       if (childwin) {
         pthread_mutex_lock(&childwin->mutex);
         childwin->searchComplete = successful;
@@ -1237,8 +1237,8 @@ void System::onResetClicked() {
   bHoldFocus = false;
 
   // 2. Stop and clear ROI tracking and imaging camera monitoring
-  if (getImagingCam()) {
-    getImagingCam()->stop(); // Stop all monitoring threads and focus search
+  if (getSensorFusion()) {
+    getSensorFusion()->stop(); // Stop all monitoring threads and focus search
     if (bSystemLogFlag) {
       logger->info("[System::onResetClicked] Stopped imaging camera monitoring "
                    "and focus search");
@@ -1316,8 +1316,8 @@ void System::whenHoldFocusToggled(bool holdingFocus) {
     }
 
     // Stop ROI tracking and clear display
-    if (getImagingCam()) {
-      getImagingCam()->stop(); // Stop the monitoring thread
+    if (getSensorFusion()) {
+      getSensorFusion()->stop(); // Stop the monitoring thread
     }
 
     bHoldFocus = 0;
@@ -1583,7 +1583,7 @@ void System::onWindowBestFocusChanged(double val) {
   // Check if this is a manual user change (not from imaging camera callback)
   // If ROI search was complete and user manually changes focus, clear the ROI
   // tracking
-  if (childwin && !imagingCamUpdatingFocus) {
+  if (childwin && !sensorFusionUpdatingFocus) {
     pthread_mutex_lock(&childwin->mutex);
     bool wasSearchComplete = childwin->searchComplete;
     bool hasActiveROI = childwin->showROI;
@@ -1673,9 +1673,9 @@ System::~System() {
   }
 
   // Stop imaging camera before other cleanup
-  if (getImagingCam()) {
-    getImagingCam()->stop();
-    imagingCam.reset();
+  if (getSensorFusion()) {
+    getSensorFusion()->stop();
+    sensorFusion.reset();
   }
 }
 
@@ -1686,13 +1686,13 @@ Recorder &System::getRecorder() { return *recorder; }
 void System::handleDisconnection() {
   std::cout << "Handling disconnection, tiltedCamDisconnected: "
             << tiltedCamDisconnected
-            << ", imagingCamDisconnected: " << imagingCamDisconnected
+            << ", sensorFusionDisconnected: " << sensorFusionDisconnected
             << ", lensDisconnected: " << lensDisconnected << std::endl;
-  if (tiltedCamDisconnected && imagingCamDisconnected && lensDisconnected) {
+  if (tiltedCamDisconnected && sensorFusionDisconnected && lensDisconnected) {
     std::cout << "All devices are disconnected!" << std::endl;
     window.displayMessageError(
         "Imaging Camera, Tilted Camera, and Lens are Disconnected");
-  } else if (tiltedCamDisconnected && imagingCamDisconnected) {
+  } else if (tiltedCamDisconnected && sensorFusionDisconnected) {
     std::cout << "Tilted Camera and Imaging Camera are Disconnected!"
               << std::endl;
     window.displayMessageError(
@@ -1700,11 +1700,11 @@ void System::handleDisconnection() {
   } else if (tiltedCamDisconnected && lensDisconnected) {
     std::cout << "TiltedCam and Lens are disconnected!" << std::endl;
     window.displayMessageError("Tilted Camera and Lens are Disconnected");
-  } else if (imagingCamDisconnected && lensDisconnected) {
-    std::cout << "ImagingCam and Lens are disconnected!" << std::endl;
+  } else if (sensorFusionDisconnected && lensDisconnected) {
+    std::cout << "SensorFusion and Lens are disconnected!" << std::endl;
     window.displayMessageError("Imaging Camera and Lens are Disconnected");
-  } else if (imagingCamDisconnected) {
-    std::cout << "ImagingCam is disconnected!" << std::endl;
+  } else if (sensorFusionDisconnected) {
+    std::cout << "SensorFusion is disconnected!" << std::endl;
     window.displayMessageError("Imaging Camera is Disconnected");
   } else if (lensDisconnected) {
     std::cout << "Lens is disconnected!" << std::endl;
@@ -1807,8 +1807,8 @@ void System::onGetDepthsClicked() {
     window.setHoldFocus(true);
 
     // Start the depth mapping process
-    if (getImagingCam()) {
-      getImagingCam()->startDepthMapping();
+    if (getSensorFusion()) {
+      getSensorFusion()->startDepthMapping();
     }
   } else {
     // Toggle OFF - Clear depth mapping
@@ -1868,10 +1868,10 @@ void System::updateROICenter(int x, int y) {
     return;
   }
 
-  // Start ROI tracking if imagingCam exists
-  if (getImagingCam()) {
-    getImagingCam()->setROICenter(x, y);
-    getImagingCam()->start(); // Start the monitoring thread
+  // Start ROI tracking if sensorFusion exists
+  if (getSensorFusion()) {
+    getSensorFusion()->setROICenter(x, y);
+    getSensorFusion()->start(); // Start the monitoring thread
   }
 
   // Update SDL window display parameters with current ROI info from imaging
@@ -1884,9 +1884,9 @@ void System::updateROICenter(int x, int y) {
     childwin->searchComplete = false; // Reset search complete state
 
     // Get the current ROI size from imaging camera to ensure synchronization
-    if (getImagingCam()) {
+    if (getSensorFusion()) {
       int centerX, centerY, width, height;
-      getImagingCam()->getCurrentROI(centerX, centerY, width, height);
+      getSensorFusion()->getCurrentROI(centerX, centerY, width, height);
       childwin->roiWidth = width;
       childwin->roiHeight = height;
     }
@@ -1897,8 +1897,8 @@ void System::updateROICenter(int x, int y) {
 
 void System::clearROIDisplay() {
   // Stop ROI tracking first to ensure threads are stopped
-  if (getImagingCam()) {
-    getImagingCam()
+  if (getSensorFusion()) {
+    getSensorFusion()
         ->stop(); // Stop the monitoring thread and any active focus search
 
     if (bSystemLogFlag) {
@@ -1925,8 +1925,8 @@ void System::clearROIDisplay() {
 
 void System::getCurrentROI(int &centerX, int &centerY, int &width,
                            int &height) const {
-  if (imagingCam) {
-    imagingCam->getCurrentROI(centerX, centerY, width, height);
+  if (sensorFusion) {
+    sensorFusion->getCurrentROI(centerX, centerY, width, height);
   } else {
     centerX = centerY = -1;
     width = height = 150;

@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <mutex>
 #include <opencv2/highgui.hpp>
 #include <opencv2/video.hpp>
@@ -148,6 +149,31 @@ public:
    * @return Proportional gain value.
    */
   double getPGain() const;
+
+  // Peak locator selection
+  enum class PeakLocator {
+    CenterOfMass,
+    PowerCOM,
+    TruncatedGaussian,
+    GaussianFitBrute
+  };
+
+  // Switch methods at runtime
+  void setPeakLocator(PeakLocator m);
+
+  // Power-COM tuning
+  void setPowerCOMExponent(int p);          // integer >= 1, default 4
+  void setPowerCOMQuadraticRefine(bool on); // sub-pixel parabola refine
+
+  // Set the assumed Gaussian sigma in **full-resolution pixels**. If <= 0, we
+  // auto-estimate from σ_a.
+  void setTruncGaussSigmaFullRes(double sigmaPx);
+  // How many points to average at each edge to estimate f(a), f(b). (>=1)
+  void setTruncGaussEdgeAveraging(int count);
+
+  // Exponential smoothing of the *returned* peak (0<beta<=1). beta=1 disables
+  // smoothing.
+  void setPeakSmoothing(double beta);
 
   /**
    * @brief Gets the lens object.
@@ -344,6 +370,35 @@ private:
    * @brief Derivative gain for the PID controller.
    */
   double Kd;
+
+  PeakLocator m_peakLocator = PeakLocator::TruncatedGaussian;
+
+  // Power-COM parameters
+  int m_powerExponent = 4;          // default ^4
+  bool m_powerCOMQuadRefine = true; // parabolic refine on by default
+
+  // TruncatedGaussian parameters
+  double m_sigmaPxFullRes =
+      -1.0;               // <=0 => auto-estimate σ from σ_a (apparent var)
+  int m_edgeAvgCount = 5; // points to average at each edge
+
+  // Optional output smoothing (shared)
+  double m_peakEmaBeta = 1.0; // 1.0 => smoothing disabled
+  double m_prevMuReduced = std::numeric_limits<double>::quiet_NaN();
+
+  // Helper: Power-COM peak estimator
+  double estimatePeakPowerCOM(const std::vector<double> &f, int power,
+                              bool quadraticRefine,
+                              double *out_plainCOM = nullptr);
+
+  // Helper: truncated Gaussian peak estimator on the reduced-resolution curve
+  // domain [0..N-1] Returns μ̂ (in curve index units). Optionally returns μ_a,
+  // σ_a^2, and μ_[a,b].
+  double estimatePeakTruncatedGaussian(const std::vector<double> &f,
+                                       double sigmaPxReduced, int edgeAvgCount,
+                                       double eps, double *out_mu_a = nullptr,
+                                       double *out_sigma_a_sq = nullptr,
+                                       double *out_mu_ab = nullptr);
 
   Settings settings; ///< Settings object to manage configuration
 };

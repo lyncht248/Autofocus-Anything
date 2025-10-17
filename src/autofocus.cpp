@@ -6,6 +6,7 @@
 #include "main.hpp"
 #include "mainwindow.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -563,13 +564,13 @@ void autofocus::run() {
         double errorMagnitude = abs(currentError);
         double pScaleFactor;
         if (errorMagnitude <= 3.0) {
-          pScaleFactor = 0.15;
-        } else if (errorMagnitude >= 100.0) {
+          pScaleFactor = 0.13;
+        } else if (errorMagnitude >= 130.0) {
           pScaleFactor = 1.0;
         } else {
           // Linear interpolation between 3 pixels (0.1x) and 100 pixels (1.0x)
           pScaleFactor =
-              0.15 + (errorMagnitude - 3.0) * (1.0 - 0.15) / (100.0 - 3.0);
+              0.13 + (errorMagnitude - 3.0) * (1.0 - 0.13) / (100.0 - 3.0);
         }
 
         // Apply directional multiplier for downward moves (positive errors)
@@ -925,13 +926,13 @@ double autofocus::computeBestFocusReduced(cv::Mat image, int imgHeight,
                                           int imgWidth) {
   auto startTime = std::chrono::high_resolution_clock::now();
 
-  // Resize to 1/4 size (1/2 in each dimension)
+  // Resize to 1/2 x 1/2
   auto resizeStart = std::chrono::high_resolution_clock::now();
   cv::Mat resized;
   cv::resize(image, resized, cv::Size(), 0.5, 0.5);
   auto resizeEnd = std::chrono::high_resolution_clock::now();
 
-  // Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+  // CLAHE
   auto claheStart = std::chrono::high_resolution_clock::now();
   cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
   clahe->setClipLimit(2.0);
@@ -947,105 +948,138 @@ double autofocus::computeBestFocusReduced(cv::Mat image, int imgHeight,
                    cv::BORDER_DEFAULT);
   auto blurEnd = std::chrono::high_resolution_clock::now();
 
-  // Compute sharpness using Roberts Cross operator
+  // Roberts Cross gradients -> sharpness image (float)
   auto robertsStart = std::chrono::high_resolution_clock::now();
   cv::Mat img_x, img_y;
   cv::filter2D(blurred, img_x, CV_16S, roberts_kernelx);
   cv::filter2D(blurred, img_y, CV_16S, roberts_kernely);
-
-  // Square the gradients and sum them
   cv::Mat img_x_squared, img_y_squared, sum_xy;
   cv::multiply(img_x, img_x, img_x_squared);
   cv::multiply(img_y, img_y, img_y_squared);
   cv::add(img_x_squared, img_y_squared, sum_xy);
-
-  // Convert to float for better precision
   cv::Mat sharpness_float;
   sum_xy.convertTo(sharpness_float, CV_32F);
   auto robertsEnd = std::chrono::high_resolution_clock::now();
 
-  // Column Means
+  // Column means
   auto columnStart = std::chrono::high_resolution_clock::now();
   cv::Mat columnMeansMatrix;
   cv::reduce(sharpness_float, columnMeansMatrix, 0, cv::REDUCE_AVG, CV_64F);
-
-  // Convert to vector for compatibility with existing code
   std::vector<double> columnMeans;
   columnMeansMatrix.copyTo(columnMeans);
   auto columnEnd = std::chrono::high_resolution_clock::now();
 
-  // Sliding Window with Hamming
+  // Sliding Hamming
   auto slidingStart = std::chrono::high_resolution_clock::now();
   std::vector<double> sharpnesscurve;
-  int kernel = 20; // Reduced from 40 for 1/2 resolution (40/2 = 20)
-
-  // Pre-compute Hamming window coefficients
+  const int kernel = 20; // for 1/2 resolution
   std::vector<double> hammingWindow(kernel);
-  for (int i = 0; i < kernel; i++) {
+  for (int i = 0; i < kernel; ++i)
     hammingWindow[i] = 0.54 - 0.46 * std::cos(2 * M_PI * i / (kernel - 1.0));
-  }
 
-  for (int i = 0; i < blurred.cols - kernel; i++) {
-    double regionSharpnessScore = 0.0;
-    double windowSum = 0.0;
-    for (int k = 0; k < kernel; k++) {
-      regionSharpnessScore += columnMeans[i + k] * hammingWindow[k];
-      windowSum += hammingWindow[k];
+  sharpnesscurve.reserve(std::max(0, blurred.cols - kernel));
+  for (int i = 0; i < blurred.cols - kernel; ++i) {
+    double acc = 0.0, wsum = 0.0;
+    for (int k = 0; k < kernel; ++k) {
+      const double w = hammingWindow[k];
+      acc += columnMeans[i + k] * w;
+      wsum += w;
     }
-    regionSharpnessScore /=
-        windowSum; // Normalize by sum of window coefficients
-    sharpnesscurve.push_back(regionSharpnessScore);
+    sharpnesscurve.push_back(acc / wsum);
   }
   auto slidingEnd = std::chrono::high_resolution_clock::now();
 
-  // Calculate and save the max amplitude of the sharpness curve
-  double minVal =
-      *std::min_element(sharpnesscurve.begin(), sharpnesscurve.end());
-  for (double &val : sharpnesscurve) {
-    val -= minVal;
+  // Normalize baseline to zero for robust COM / TG moments
+  if (!sharpnesscurve.empty()) {
+    const double minVal =
+        *std::min_element(sharpnesscurve.begin(), sharpnesscurve.end());
+    for (double &v : sharpnesscurve)
+      v = std::max(0.0, v - minVal);
   }
-  double maxVal =
-      *std::max_element(sharpnesscurve.begin(), sharpnesscurve.end());
-  double amplitude = maxVal;
-  // Print center of mass to console
-  // std::cout << "COM: " << centerOfMass << ", Amplitude: " << amplitude <<
-  // std::endl;
 
-  // If the amplitude is too low, return the scaled desiredLocBestFocus
-  if (amplitude < 3.0) {
-    std::cout << "Amplitude is too low, returning scaled desiredLocBestFocus\n";
+  // Amplitude check (edge case / low SNR): behave like your current shortcut.
+  const double maxVal =
+      sharpnesscurve.empty()
+          ? 0.0
+          : *std::max_element(sharpnesscurve.begin(), sharpnesscurve.end());
+  if (maxVal < 3.0) {
+    // keep behavior: do nothing when almost no structure is visible
     return static_cast<double>(desiredLocBestFocus);
   }
-  // Calculate center of mass
-  auto comStart = std::chrono::high_resolution_clock::now();
-  double centerOfMass = findCenterOfMass(sharpnesscurve);
-  auto comEnd = std::chrono::high_resolution_clock::now();
 
-  // Save sharpness curves if enabled
-  if (bSaveSharpnessCurves) {
-    std::string FileName = "TESTING_REDUCED" + std::to_string(increment);
-    std::string TextFile =
-        "/home/hvi/Desktop/HVI-data/Blendi_SharpnessCurves/" + FileName +
-        "_SharpnessCurve.txt";
-    std::ofstream outputFile(TextFile);
-    std::ostream_iterator<double> output_iterator(outputFile, ", ");
-    std::copy(sharpnesscurve.begin(), sharpnesscurve.end(), output_iterator);
-    outputFile << "\n";
-    outputFile.close();
+  // --- Choose estimator on the curve domain [0..N-1] ---
+  auto estStart = std::chrono::high_resolution_clock::now();
+
+  double mu_curve = 0.0; // result in curve index units
+  lastFittedCurve.clear();
+  lastSharpnessCurve = sharpnesscurve;
+  lastCenterOfMass = -1.0; // we'll fill it if available
+
+  switch (m_peakLocator) {
+  case PeakLocator::CenterOfMass: {
+    // your plain COM (already baseline-subtracted)
+    mu_curve = findCenterOfMass(sharpnesscurve);
+    lastCenterOfMass = mu_curve;
+  } break;
+
+  case PeakLocator::PowerCOM: {
+    double com_plain = -1.0;
+    mu_curve = estimatePeakPowerCOM(sharpnesscurve, m_powerExponent,
+                                    m_powerCOMQuadRefine, &com_plain);
+    // Keep overlay meaning: cyan line = plain COM
+    if (com_plain >= 0.0)
+      lastCenterOfMass = com_plain;
+  } break;
+
+  case PeakLocator::TruncatedGaussian: {
+    // Work in reduced coordinates. If user set σ at full-res, scale it by 0.5
+    // If not set, use the same estimation as the brute force method
+    double sigmaReduced;
+    if (m_sigmaPxFullRes > 0.0) {
+      sigmaReduced = 0.5 * m_sigmaPxFullRes;
+    } else {
+      // Use the same σ estimation as brute force Gaussian: 0.2 * curve_length
+      sigmaReduced = 0.2 * sharpnesscurve.size();
+    }
+    double mu_a_dbg = -1.0;
+    mu_curve = estimatePeakTruncatedGaussian(sharpnesscurve, sigmaReduced,
+                                             m_edgeAvgCount, 1e-2, &mu_a_dbg,
+                                             nullptr, nullptr);
+    if (mu_a_dbg >= 0.0)
+      lastCenterOfMass = mu_a_dbg; // overlay: COM
+  } break;
+
+  case PeakLocator::GaussianFitBrute: {
+    const double amplitude = maxVal;
+    const double offset = 0.0;
+    std::vector<double> fitted =
+        fitnormalcurveBruteForce(sharpnesscurve, amplitude, offset, 0.2);
+    auto it = std::max_element(fitted.begin(), fitted.end());
+    mu_curve = static_cast<double>(std::distance(fitted.begin(), it));
+    // (optional) lastCenterOfMass = findCenterOfMass(sharpnesscurve);
+  } break;
   }
 
-  if (bSaveImages) {
-    // Store the curves for visualization and center of mass
-    lastSharpnessCurve = sharpnesscurve;
-    lastFittedCurve.clear(); // No fitted curve when using COM
-    lastCenterOfMass = centerOfMass;
+  // Optional exponential smoothing of the peak (keeps continuity but still
+  // fast)
+  if (m_peakEmaBeta < 1.0) {
+    if (std::isnan(m_prevMuReduced))
+      m_prevMuReduced = mu_curve;
+    mu_curve =
+        (1.0 - m_peakEmaBeta) * m_prevMuReduced + m_peakEmaBeta * mu_curve;
+    m_prevMuReduced = mu_curve;
   }
 
-  auto endTime = std::chrono::high_resolution_clock::now();
+  // For your saved debug overlay: show COM (μ_a) if we have it
+  // (mu_a_dbg is only available in TruncatedGaussian case, handled in switch
+  // above)
 
-  // Benchmark timing
-  auto totalTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      endTime - startTime);
+  auto estEnd = std::chrono::high_resolution_clock::now();
+
+  // --- Timing log unchanged footprint, writing "com_time_us" as estimator time
+  // ---
+  auto totalTime =
+      std::chrono::duration_cast<std::chrono::microseconds>(estEnd - startTime);
   auto resizeTime = std::chrono::duration_cast<std::chrono::microseconds>(
       resizeEnd - resizeStart);
   auto claheTime = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -1058,8 +1092,8 @@ double autofocus::computeBestFocusReduced(cv::Mat image, int imgHeight,
       columnEnd - columnStart);
   auto slidingTime = std::chrono::duration_cast<std::chrono::microseconds>(
       slidingEnd - slidingStart);
-  auto comTime =
-      std::chrono::duration_cast<std::chrono::microseconds>(comEnd - comStart);
+  auto estTime =
+      std::chrono::duration_cast<std::chrono::microseconds>(estEnd - estStart);
 
   try {
     std::ofstream reducedBenchmarkFile("../output/focus_benchmark_reduced.csv",
@@ -1068,30 +1102,22 @@ double autofocus::computeBestFocusReduced(cv::Mat image, int imgHeight,
       auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                            std::chrono::system_clock::now().time_since_epoch())
                            .count();
+      // keep CSV header compatibility: write estimator time in the
+      // "com_time_us" column
       reducedBenchmarkFile << timestamp << "," << totalTime.count() << ","
                            << resizeTime.count() << "," << claheTime.count()
                            << "," << blurTime.count() << ","
                            << robertsTime.count() << "," << columnTime.count()
                            << "," << slidingTime.count() << ","
-                           << comTime.count() << std::endl;
-
-      if (reducedBenchmarkFile.fail()) {
-        if (bAutofocusLogFlag) {
-          logger->warn("[autofocus::computeBestFocusReduced] Failed to write "
-                       "benchmark data");
-        }
-      }
+                           << estTime.count() << std::endl;
       reducedBenchmarkFile.close();
     }
-  } catch (const std::exception &ex) {
-    if (bAutofocusLogFlag) {
-      logger->error(
-          "[autofocus::computeBestFocusReduced] Benchmark file error: " +
-          std::string(ex.what()));
-    }
+  } catch (...) { /* ignore */
   }
 
-  return (centerOfMass + kernel / 2);
+  // Map curve index back to reduced-image x by adding the kernel/2 offset,
+  // exactly like your original COM method (no scaling to full-res here).
+  return mu_curve + kernel / 2.0;
 }
 
 int autofocus::computeBestFocusVeryReduced(cv::Mat image, int imgHeight,
@@ -1577,6 +1603,203 @@ double autofocus::findCenterOfMass(const std::vector<double> &curve) {
   }
 
   return totalWeight > 0 ? (weightedSum / totalWeight) : curve.size() / 2.0;
+}
+
+void autofocus::setPeakLocator(PeakLocator m) { m_peakLocator = m; }
+
+void autofocus::setTruncGaussSigmaFullRes(double sigmaPx) {
+  m_sigmaPxFullRes = sigmaPx;
+}
+
+void autofocus::setPowerCOMExponent(int p) { m_powerExponent = std::max(1, p); }
+
+void autofocus::setPowerCOMQuadraticRefine(bool on) {
+  m_powerCOMQuadRefine = on;
+}
+
+void autofocus::setTruncGaussEdgeAveraging(int count) {
+  m_edgeAvgCount = std::max(1, count);
+}
+
+void autofocus::setPeakSmoothing(double beta) {
+  // clamp to (0,1]; beta=1 means "no smoothing"
+  m_peakEmaBeta = std::min(std::max(beta, 0.0), 1.0);
+  if (m_peakEmaBeta >= 1.0) {
+    m_prevMuReduced = std::numeric_limits<double>::quiet_NaN();
+  }
+}
+
+// Fast integer power helper function
+static inline double powi_pos(double x, int p) {
+  // fast integer power, p>=1
+  double r = 1.0;
+  while (p > 0) {
+    if (p & 1)
+      r *= x;
+    x *= x;
+    p >>= 1;
+  }
+  return r;
+}
+
+double autofocus::estimatePeakPowerCOM(const std::vector<double> &v, int power,
+                                       bool quadraticRefine,
+                                       double *out_plainCOM) {
+  const int N = static_cast<int>(v.size());
+  if (N <= 0) {
+    if (out_plainCOM)
+      *out_plainCOM = 0.0;
+    return 0.0;
+  }
+
+  // Baseline subtract to suppress center pull from background
+  const double minv = *std::min_element(v.begin(), v.end());
+
+  // Optional: also compute plain COM for overlay/debug
+  if (out_plainCOM) {
+    double S0 = 0.0, S1 = 0.0;
+    for (int i = 0; i < N; ++i) {
+      const double w = std::max(0.0, v[i] - minv);
+      S0 += w;
+      S1 += w * i;
+    }
+    *out_plainCOM = (S0 > 1e-12) ? (S1 / S0) : 0.5 * (N - 1);
+  }
+
+  double sumw = 0.0, sumiw = 0.0;
+  for (int i = 0; i < N; ++i) {
+    double w = v[i] - minv;
+    if (w <= 0.0)
+      continue;
+    double wp = powi_pos(w, std::max(1, power)); // winner-take-most
+    sumw += wp;
+    sumiw += wp * i;
+  }
+
+  if (sumw <= 1e-12)
+    return 0.5 * (N - 1); // degenerate fallback
+
+  double idx = sumiw / sumw;
+
+  // Optional sub-pixel parabolic refine around nearest integer bin
+  if (quadraticRefine) {
+    int k = std::clamp((int)std::round(idx), 0, N - 1);
+    if (k > 0 && k < N - 1) {
+      double y1 = v[k - 1], y2 = v[k], y3 = v[k + 1];
+      double denom = 2.0 * y2 - y1 - y3;
+      if (std::fabs(denom) > 1e-12) {
+        double delta = 0.5 * (y1 - y3) / denom; // ~[-0.5, +0.5]
+        idx = std::clamp(k + delta, 0.0, (double)(N - 1));
+      }
+    }
+  }
+  return idx;
+}
+
+// Discrete truncated-Gaussian correction on f[0..N-1] (non-negative).
+// sigmaPxReduced: Gaussian sigma in the same pixel units as f's x-axis (reduced
+// resolution). If sigmaPxReduced <= 0, we auto-estimate σ from apparent
+// variance σ_a^2. eps: threshold for the |t| test (per note in the memo);
+// default ~1e-2.
+double autofocus::estimatePeakTruncatedGaussian(
+    const std::vector<double> &f, double sigmaPxReduced, int edgeAvgCount,
+    double eps, double *out_mu_a, double *out_sigma_a_sq, double *out_mu_ab) {
+  const int N = static_cast<int>(f.size());
+  if (N <= 1) {
+    if (out_mu_a)
+      *out_mu_a = 0.0;
+    if (out_sigma_a_sq)
+      *out_sigma_a_sq = 0.0;
+    if (out_mu_ab)
+      *out_mu_ab = 0.0;
+    return 0.0;
+  }
+
+  // --- sums for μ_a and σ_a^2 (apparent, discrete) ---
+  double S0 = 0.0, S1 = 0.0, S2 = 0.0;
+  for (int i = 0; i < N; ++i) {
+    const double w = std::max(0.0, f[i]); // ensure non-negative
+    S0 += w;
+    S1 += w * i;
+    S2 += w * i * i;
+  }
+
+  if (S0 <= 1e-12) {
+    // degenerate: return middle as a safe value
+    const double mid = 0.5 * (N - 1);
+    if (out_mu_a)
+      *out_mu_a = mid;
+    if (out_sigma_a_sq)
+      *out_sigma_a_sq = 0.0;
+    if (out_mu_ab)
+      *out_mu_ab = mid;
+    return mid;
+  }
+
+  const double mu_a = S1 / S0;
+  const double sigma_a_sq = std::max(0.0, S2 / S0 - mu_a * mu_a);
+
+  // --- edge averages for f(a), f(b) (robust to noise) ---
+  const int k = std::min(
+      edgeAvgCount, std::max(1, N / 10)); // don't overreach on short signals
+  double fa = 0.0, fb = 0.0;
+  for (int i = 0; i < k; ++i)
+    fa += f[i];
+  for (int i = 0; i < k; ++i)
+    fb += f[N - 1 - i];
+  fa /= k;
+  fb /= k;
+
+  // --- μ_[a,b] with a=0, b=N-1 (discrete indices) ---
+  // μ_[a,b] = (b f(b) - a f(a)) / (f(b) - f(a))  with a=0 => μ_[a,b] = b f(b) /
+  // (f(b) - f(a))
+  double mu_ab;
+  const double denom_fb_fa = (fb - fa);
+  if (std::abs(denom_fb_fa) <= 1e-12) {
+    // symmetric edges -> μ_ab → ∞ ; in that case μ = μ_a (per note)
+    mu_ab = std::numeric_limits<double>::infinity();
+  } else {
+    mu_ab = (N - 1) * fb / denom_fb_fa;
+  }
+
+  // --- choose σ: user-provided (full-res) scaled to reduced, or auto from σ_a
+  // ---
+  double sigma_used = sigmaPxReduced;
+  if (sigma_used <= 0.0) {
+    // fallback: use sqrt(σ_a^2) but guard with a minimum to avoid near-zero
+    sigma_used = std::sqrt(std::max(sigma_a_sq, 1.0));
+  }
+
+  // --- t test: t = 2*(f(b)-f(a))/(f(b)+f(a)) ; if |t| < eps => use μ_a ---
+  const double denom_sum = fb + fa;
+  const double t =
+      (std::abs(denom_sum) <= 1e-12) ? 0.0 : (2.0 * (fb - fa) / denom_sum);
+
+  double mu_hat;
+  if (!std::isfinite(mu_ab) || std::abs(t) < eps) {
+    mu_hat = mu_a; // safe case near symmetric edges
+  } else {
+    const double denom = (mu_a - mu_ab);
+    if (std::abs(denom) <= 1e-9) {
+      mu_hat = mu_a; // avoid blow-ups
+    } else {
+      // Core formula: μ = μ_a + (σ_a^2 - σ^2) / (μ_a - μ_[a,b])
+      mu_hat = mu_a + (sigma_a_sq - sigma_used * sigma_used) / denom;
+    }
+  }
+
+  // Bound to observed domain to keep downstream code happy (drawing, indexing).
+  // This *doesn't* introduce discrete jumps; μ̂ approaches the bound smoothly.
+  mu_hat = std::clamp(mu_hat, 0.0, static_cast<double>(N - 1));
+
+  if (out_mu_a)
+    *out_mu_a = mu_a;
+  if (out_sigma_a_sq)
+    *out_sigma_a_sq = sigma_a_sq;
+  if (out_mu_ab)
+    *out_mu_ab = mu_ab;
+
+  return mu_hat;
 }
 
 void autofocus::reloadSettings() {
