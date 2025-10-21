@@ -313,6 +313,10 @@ public:
 
   int getFrameSliderValue() const;
   double getFrameRateEntryBox() const;
+
+  double getGammaScaleBox() const;
+  double getExposureScaleBox() const;
+
   std::string getFileLocation() const;
 
   void addRenderFilter(const std::string &key, RenderFilter *filter);

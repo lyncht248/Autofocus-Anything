@@ -1162,6 +1162,22 @@ double MainWindow::getFrameRateEntryBox() const {
   return frameRate;
 }
 
+
+double MainWindow::getGammaScaleBox() const {
+  double gamma = gammaScale.getValue();
+  return gamma;
+}
+
+double MainWindow::getExposureScaleBox() const {
+  double exposure = exposeScale.getValue();
+
+  return exposure;
+}
+
+
+
+
+
 void MainWindow::addRenderFilter(const std::string &key, RenderFilter *filter) {
   renderFilters[key] = filter;
 }

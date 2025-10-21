@@ -56,7 +56,10 @@ VidFrame* Recorder::getFrame(int n)
 //Fills up the frames buffer (or the RAM) with frames, either from live camera or from loaded file
 int Recorder::putFrame(VidFrame *frame)
 {
+	// Record time
+	auto now = std::chrono::system_clock::now();
 	frames.push_back(frame);
+	frame_times.push_back(now);
 	emitOperationComplete(Operation::RECOP_ADDFRAME, true);
 
 	//If the frames queue size is equal to the recording size scale value, emit the RECOP_FILLED signal
@@ -71,6 +74,29 @@ int Recorder::putFrame(VidFrame *frame)
 
 void Recorder::saveFrames(const std::string &location)
 {
+	// Prepare saving timestamps
+	auto tp_save = std::chrono::system_clock::now();
+	std::time_t t_save = std::chrono::system_clock::to_time_t(tp_save);
+	std::tm tm_save;
+	localtime_r(&t_save, &tm_save);
+	auto ms_save = std::chrono::duration_cast<std::chrono::milliseconds>(tp_save.time_since_epoch()).count() % 1000;
+
+	// prepare recording start time string if available
+	std::string recording_start;
+	if (!frame_times.empty()) {
+		auto tp_rec = frame_times.front();
+		std::time_t t_rec = std::chrono::system_clock::to_time_t(tp_rec);
+		std::tm tm_rec;
+		localtime_r(&t_rec, &tm_rec);
+		auto ms_rec = std::chrono::duration_cast<std::chrono::milliseconds>(tp_rec.time_since_epoch()).count() % 1000;
+		std::ostringstream oss;
+		oss << std::put_time(&tm_rec, "%F %T") << "." << std::setfill('0') << std::setw(3) << ms_rec;
+		recording_start = oss.str();
+	}
+
+
+
+
 	char fnum[FNUM_SIZE];
 	mkdir(location.c_str(), 0777);
 	for (unsigned long i = 0; i < frames.size(); i++)
@@ -87,6 +113,35 @@ void Recorder::saveFrames(const std::string &location)
 			return;
 		}
 	}
+
+	// Metadata CSV file
+	std::ofstream csv(location + std::string("/metadata.csv"));
+	if (!csv.is_open() )
+	{
+		emitOperationComplete(Operation::RECOP_SAVE, false);
+		return;
+	}
+
+	// Write metadata
+	csv << "Recording Start Time," << recording_start << "\n";
+	csv << "Frame Rate," << system.getFPS() << "\n";
+	csv << "Gamma," << system.getGamma() << "\n";
+	csv << "Exposure," << system.getExposure() << "\n";
+	csv << "Num Frames," << frames.size() << "\n\n";
+
+	csv << "Frame Number,Timestamp (Human-Readable)\n";
+	for (size_t i = 0; i < frames.size(); ++i) {
+		auto timestamp = frame_times[i];
+		std::time_t t_frame = std::chrono::system_clock::to_time_t(timestamp);
+		std::tm tm_frame;
+		localtime_r(&t_frame, &tm_frame);
+		auto ms_frame = std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()).count() % 1000;
+
+		csv << i << "," << std::put_time(&tm_frame, "%F %T") << "." << std::setfill('0') << std::setw(3) << ms_frame << "\n";
+	}
+	csv.close();
+
+
 	if(bRecorderLogFlag) logger->info("[Recorder::saveFrames()] frames saved to: {}", location);
 	emitOperationComplete(Operation::RECOP_SAVE, true);
 }

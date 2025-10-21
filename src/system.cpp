@@ -1643,6 +1643,10 @@ void System::onWindowEnterClicked() {
 
 double System::getFPS() { return window.getFrameRateEntryBox(); }
 
+double System::getGamma() { return window.getGammaScaleBox(); }
+
+double System::getExposure() { return window.getExposureScaleBox(); }
+
 bool System::onCloseClicked(const GdkEventAny *event) {
   // CODE TO EXECUTE WHEN CLOSE BUTTON CLICKED
   if (bSystemLogFlag) {

@@ -253,6 +253,12 @@ public:
    */
   double getFPS();
 
+
+
+  double getGamma();
+  double getExposure();
+  
+
   void onWindowHomePositionChanged(double val);
   void onWindowPGainChanged(double val);
   void onWindowSettingsChanged();
