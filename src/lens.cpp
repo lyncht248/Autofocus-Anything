@@ -13,6 +13,7 @@
 #include <stdexcept>
 
 bool bLensLogFlag = 1;
+bool bLensLogFlagSave = 0;
 
 lens::lens()
     : stop_thread(false), controller(nullptr), axis(nullptr), settings("") {
@@ -32,42 +33,42 @@ lens::lens()
     throw; // Rethrow exception to indicate critical failure
   }
   // Comment out CSV file initialization
-  /*
+  ///*
   // Create output directory and initialize CSV file
   if (createOutputDirectory()) {
       logFile.open(logFilePath, std::ios::out);
       if (logFile.is_open()) {
           // Write header row
-          logFile << "timestamp,DPOS,EPOS,Desired Lens Position" << std::endl;
+          logFile << "timestamp, Lens Position" << std::endl;
           if (bLensLogFlag)
-              logger->info("[lens::lens] CSV log file initialized at {}",
-  logFilePath); } else { logger->error("[lens::lens] Failed to open log file at
-  {}", logFilePath);
+              logger->info("[lens::lens] CSV log file initialized at {}", logFilePath); 
+          } else { logger->error("[lens::lens] Failed to open log file at {}", logFilePath);
       }
   }
-  */
+  //*/
 }
 
 // Comment out createOutputDirectory method
-/*
+ // /*
 bool lens::createOutputDirectory() {
     try {
         if (!std::filesystem::exists(outputDir)) {
             if (std::filesystem::create_directory(outputDir)) {
-                if (bLensLogFlag)
-                    logger->info("[lens::createOutputDirectory] Created output
-directory: {}", outputDir); } else {
-                logger->error("[lens::createOutputDirectory] Failed to create
-output directory: {}", outputDir); return false;
+                if (bLensLogFlag) {
+                    logger->info("[lens::createOutputDirectory] Created output directory: {}", outputDir);
+                } else {
+                    logger->error("[lens::createOutputDirectory] Failed to create output directory: {}", outputDir);
+                return false;
+                }
             }
         }
         return true;
     } catch (const std::filesystem::filesystem_error& e) {
-        logger->error("[lens::createOutputDirectory] Filesystem error: {}",
-e.what()); return false;
+        logger->error("[lens::createOutputDirectory] Filesystem error: {}", e.what()); 
+        return false;
     }
 }
-*/
+ // */
 
 bool lens::initialize() {
   // start lens thread
@@ -339,10 +340,30 @@ void lens::mov_abs(double mmToMoveTo) {
         logger->info("[lens::mov_abs] Moved to absolute position: {}mm, "
                      "Timestamp: {:.3f}ms",
                      mmToMoveTo, timestamp_ms);
+
+        
       }
 
       // Update the current lens location
       currentLensLoc = mmToMoveTo;
+
+
+      if (bLensLogFlag) {
+        // Write new lens position to csv file
+        if (bLensLogFlagSave) {        
+          if (logFile.is_open()) {
+          
+            // Timestamp in human readable form
+            auto now = std::chrono::system_clock::now();
+            auto now_time_t = std::chrono::system_clock::to_time_t(now);
+            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+
+            logFile << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S")
+                    << "." << std::setfill('0') << std::setw(3) << ms.count() << ","
+                    << mmToMoveTo << std::endl;
+          }
+        }
+      }
 
       // If lens is went out of bounds, ensure error message is persistent
       // (avoids flickering)
@@ -398,14 +419,14 @@ lens::~lens() {
   if (tLens.joinable())
     tLens.join();
 
-  /*
+  // /*
   // Close the CSV file
   if (logFile.is_open()) {
       logFile.close();
       if (bLensLogFlag)
           logger->info("[lens::~lens] CSV log file closed");
   }
-  */
+  // */
 
   if (controller) {
     if (axis) {

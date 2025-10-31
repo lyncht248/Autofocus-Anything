@@ -44,9 +44,9 @@ bool bSaveImages =
     0; // Saves images from the tilted camera to output folder. WARNING: will
        // produce enourmous number of images and slow down the system!
 bool bSaveSharpnessCurves =
-    0; // Saves text files with the sharpness curve data, similar to above
+    1; // Saves text files with the sharpness curve data, similar to above
 
-bool bSaveAllImages = 0; // Saves all images, not just during autofocus-ing
+bool bSaveAllImages = 1; // Saves all images, not just during autofocus-ing
 bool bBlinking = 0;
 
 unsigned char *img_buf =
@@ -194,7 +194,7 @@ bool autofocus::initialize() {
 
       if (csvFile.is_open() && csvFile.good()) {
         // Always write CSV header since we're overwriting the file
-        csvFile << "timestamp_ms,imgcountfile,desiredLocBestFocus,locBestFocus,"
+        csvFile << "time, timestamp_ms,imgcountfile,desiredLocBestFocus,locBestFocus,"
                    "pSignal,filteredLocBestFocus,dSignal,totalPdSignal,Kp\n";
 
         csvFile.flush();
@@ -358,6 +358,11 @@ void autofocus::run() {
         cv::GaussianBlur(clahe_enhanced_for_save,
                           processed_img, cv::Size(3, 3), 1, 1,
                           cv::BORDER_DEFAULT);
+
+        // try without CLAHE - bigger blur
+        // cv::GaussianBlur(image_resized_for_save,
+        //                   processed_img, cv::Size(7, 7), 1, 1,
+        //                   cv::BORDER_DEFAULT);
 
 
         // locBestFocus is already in reduced resolution coordinates, so no
@@ -908,6 +913,14 @@ void autofocus::run() {
                 std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::system_clock::now().time_since_epoch())
                     .count();
+            // Timestamp in human readable form
+            auto now = std::chrono::system_clock::now();
+            auto now_time_t = std::chrono::system_clock::to_time_t(now);
+            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+
+            csvFile << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S")
+                    << "." << std::setfill('0') << std::setw(3) << ms.count() << ",";
+
 
             // Use higher precision for double values
             csvFile << std::fixed << std::setprecision(6);
@@ -1241,6 +1254,10 @@ double autofocus::computeBestFocusReduced(cv::Mat image, int imgHeight,
   cv::Mat blurred;
   cv::GaussianBlur(clahe_enhanced, blurred, cv::Size(3, 3), 1, 1,
                    cv::BORDER_DEFAULT);
+
+  // try without CLAHE
+  // cv::GaussianBlur(resized, blurred, cv::Size(7, 7), 1, 1,
+  //                 cv::BORDER_DEFAULT);
   auto blurEnd = std::chrono::high_resolution_clock::now();
 
   // Roberts Cross gradients -> sharpness image (float)
@@ -1282,6 +1299,17 @@ double autofocus::computeBestFocusReduced(cv::Mat image, int imgHeight,
     }
     sharpnesscurve.push_back(acc / wsum);
   }
+
+  // Use moving average instead of Hamming window
+  // for (int i = 0; i < blurred.cols - kernel; i++) {
+  //   double regionSharpnessScore = 0.0;
+  //   for (int k = 0; k < kernel; k++) {
+  //     regionSharpnessScore += columnMeans[i + k];
+  //   }
+  //   regionSharpnessScore /= kernel; // Normalize by kernel size
+  //   sharpnesscurve.push_back(regionSharpnessScore);
+  // }
+
   auto slidingEnd = std::chrono::high_resolution_clock::now();
 
 
@@ -1289,7 +1317,7 @@ double autofocus::computeBestFocusReduced(cv::Mat image, int imgHeight,
   if (bSaveSharpnessCurves) {
     std::string FileName = "TESTING_" + std::to_string(increment);
     std::string TextFile1 = "../output/SharpnessCurves_steps/" + FileName + "_CLAHE_1.txt";
-    std::string TextFile2 = "../output/SharpnessCurves_steps/" + FileName + "_CLAHE_blur_2.txt";
+    std::string TextFile2 = "../output/SharpnessCurves_steps/" + FileName + "_blur_2.txt";
     std::string TextFile3 = "../output/SharpnessCurves_steps/" + FileName + "_robertscross_3.txt";
     std::string TextFile4 = "../output/SharpnessCurves_steps/" + FileName + "_column_means_4.txt";
     std::string TextFile5 = "../output/SharpnessCurves_steps/" + FileName + "_hamming_5.txt";
