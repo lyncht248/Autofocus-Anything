@@ -127,6 +127,8 @@ void Recorder::saveFrames(const std::string &location)
 	csv << "Frame Rate," << system.getFPS() << "\n";
 	csv << "Gamma," << system.getGamma() << "\n";
 	csv << "Exposure," << system.getExposure() << "\n";
+	csv << "Magnification Settings," << system.getCurrentMagnification() << "\n";
+	csv << "Magnification (um/pixel)," << system.getCurrentMicronsPerPixel() << "\n";
 	csv << "Num Frames," << frames.size() << "\n\n";
 
 	csv << "Frame Number,Timestamp (Human-Readable)\n";

@@ -121,6 +121,10 @@ namespace SDLWindow
         int roiWidth, roiHeight; /**< Width and height of the ROI. */
         bool searchComplete; /**< Flag indicating whether the search is complete. */
 
+        // Scale bar parameters
+        double micronsPerPixel = 1.0; /**< Microns per pixel scaling factor for distance measurements. */
+        bool showScaleBar; /**< Flag indicating whether to show the scale bar. */
+
 		// Stabilization offset for ROI display
 		double stabOffsetX, stabOffsetY; /**< X- and Y-offset for stabilization. */
         bool stabActive; /**< Flag indicating whether stabilization is active. */

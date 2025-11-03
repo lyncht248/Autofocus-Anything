@@ -257,6 +257,8 @@ public:
 
   double getGamma();
   double getExposure();
+  const std::string getCurrentMagnification();
+  double getCurrentMicronsPerPixel();
   
 
   void onWindowHomePositionChanged(double val);
@@ -292,6 +294,8 @@ public:
    * @param win Pointer to the SDL window.
    */
   void setSDLWindow(SDLWindow::SDLWin *win);
+
+  double getMicronsPerPixel(const std::string& magnification);
 
   /**
    * @brief Gets the sensor fusion object.
@@ -405,6 +409,8 @@ private:
   void onWindowPauseClicked(); ///< Handles pause button clicks.
   void onFindFocusClicked();   ///< Handles find focus button clicks.
   void onResetClicked();       ///< Handles reset button clicks.
+  std::string currentMagnification;
+  void onScaleBarToggled();   ///< Handles scale bar button clicks.
   void onRecenterClicked();    ///< Handles recenter button clicks.
   void onWindowEnterClicked(); ///< Handles enter button clicks.
 

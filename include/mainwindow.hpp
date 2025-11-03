@@ -275,6 +275,9 @@ public:
   using SignalRecenterClicked = sigc::signal<void()>;
   SignalRecenterClicked signalRecenterClicked();
 
+  using SignalScaleBarToggled = sigc::signal<void()>;
+  SignalScaleBarToggled signalScaleBarToggled();
+
   using SignalGetDepthsClicked = sigc::signal<void()>;
   SignalGetDepthsClicked signalGetDepthsClicked();
 
@@ -310,6 +313,7 @@ public:
   Condition &getFindFocusActive();
   Condition &getViewDepthsActive();
   Condition &getGetDepthsActive();
+  Condition &getScaleBarActive();
 
   int getFrameSliderValue() const;
   double getFrameRateEntryBox() const;
@@ -385,6 +389,8 @@ private:
   void onResetClicked();
   void onRecenterClicked();
 
+  void onScaleBarToggled();
+
   void bufferFilled();
   void bufferEmptied();
 
@@ -437,6 +443,7 @@ private:
   Gtk::Button recordButton, backToStartButton, pauseButton, playButton,
       fileLoadButton, fileSaveButton, settingsButton, resetButton, enterButton,
       recenterButton;
+  Gtk::ToggleButton scaleBarToggle;
   Gtk::ToggleButton getDepthsToggle;
   Gtk::ToggleButton liveToggle, makeMapToggle, stabiliseToggle, showMapToggle,
       holdFocusToggle, threedStabToggle, twodStabToggle, findFocusToggle,
@@ -451,7 +458,7 @@ private:
   Condition makeMapActive, stabiliseActive, showMapActive, holdFocusActive,
       threedStabActive, twodStabActive, hasBuffer, liveView, loading, saving,
       playingBuffer, seeking, recording, pausedRecording, trackingFPS,
-      viewDepthsActive, getDepthsActive;
+      viewDepthsActive, getDepthsActive, scaleBarActive;
 
   SignalFrameDrawn sigFrameDrawn;
   SignalFeatureUpdated sigFeatureUpdated;
@@ -462,6 +469,7 @@ private:
   SignalEnterClicked sigEnterClicked;
   SignalFindFocusClicked sigFindFocusClicked;
   SignalResetClicked sigResetClicked;
+  SignalScaleBarToggled sigScaleBarToggled;
   SignalRecenterClicked sigRecenterClicked;
   SignalGetDepthsClicked sigGetDepthsClicked;
   sigc::connection gainScaleConnection, exposeScaleConnection,

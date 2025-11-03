@@ -807,6 +807,8 @@ System::System(int argc, char **argv)
 
   window.signalResetClicked().connect(
       sigc::mem_fun(*this, &System::onResetClicked));
+  window.signalScaleBarToggled().connect(
+      sigc::mem_fun(*this, &System::onScaleBarToggled));
   window.signalRecenterClicked().connect(
       sigc::mem_fun(*this, &System::onRecenterClicked));
   window.signalGetDepthsClicked().connect(
@@ -1298,6 +1300,79 @@ void System::onRecenterClicked() {
   frameProcessor.resetRaster();
 }
 
+void System::onScaleBarToggled() {
+  if (bSystemLogFlag) {
+    logger->info("[System::onScaleBarToggled] Scale bar toggled");
+  }
+
+  bool showingScaleBar = window.getScaleBarActive().getValue();
+
+  if (showingScaleBar) {
+    // Create a dialog window
+    Gtk::Dialog dialog("Select Magnification", window, true);
+    dialog.set_default_size(250, 100);
+
+    // Add a label
+    Gtk::Label label("Magnification:");
+    label.set_margin_bottom(10);
+
+    // Add a dropdown (combo box)
+    Gtk::ComboBoxText combo;
+    combo.append("12x");
+    combo.append("20x");
+    combo.append("32x");
+    combo.set_active(0);
+
+    // Layout
+    Gtk::Box* content = dialog.get_content_area();
+    content->pack_start(label, Gtk::PACK_SHRINK);
+    content->pack_start(combo, Gtk::PACK_SHRINK);
+
+    // Add OK/Cancel buttons
+    dialog.add_button("OK", Gtk::RESPONSE_OK);
+    dialog.add_button("Cancel", Gtk::RESPONSE_CANCEL);
+
+    dialog.show_all();
+
+    // Run the dialog and get the response
+    int result = dialog.run();
+    if (result == Gtk::RESPONSE_OK) {
+        currentMagnification = combo.get_active_text();
+        // TODO: Use the selected magnification value as needed
+        logger->info("Selected magnification: {}", currentMagnification);
+
+
+        double micronsPerPixel = getMicronsPerPixel(currentMagnification);
+        if (childwin) {
+            pthread_mutex_lock(&childwin->mutex);
+            childwin->micronsPerPixel = micronsPerPixel;
+            childwin->showScaleBar = true;
+            pthread_mutex_unlock(&childwin->mutex);
+        }
+
+    }
+  } else {
+    if (childwin) {
+      pthread_mutex_lock(&childwin->mutex);
+      childwin->showScaleBar = false;
+      pthread_mutex_unlock(&childwin->mutex);
+    }
+  }
+
+}
+
+
+double System::getMicronsPerPixel(const std::string& magnification) {
+    if (magnification == "12x") {
+        return 2.0; // Example value for 12x
+    } else if (magnification == "20x") {
+        return 1.8; //  value for 20x
+    } else if (magnification == "32x") {
+        return 1.15; // value for 32x
+    }
+    return 0.0; // Default or unknown magnification
+}
+
 void System::whenHoldFocusToggled(bool holdingFocus) {
   // TODO: Fix this
   if (holdingFocus) {
@@ -1646,6 +1721,12 @@ double System::getFPS() { return window.getFrameRateEntryBox(); }
 double System::getGamma() { return window.getGammaScaleBox(); }
 
 double System::getExposure() { return window.getExposureScaleBox(); }
+
+double System::getCurrentMicronsPerPixel() { return getMicronsPerPixel(currentMagnification); }
+
+const std::string System::getCurrentMagnification() {
+    return currentMagnification;
+}
 
 bool System::onCloseClicked(const GdkEventAny *event) {
   // CODE TO EXECUTE WHEN CLOSE BUTTON CLICKED

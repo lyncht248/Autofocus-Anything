@@ -49,6 +49,7 @@ static int lastClickX = 0, lastClickY = 0;
 static void handleDoubleClick(int x, int y);
 static void drawROIOverlay(SDL_Renderer *renderer);
 static void drawDepthMapOverlay(SDL_Renderer *renderer);
+static void drawScaleBarOverlay(SDL_Renderer *renderer);
 static void handleDoubleClickWithRenderer(int x, int y, SDL_Renderer *renderer);
 
 void convert_g8_to_rgb888(uint32_t *dst, const uint8_t *src, ssize_t n) {
@@ -136,6 +137,108 @@ static void handleDoubleClickWithRenderer(int x, int y,
   printf("[SDL Child] Double-click at screen (%d, %d) -> image (%d, %d)\n", x,
          y, (int)imageX, (int)imageY);
 }
+
+// Draw Scale bar
+static void drawScaleBarOverlay(SDL_Renderer *renderer) {
+    pthread_mutex_lock(&sdlwin->mutex);
+    bool showScaleBar = sdlwin->showScaleBar;
+    double micronsPerPixel = sdlwin->micronsPerPixel;
+    double zoomFactor = sdlwin->zoomFactor;
+    pthread_mutex_unlock(&sdlwin->mutex);
+
+
+    if (!showScaleBar)
+        return;
+
+  //double micronsPerPixel = 1.0;
+
+ // int barLengthPixels = 50;
+  //double barLengthMicrons = barLengthPixels * micronsPerPixel;
+
+  // Choose a real-world length for the scale bar (e.g., 100 microns)
+  double barLengthMicrons = 100.0;
+
+  // Calculate how many pixels this is at the current zoom
+  int barLengthPixels = (int)(barLengthMicrons / micronsPerPixel * zoomFactor);
+
+  int barHeight = 6;
+  int margin = 20;
+
+  // Get window size
+  int windowWidth, windowHeight;
+  SDL_GetRendererOutputSize(renderer, &windowWidth, &windowHeight);
+
+  // Position: bottom left
+  // int x = margin;
+  // int y = windowHeight - margin - barHeight;
+
+  // Show at bottom left of frame
+  // --- Calculate frame position and size (same as in redraw) ---
+  double xscale = ((double)windowWidth - BORDER_THRES * 2) / sdlwin->raster.w;
+  double yscale = ((double)windowHeight - BORDER_THRES * 2) / sdlwin->raster.h;
+  double arscale = xscale > yscale ? yscale : xscale;
+  double zoomedScale = arscale * sdlwin->zoomFactor;
+  double swidth = zoomedScale * sdlwin->raster.w;
+  double sheight = zoomedScale * sdlwin->raster.h;
+
+  double centerx = (windowWidth - swidth) / 2.0;
+  double centery = (windowHeight - sheight) / 2.0;
+  if (centerx < BORDER_THRES) centerx = BORDER_THRES;
+  if (centery < BORDER_THRES) centery = BORDER_THRES;
+
+  // Account for image panning/offsets
+  double frameX = centerx + zoomedScale * (sdlwin->raster.x + sdlwin->zoomOffsetX);
+  double frameY = centery + zoomedScale * (sdlwin->raster.y + sdlwin->zoomOffsetY);
+
+  // Calculate the visible region (displayed image)
+  int visibleX = (int)frameX;
+  int visibleY = (int)frameY;
+  int visibleW = (int)swidth;
+  int visibleH = (int)sheight;
+
+
+  // Draw the scale bar at the bottom-left of the visible image region
+  int x = visibleX + margin;
+  int y = visibleY + visibleH - margin - barHeight;
+
+  if (x < margin) x = margin;
+  if (x + barLengthPixels > windowWidth - margin)
+      x = windowWidth - margin - barLengthPixels;
+  if (y < margin) y = margin;
+  if (y + barHeight > windowHeight - margin)
+      y = windowHeight - margin - barHeight;
+
+  // Draw the bar (white)
+  SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+  SDL_Rect barRect = {x, y, barLengthPixels, barHeight};
+  SDL_RenderFillRect(renderer, &barRect);
+
+  // Draw border (black)
+  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+  SDL_RenderDrawRect(renderer, &barRect);
+
+
+
+
+
+
+
+  // Draw label (if SDL_ttf/font is available)
+  if (font) {
+      char label[64];
+      snprintf(label, sizeof(label), "%.0f um", barLengthMicrons);
+      SDL_Color textColor = {255, 255, 255, 255};
+      SDL_Surface *textSurface = TTF_RenderText_Solid(font, label, textColor);
+      if (textSurface) {
+          SDL_Texture *textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+          SDL_Rect textRect = {x + barLengthPixels + 10, y + barHeight/2 - textSurface->h/2, textSurface->w, textSurface->h};
+          SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
+          SDL_FreeSurface(textSurface);
+          SDL_DestroyTexture(textTexture);
+      }
+  }
+}
+
 
 // Add this function to draw the ROI overlay
 static void drawROIOverlay(SDL_Renderer *renderer) {
@@ -536,6 +639,10 @@ static inline void redraw(SDL_Renderer *renderer, SDL_Texture *frame,
 
   // Add depth map overlay
   drawDepthMapOverlay(renderer);
+
+
+  // Scale bar overlay
+  drawScaleBarOverlay(renderer);
 }
 
 static SDL_HitTestResult hit_test(SDL_Window *window, const SDL_Point *pt,

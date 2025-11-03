@@ -311,7 +311,7 @@ MainWindow::MainWindow()
       homePositionScale(-14.0, 0.0, 0.1, -9.1, 4, 100),
       pGainScale(0, 100, 1, 12, 4, 100), outOfBoundsWarningLabel(""),
       recordButton(), backToStartButton(), pauseButton(), playButton(),
-      resetButton("Reset All"), recenterButton("Recenter"),
+      resetButton("Reset All"), scaleBarToggle("Scale bar"), recenterButton("Recenter"),
       fileLoadButton("Load"), fileSaveButton("Save"), settingsButton(),
       frameRateEntry(), enterButton("Enter"), liveToggle(),
       // makeMapToggle("Make Map"),
@@ -685,6 +685,10 @@ MainWindow::MainWindow()
   resetButton.set_tooltip_text("Reset all: lens, focus modes, stabilization, "
                                "depth mapping, and ROI tracking");
 
+  scaleBarToggle.signal_clicked().connect(
+      sigc::mem_fun(*this, &MainWindow::onScaleBarToggled));
+  scaleBarToggle.set_tooltip_text("Add a scale bar");
+
   recenterButton.signal_clicked().connect(
       sigc::mem_fun(*this, &MainWindow::onRecenterClicked));
   recenterButton.set_tooltip_text("Recenter the rendered video frames");
@@ -816,6 +820,7 @@ MainWindow::MainWindow()
   priv->controlGrid.attach(holdFocusToggle, 1, 1);
   priv->controlGrid.attach(threedStabToggle, 1, 2);
   priv->controlGrid.attach(resetButton, 1, 3);
+  priv->controlGrid.attach(scaleBarToggle, 2, 3);
 
   priv->controlGrid.attach(priv->space4[1], 2, 0);
 
@@ -1059,6 +1064,10 @@ MainWindow::SignalFindFocusClicked MainWindow::signalFindFocusClicked() {
 
 MainWindow::SignalResetClicked MainWindow::signalResetClicked() {
   return sigResetClicked;
+}
+
+MainWindow::SignalScaleBarToggled MainWindow::signalScaleBarToggled() {
+  return sigScaleBarToggled;
 }
 
 MainWindow::SignalRecenterClicked MainWindow::signalRecenterClicked() {
@@ -1463,6 +1472,16 @@ void MainWindow::onRecenterClicked() {
   }
 }
 
+void MainWindow::onScaleBarToggled() {
+  bool active = scaleBarToggle.get_active();
+  scaleBarActive.setValue(active); // <-- update the Condition
+  signalScaleBarToggled().emit();
+  if (bMainWindowLogFlag) {
+      logger->info("[MainWindow::onScaleBarToggled] Scale Bar toggled");
+  }
+  
+}
+
 void MainWindow::bufferFilled() {
   loading.setValue(false);
   recording.setValue(false);
@@ -1857,6 +1876,8 @@ Condition &MainWindow::getFindFocusActive() {
 Condition &MainWindow::getViewDepthsActive() { return viewDepthsActive; }
 
 Condition &MainWindow::getGetDepthsActive() { return getDepthsActive; }
+
+Condition &MainWindow::getScaleBarActive() { return scaleBarActive; }
 
 void MainWindow::onGetDepthsClicked() {
   sigGetDepthsClicked.emit();
