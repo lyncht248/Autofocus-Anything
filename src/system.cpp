@@ -1364,11 +1364,11 @@ void System::onScaleBarToggled() {
 
 double System::getMicronsPerPixel(const std::string& magnification) {
     if (magnification == "12x") {
-        return 2.0; // Example value for 12x
+        return 2.948; // value for 12x
     } else if (magnification == "20x") {
-        return 1.8; //  value for 20x
+        return 1.808; //  value for 20x
     } else if (magnification == "32x") {
-        return 1.15; // value for 32x
+        return 1.144; // value for 32x
     }
     return 0.0; // Default or unknown magnification
 }

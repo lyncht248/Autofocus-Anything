@@ -128,6 +128,9 @@ public:
    */
   int computeBestFocusVeryReduced(cv::Mat image, int imgHeight, int imgWidth);
 
+
+  std::vector<double> computeBestFocusReducedHorizontal(cv::Mat image, int imgHeight, int imgWidth);
+
   /**
    * @brief Adjusts the best focus location.
    *
