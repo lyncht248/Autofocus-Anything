@@ -46,7 +46,8 @@ bool bSaveImages =
 bool bSaveSharpnessCurves =
     1; // Saves text files with the sharpness curve data, similar to above
 bool bSaveSharpnessCurves2 =
-    0; // Saves text files with the sharpness curve data, similar to above
+    0; // Saves text files with the sharpness curve data (no column means, saves
+       // sharpest point in each row)
 
 bool bSaveAllImages = 0; // Saves all images, not just during autofocus-ing
 bool bRunGaussian = 1;          // For testing new Gaussian method
@@ -1916,7 +1917,16 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
   cv::reduce(sharpness_float_reduced, columnMeansMatrixReduced, 0, cv::REDUCE_AVG, CV_64F);
   std::vector<double> columnMeansReduced;
   columnMeansMatrixReduced.copyTo(columnMeansReduced);
+
+
+  // Set the first value equal to the second
+  if (columnMeansReduced.size() > 1) {
+      columnMeansReduced[0] = columnMeansReduced[1];
+  }
+
   auto columnReducedEnd = std::chrono::high_resolution_clock::now();
+
+  
 
 
   // Compute ratio - 1
@@ -1989,9 +1999,9 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
   double mu = -coeff_b / (2 * c);
   auto gaussianFitEnd = std::chrono::high_resolution_clock::now();
   std::cout << "Estimated mu (Gaussian fit): " << mu << std::endl;
-  std::cout << "b: " << coeff_b << ", c: " << c << std::endl;
-  std::cout << "Range of sharpness curve: min = " << *std::min_element(sharpnesscurve.begin(), sharpnesscurve.end())
-            << ", max = " << *std::max_element(sharpnesscurve.begin(), sharpnesscurve.end()) << std::endl;
+  // std::cout << "b: " << coeff_b << ", c: " << c << std::endl;
+  // std::cout << "Range of sharpness curve: min = " << *std::min_element(sharpnesscurve.begin(), sharpnesscurve.end())
+  //           << ", max = " << *std::max_element(sharpnesscurve.begin(), sharpnesscurve.end()) << std::endl;
 
   // Save range of values after each stage for debugging
   if (bSaveSharpnessCurves) {
@@ -2109,7 +2119,7 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
       try {
         // Create graph image with same width as resized image
         int graphHeight = 200;
-        int graphWidth = lastSharpnessCurve.size();
+        int graphWidth = colorResized.cols;
         cv::Mat graphImage =
             cv::Mat::zeros(graphHeight, graphWidth, CV_8UC3);
 
@@ -2255,6 +2265,7 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
                                     std::round(mu))) +
                                 ".png";
         cv::imwrite(FilePath, colorResized);
+        std::cout << "Error combining images: " << e.what() << std::endl;
       }
     } else {
       // Just save the original image if no curve data
