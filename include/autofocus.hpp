@@ -117,7 +117,7 @@ public:
   double computeBestFocusReduced(cv::Mat image, int imgHeight, int imgWidth);
 
 
-
+  double computeBestFocusRatioGaussian(cv::Mat image, int imgHeight, int imgWidth);
   double computeBestFocusGaussian(cv::Mat image, int imgHeight, int imgWidth);
 
   /**
