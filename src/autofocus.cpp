@@ -25,6 +25,15 @@
 #include <unistd.h>
 // #include <gtk/gtk.h>
 
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <gsl/gsl_vector.h>
+// #include <gsl/gsl_matrix.h>
+// #include <gsl/gsl_blas.h>
+// #include <gsl/gsl_multilarge_nlinear.h>
+// #include <gsl_gsl_spblas.h>
+// #include <gsl/gsl_spmatrix.h>
+
 #include "opencv2/highgui/highgui.hpp"
 
 #include "settings.hpp"
@@ -41,7 +50,7 @@ std::atomic<bool> bNewImage = 0; // Flag that is 1 for when the buffer image is
 
 const long img_size = 1280 * 960; // Replace with actual image size
 bool bSaveImages =
-    0; // Saves images from the tilted camera to output folder. WARNING: will
+    1; // Saves images from the tilted camera to output folder. WARNING: will
        // produce enourmous number of images and slow down the system!
 bool bSaveSharpnessCurves =
     0; // Saves text files with the sharpness curve data, similar to above
@@ -49,8 +58,8 @@ bool bSaveSharpnessCurves2 =
     0; // Saves text files with the sharpness curve data (no column means, saves
        // sharpest point in each row)
 
-bool bSaveAllImages = 1; // Saves all images, not just during autofocus-ing
-bool bRunGaussian = 1;          // For testing new Gaussian method
+bool bSaveAllImages = 0; // Saves all images, not just during autofocus-ing
+bool bRunGaussian = 0;          // For testing new Gaussian method
 bool bBlinking = 0;
 
 unsigned char *img_buf =
@@ -78,6 +87,7 @@ int increment3 = 0;
 
 
 std::vector<double> lastSharpnessCurve;
+std::vector<double> lastXIndices;
 std::vector<double> lastFittedCurve;
 
 static int totalFramesCaptured = 0;
@@ -144,15 +154,15 @@ bool autofocus::initialize() {
     leastSquaresBenchmarkFile.close();
   }
 
-  std::ofstream inverseBenchmarkFile(
-      "../output/focus_benchmark_inverse.csv");
-  if (inverseBenchmarkFile.is_open()) {
-    inverseBenchmarkFile
+  std::ofstream iterativeBenchmarkFile(
+      "../output/focus_benchmark_iterative.csv");
+  if (iterativeBenchmarkFile.is_open()) {
+    iterativeBenchmarkFile
         << "timestamp,total_time_us,resize_time_us,roberts_time_us,column_time_us,"
-           "offset_time_us,gaussian_fit_time_us,"
+           "offset_time_us,rescale_time,gaussian_fit_time_us,"
            "mu_values"
         << std::endl;
-    inverseBenchmarkFile.close();
+    iterativeBenchmarkFile.close();
   }
 
 
@@ -488,6 +498,9 @@ void autofocus::run() {
                 double yAxisMax = maxSharpness;
                 double maxVal = yAxisMax;
 
+                // double x_min = *std::min_element(lastXIndices.begin(), lastXIndices.end());
+                // double x_max = *std::max_element(lastXIndices.begin(), lastXIndices.end());
+
 
                 if (maxVal <= 0)
                   maxVal = 1.0;
@@ -495,8 +508,17 @@ void autofocus::run() {
                 // Draw sharpness curve (blue) - map curve indices to correct x
                 // positions
                 for (size_t i = 1; i < lastSharpnessCurve.size(); i++) {
-                  int x1 = (i - 1);
-                  int x2 = (i);
+                  int x1, x2;
+
+                  // If we have specific x indices, use them
+                  if (!lastXIndices.empty()) {
+                    x1 = lastXIndices[i - 1];
+                    x2 = lastXIndices[i];
+                  } else {
+                    x1 = (i - 1);
+                    x2 = i;
+                  }
+
 
                   // Only draw if within graph bounds
                   if (x1 >= 0 && x2 < graphWidth) {
@@ -530,7 +552,7 @@ void autofocus::run() {
               std::string rangeText =
                   "Range: " + std::to_string(range).substr(0, 6);
               std::string comText =
-                  "COM: " + std::to_string(locBestFocusDouble).substr(0, 8);
+                  "LoBF index: " + std::to_string(locBestFocusDouble).substr(0, 8);
               std::string sharpnessText = "LoBF sharpness: " + std::to_string(sharpnessAtBest).substr(0, 8);
               
 
@@ -538,7 +560,7 @@ void autofocus::run() {
               cv::putText(graphImage, "Sharpness Curve", cv::Point(10, 20),
                           cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 0, 0),
                           1);
-              cv::putText(graphImage, "Center of Mass", cv::Point(10, 40),
+              cv::putText(graphImage, "Location of Best Focus", cv::Point(10, 40),
                           cv::FONT_HERSHEY_SIMPLEX, 0.5,
                           cv::Scalar(255, 255, 0), 1);
 
@@ -571,17 +593,18 @@ void autofocus::run() {
               //         cv::Point(0, graphHeight - 50),
               //         cv::Scalar(200, 200, 200), 1);
 
-
+              double x_min = *std::min_element(lastXIndices.begin(), lastXIndices.end());
+              double x_max = *std::max_element(lastXIndices.begin(), lastXIndices.end());
               // Draw x-axis ticks and optional labels
               for (int i = 0; i <= numXTicks; ++i) {
-                  int x = i * (graphWidth - 1) / numXTicks;
-                  cv::line(graphImage, cv::Point(x, graphHeight - 1), 
-                          cv::Point(x, graphHeight - 1 - tickLength), 
-                          cv::Scalar(200, 200, 200), 1);
-                  int labelValue = i * (curveWidth - 1) / numXTicks;
-                  cv::putText(graphImage, std::to_string(labelValue), 
-                              cv::Point(x + 2, graphHeight - 1 - 5), 
-                              cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
+                double xValue = x_min + (x_max - x_min) * i / numXTicks;
+                int x = static_cast<int>(xValue);
+                cv::line(graphImage, cv::Point(x, graphHeight - 1), 
+                        cv::Point(x, graphHeight - 1 - tickLength), 
+                        cv::Scalar(200, 200, 200), 1);
+                cv::putText(graphImage, std::to_string(static_cast<int>(xValue)), 
+                            cv::Point(x + 2, graphHeight - 1 - 5), 
+                            cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
               }
 
               for (int i = 0; i <= numYTicks; ++i) {
@@ -664,13 +687,14 @@ void autofocus::run() {
         double fps = timeDiff > 0 ? 1000.0 / timeDiff : 0.0;
 
         // // Output to console for every frame
-        std::cout << "locBestFocus: " << locBestFocusDouble
-                  << ", desiredLocBestFocus: " << desiredLocBestFocus
-                  << ", FPS: " << std::fixed << std::setprecision(1) << fps
-                  << std::endl;
+        // std::cout << "locBestFocus: " << locBestFocusDouble
+        //           << ", desiredLocBestFocus: " << desiredLocBestFocus
+        //           << ", FPS: " << std::fixed << std::setprecision(1) << fps
+        //           << std::endl;
 
         lastTime = currentTime;
 
+     
         // Use the reduced resolution result for all autofocus logic
         if (bSaveImages) {
           // Apply CLAHE to the image for saving (same as used in
@@ -724,6 +748,12 @@ void autofocus::run() {
           //   }
           // }
 
+
+          
+
+
+         
+
           cv::Mat combined;
 
           // Draw graph if we have curve data
@@ -767,8 +797,16 @@ void autofocus::run() {
               // Draw sharpness curve (blue) - map curve indices to correct x
               // positions
               for (size_t i = 1; i < lastSharpnessCurve.size(); i++) {
-                int x1 = (i - 1);
-                int x2 = i;
+                int x1, x2;
+
+                // If we have specific x indices, use them
+                if (!lastXIndices.empty()) {
+                  x1 = lastXIndices[i - 1];
+                  x2 = lastXIndices[i];
+                } else {
+                  x1 = (i - 1);
+                  x2 = i;
+                }
 
                 // Only draw if within graph bounds
                 if (x1 >= 0 && x2 < graphWidth) {
@@ -800,7 +838,7 @@ void autofocus::run() {
               std::string rangeText =
                   "Range: " + std::to_string(range).substr(0, 6);
               std::string comText =
-                  "COM: " + std::to_string(locBestFocusDouble).substr(0, 8);
+                  "LoBF index: " + std::to_string(locBestFocusDouble).substr(0, 8);
               std::string sharpnessText = "LoBF sharpness: " + std::to_string(sharpnessAtBest).substr(0, 8);
               
 
@@ -808,7 +846,7 @@ void autofocus::run() {
               cv::putText(graphImage, "Sharpness Curve", cv::Point(10, 20),
                           cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 0, 0),
                           1);
-              cv::putText(graphImage, "Center of Mass", cv::Point(10, 40),
+              cv::putText(graphImage, "Location of Best Focus", cv::Point(10, 40),
                           cv::FONT_HERSHEY_SIMPLEX, 0.5,
                           cv::Scalar(255, 255, 0), 1);
 
@@ -833,14 +871,14 @@ void autofocus::run() {
 
               // Draw x-axis ticks and optional labels
               for (int i = 0; i <= numXTicks; ++i) {
-                  int x = i * (graphWidth - 1) / numXTicks;
-                  cv::line(graphImage, cv::Point(x, graphHeight - 1), 
-                          cv::Point(x, graphHeight - 1 - tickLength), 
-                          cv::Scalar(200, 200, 200), 1);
-                  int labelValue = i * (curveWidth - 1) / numXTicks;
-                  cv::putText(graphImage, std::to_string(labelValue), 
-                              cv::Point(x + 2, graphHeight - 1 - 5), 
-                              cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
+                double xValue = x_min + (x_max - x_min) * i / numXTicks;
+                int x = static_cast<int>(xValue);
+                cv::line(graphImage, cv::Point(x, graphHeight - 1), 
+                        cv::Point(x, graphHeight - 1 - tickLength), 
+                        cv::Scalar(200, 200, 200), 1);
+                cv::putText(graphImage, std::to_string(static_cast<int>(xValue)), 
+                            cv::Point(x + 2, graphHeight - 1 - 5), 
+                            cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
               }
 
               for (int i = 0; i <= numYTicks; ++i) {
@@ -1910,18 +1948,19 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
   // cv::filter2D(resized, img_y, CV_32F, roberts_kernely);
   cv::filter2D(resized, img_x, CV_16S, roberts_kernelx);
   cv::filter2D(resized, img_y, CV_16S, roberts_kernely);
-  // cv::Mat img_x_squared, img_y_squared, sum_xy;
-  // cv::multiply(img_x, img_x, img_x_squared);
-  // cv::multiply(img_y, img_y, img_y_squared);
-  // cv::add(img_x_squared, img_y_squared, sum_xy);
-  // cv::Mat sharpness_float;
-  // sum_xy.convertTo(sharpness_float, CV_32F);
-  cv::Mat img_x_abs, img_y_abs, sum_xy, sharpness_float;
-  img_x_abs = cv::abs(img_x);
-  img_y_abs = cv::abs(img_y);
-  cv::add(img_x_abs, img_y_abs, sum_xy);
+  cv::Mat img_x_squared, img_y_squared, sum_xy;
+  cv::multiply(img_x, img_x, img_x_squared);
+  cv::multiply(img_y, img_y, img_y_squared);
+  cv::add(img_x_squared, img_y_squared, sum_xy);
+  cv::Mat sharpness_float;
   sum_xy.convertTo(sharpness_float, CV_32F);
   auto robertsEnd = std::chrono::high_resolution_clock::now();
+
+  // Print largest value in sharpness_float for debugging
+  // std::cout << "Max sharpness value: ";
+  // double minVal, maxVal;
+  // cv::minMaxLoc(sharpness_float, &minVal, &maxVal);
+  // std::cout << maxVal << std::endl;
 
  
 
@@ -1934,9 +1973,16 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
   columnMeansMatrix.copyTo(columnMeans);
   auto columnEnd = std::chrono::high_resolution_clock::now();
 
+
+  // std::cout << "Max column mean value : ";
+  // double minColVal, maxColVal;
+  // cv::Mat columnMeansMat(columnMeans);
+  // cv::minMaxLoc(columnMeansMat, &minColVal, &maxColVal);
+  // std::cout << maxColVal << std::endl;
+
   // Compute offset
   auto offsetStart = std::chrono::high_resolution_clock::now();
-  const int offsetWindow = 100;
+  const int offsetWindow = 50;
   double offset_left = 0.0, offset_right = 0.0;
   if (columnMeans.size() >= offsetWindow) {
       offset_left = std::accumulate(columnMeans.begin(), columnMeans.begin() + offsetWindow, 0.0) / offsetWindow;
@@ -1951,28 +1997,89 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
 
   // Choose smallest offset and subtract, omitting negative values
   double offset = std::min(offset_left, offset_right);
-  std::vector<double> sharpnesscurve;
-  sharpnesscurve.reserve(columnMeans.size());
-  for (const double& v : columnMeans) {
-    double val = v - offset;
-    if (val >= 0.0) {
-      sharpnesscurve.push_back(val);
+  // std::vector<double> sharpnesscurve;
+  // sharpnesscurve.reserve(columnMeans.size());
+  // for (const double& v : columnMeans) {
+  //   double val = v - offset;
+  //   if (val >= 0.0) {
+  //     sharpnesscurve.push_back(val);
+  //   }
+  // }
+
+  std::vector<std::pair<double, double>> xy_pairs;
+  xy_pairs.reserve(columnMeans.size());
+  for (size_t i = 0; i < columnMeans.size(); ++i) {
+    double x = static_cast<double>(i);
+    double y = columnMeans[i] - offset;
+    if (y >= 0.0) {
+      xy_pairs.emplace_back(x, y);
     }
   }
+
   auto offsetEnd = std::chrono::high_resolution_clock::now();
 
- // Rescale x to range [-0.5, 0.5], and y to [0, 1]
-  // auto rescaleStart = std::chrono::high_resolution_clock::now();
-  // lastSharpnessCurve = sharpnesscurve;
-  // int N = static_cast<int>(sharpnesscurve.size());
-  // std::vector<double> x_values(N);
-  // double max_sharpness = *std::max_element(sharpnesscurve.begin(), sharpnesscurve.end());
-  // for (int i = 0; i < N; ++i) {
-  //   x_values[i] = static_cast<double>(i) / (N - 1) - 0.5; // x in [-0.5, 0.5]
-  //  // sharpnesscurve[i] /= max_sharpness; // y in [0, 1]
-  // }
-  // auto rescaleEnd = std::chrono::high_resolution_clock::now();
+  
 
+  // Rescale x to range [-0.5, 0.5], (and maybe y to [0, 1]?)
+  auto rescaleStart = std::chrono::high_resolution_clock::now();
+  // std::vector<double> y_values;
+  // y_values.reserve(xy_pairs.size());
+  // for (const auto& p : xy_pairs) {
+  //     y_values.push_back(p.second);
+  // }
+  double max_sharpness = xy_pairs.empty() ? 1.0 :
+      std::max_element(xy_pairs.begin(), xy_pairs.end(),
+          [](const std::pair<double, double>& a, const std::pair<double, double>& b) {
+              return a.second < b.second;
+          })->second;
+
+  // std::cout << "Max sharpness after offset: " << max_sharpness << std::endl;
+  // std::cout << "Offset value subtracted: " << offset << std::endl;
+
+  int N = static_cast<int>(xy_pairs.size());
+
+  std::vector<double> x_values(N);
+
+  // Rescale y to [0,1]
+  for (int i = 0; i < N; ++i) {
+    xy_pairs[i].second /= max_sharpness; // y in [0, 1]
+  }
+
+
+  // Save values for plotting
+  if (bSaveImages) {
+    lastSharpnessCurve.clear();
+    lastXIndices.clear();
+    for (const auto& p : xy_pairs) {
+      lastSharpnessCurve.push_back(p.second);
+      lastXIndices.push_back(p.first);
+    }
+  }
+
+  // Rescale x in [-0.5, 0.5]
+  for (int i = 0; i < N; ++i) {
+    xy_pairs[i].first = static_cast<double>(i) / (N - 1) - 0.5; // x in [-0.5, 0.5]
+  }
+
+  auto rescaleEnd = std::chrono::high_resolution_clock::now();
+
+
+  // Print min and max x value
+  // std::cout << "X range after rescaling: ";
+  // if (!xy_pairs.empty()) {
+  //   double min_x = xy_pairs.front().first;
+  //   double max_x = xy_pairs.back().first;
+  //   std::cout << min_x << " to " << max_x << std::endl;
+  // }
+
+  // Max sharpness
+  // std::cout << "Max sharpness after offset and rescale: ";
+  // double max_sharpness_final = xy_pairs.empty() ? 0.0 :
+  //     std::max_element(xy_pairs.begin(), xy_pairs.end(),
+  //         [](const std::pair<double, double>& a, const std::pair<double, double>& b) {
+  //             return a.second < b.second;
+  //         })->second;
+  // std::cout << max_sharpness_final << std::endl;
 
   // Iterative Gaussian fit (weighted least squares)
   auto gaussianFitStart = std::chrono::high_resolution_clock::now();
@@ -1983,7 +2090,7 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
   std::vector<double> muValues;
   double mu_prev = std::numeric_limits<double>::quiet_NaN();
 
-  cv::Mat ln_y;
+
   double coeff_a = 0.0, coeff_b = 0.0, coeff_c = 0.0;
 
   for (int iter = 0; iter < maxIterations; ++iter) {
@@ -1995,32 +2102,37 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
 
     
 
-    for (int i = 0; i < sharpnesscurve.size(); ++i) {
+    for (int i = 0; i < N; ++i) {
 
-      double ln_y = std::log(sharpnesscurve[i]);
-      double x = static_cast<double>(i);
+      double ln_y = std::log(xy_pairs[i].second);
+      // Not normalized
+      // double x = static_cast<double>(i);
+
+      // Normalized to [-0.5, 0.5]
+      double x_val = xy_pairs[i].first;
+
       double y;
 
       if (iter == 0) {
-        y = sharpnesscurve[i];
+        y = xy_pairs[i].second;
       } else {
-        y = std::exp(coeff_a + coeff_b * x + coeff_c * x * x);
+        y = std::exp(coeff_a + coeff_b * x_val + coeff_c * x_val * x_val);
       }
 
       
       double y2 = y * y;
-      double x2 = x * x;
-      double x3 = x2 * x;
+      double x2 = x_val * x_val;
+      double x3 = x2 * x_val;
       double x4 = x2 * x2;
 
       a11 += y2;
-      a12 += x * y2;
+      a12 += x_val * y2;
       a13 += x2 * y2;
       a23 += x3 * y2;
       a33 += x4 * y2;
 
       b_11 += y2 * ln_y;
-      b_12 += x * y2 * ln_y;
+      b_12 += x_val * y2 * ln_y;
       b_13 += x2 * y2 * ln_y;
     }
   
@@ -2051,10 +2163,10 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
     // // // or hard-code inverse
     // double det = cv::determinant(A);
 
-    // // double det =
-    // //     a11 * (a22 * a33 - a23 * a32)
-    // //   - a12 * (a21 * a33 - a23 * a31)
-    // //   + a13 * (a21 * a32 - a22 * a31);
+    // double det =
+    //     a11 * (a22 * a33 - a23 * a32)
+    //   - a12 * (a21 * a33 - a23 * a31)
+    //   + a13 * (a21 * a32 - a22 * a31);
 
     // cv::Mat A_inv = (1.0 / det) * (cv::Mat_<double>(3, 3) <<
     //     (a22 * a33 - a23 * a32),
@@ -2085,23 +2197,30 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
     double coeff_b = x.at<double>(1, 0);
     double coeff_c = x.at<double>(2, 0);
     double mu = -coeff_b / (2 * coeff_c);
-    muValues.push_back(mu);
 
-
+    // Scale back to original index to save
+    double mu_index = (mu + 0.5) * (N - 1);
+    muValues.push_back(mu_index);
 
     // Early stopping: check relative change in mu
-    if (iter > 0 && std::abs(mu - mu_prev) / std::abs(mu_prev) < 0.001) {
-      std::cout << "Early stopping at iteration " << iter << std::endl;
-      break; // Change less than 0.1%, stop early
-    }
+    // if (iter > 0 && std::abs(mu - mu_prev) / std::abs(mu_prev) < 0.001) {
+    //   //std::cout << "Early stopping at iteration " << iter << std::endl;
+    //   break; // Change less than 0.1%, stop early
+    // }
     mu_prev = mu;
-    auto gaussianFitEnd = std::chrono::high_resolution_clock::now();
+
 
   }
   auto gaussianFitEnd = std::chrono::high_resolution_clock::now();
 
 
-
+  //Print min and max x value after rescaling
+  // std::cout << "X range after rescaling back: ";
+  // if (!xy_pairs.empty()) {
+  //   double min_x = xy_pairs.front().first; 
+  //   double max_x = xy_pairs.back().first;
+  //   std::cout << min_x << " to " << max_x << std::endl;
+  // }
 
 
   auto estEnd = std::chrono::high_resolution_clock::now();
@@ -2119,29 +2238,32 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
       columnEnd - columnStart);
   auto offsetTime = std::chrono::duration_cast<std::chrono::microseconds>(
       offsetEnd - offsetStart);
+  auto rescaleTime = std::chrono::duration_cast<std::chrono::microseconds>(
+      rescaleEnd - rescaleStart);
   auto gaussianFitTime = std::chrono::duration_cast<std::chrono::microseconds>(
       gaussianFitEnd - gaussianFitStart);
   
   try {
-    std::ofstream inverseBenchmarkFile("../output/focus_benchmark_inverse.csv",
+    std::ofstream iterativeBenchmarkFile("../output/focus_benchmark_iterative.csv",
                                        std::ios::app);
-    if (inverseBenchmarkFile.is_open() && inverseBenchmarkFile.good()) {
+    if (iterativeBenchmarkFile.is_open() && iterativeBenchmarkFile.good()) {
       auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                            std::chrono::system_clock::now().time_since_epoch())
                            .count();
       // keep CSV header compatibility: write estimator time in the
       // "com_time_us" column
-      inverseBenchmarkFile << timestamp << "," << totalTime.count() << ","
+      iterativeBenchmarkFile << timestamp << "," << totalTime.count() << ","
                           << resizeTime.count() << "," << robertsTime.count()
                           << "," << columnTime.count() << ","
-                          << offsetTime.count() << "," << gaussianFitTime.count() << ",";
+                          << offsetTime.count() << "," << rescaleTime.count() << ","
+                          << gaussianFitTime.count() << ",";
 
       // Write all mu values for each iteration, separated by semicolon
       for (size_t i = 0; i < muValues.size(); ++i) {
-          inverseBenchmarkFile << muValues[i];
-          if (i < muValues.size() - 1) inverseBenchmarkFile << ";";
+          iterativeBenchmarkFile << muValues[i];
+          if (i < muValues.size() - 1) iterativeBenchmarkFile << ";";
       }
-      inverseBenchmarkFile << std::endl;
+      iterativeBenchmarkFile << std::endl;
     }
   } catch (...) { /* ignore */
   }
@@ -2152,6 +2274,49 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
   //     std::cout << mu << " ";
   // }
   // std::cout << std::endl;
+
+
+
+    std::string FileName = "GAUSSIAN_FIT_" + std::to_string(increment2);
+
+    if (bSaveSharpnessCurves) {
+    // UNCOMMENT TO SAVE TXT FILES
+    std::string FileName = "TESTING_GAUSSIAN_" + std::to_string(increment3);
+    std::string TextFile1 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_resized.txt";
+    std::string TextFile2 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_robertscross.txt";
+    // std::string TextFile3 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_reduced_robertscross.txt";
+    // std::string TextFile4 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_column_means.txt";
+    // std::string TextFile5 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_reduced_column_means.txt";
+    // std::string TextFile6 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_sharpnesscurve.txt";
+    std::ofstream outputFile1(TextFile1);
+    std::ofstream outputFile2(TextFile2);
+    // std::ofstream outputFile3(TextFile3);
+    // std::ofstream outputFile4(TextFile4);
+    // std::ofstream outputFile5(TextFile5);
+    // std::ofstream outputFile6(TextFile6);
+
+
+    std::ostream_iterator<double> output_iterator(outputFile1, ", ");
+    for (int i = 0; i < resized.rows; ++i) {
+      const uchar* row_ptr = resized.ptr<uchar>(i);
+      for (int j = 0; j < resized.cols; ++j) {
+        outputFile1 << static_cast<double>(row_ptr[j]) << ", ";
+      }
+    }
+    outputFile1 << "\n";
+
+    std::ostream_iterator<double> output_iterator2(outputFile2, ", ");
+    for (int i = 0; i < sharpness_float.rows; ++i) {
+      const float* row_ptr = sharpness_float.ptr<float>(i);
+      for (int j = 0; j < sharpness_float.cols; ++j) {
+        outputFile2 << static_cast<double>(row_ptr[j]) << ", ";
+      }
+    }
+    outputFile2 << "\n";
+
+    outputFile1.close();
+    outputFile2.close();
+  }
 
 
   return muValues.back();
