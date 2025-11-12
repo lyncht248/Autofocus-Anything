@@ -869,6 +869,8 @@ void autofocus::run() {
               // Draw y-axis (vertical line at the left)
               cv::line(graphImage, cv::Point(0, 0), cv::Point(0, graphHeight - 1), cv::Scalar(200, 200, 200), 1);
 
+              double x_min = *std::min_element(lastXIndices.begin(), lastXIndices.end());
+              double x_max = *std::max_element(lastXIndices.begin(), lastXIndices.end());
               // Draw x-axis ticks and optional labels
               for (int i = 0; i <= numXTicks; ++i) {
                 double xValue = x_min + (x_max - x_min) * i / numXTicks;
