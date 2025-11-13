@@ -371,7 +371,7 @@ private:
    */
   double Kd;
 
-  PeakLocator m_peakLocator = PeakLocator::TruncatedGaussian;
+  PeakLocator m_peakLocator = PeakLocator::GaussianFitBrute;
 
   // Power-COM parameters
   int m_powerExponent = 4;          // default ^4
