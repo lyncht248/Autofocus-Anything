@@ -12,7 +12,7 @@
 #include <iomanip>
 #include <stdexcept>
 
-bool bLensLogFlag = 1;
+bool bLensLogFlag = 0;
 bool bLensLogFlagSave = 0;
 
 lens::lens()

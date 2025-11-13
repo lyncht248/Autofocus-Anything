@@ -1925,6 +1925,7 @@ void MainWindow::whenViewDepthsToggled(bool viewingDepths) {
 bool MainWindow::on_key_press_event(GdkEventKey *event) {
   if (event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter) {
     enterButton.clicked(); // Simulate a click on the enterButton
+    enterButton.grab_focus(); // moves focus to the button, hides the cursor in the entry
     return true;           // Event handled
   }
   return Gtk::Window::on_key_press_event(

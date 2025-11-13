@@ -116,6 +116,10 @@ public:
    */
   double computeBestFocusReduced(cv::Mat image, int imgHeight, int imgWidth);
 
+
+  double computeBestFocusRatioGaussian(cv::Mat image, int imgHeight, int imgWidth);
+  double computeBestFocusGaussian(cv::Mat image, int imgHeight, int imgWidth);
+
   /**
    * @brief Computes the best focus at very reduced resolution.
    *
@@ -127,6 +131,9 @@ public:
    * @return Best focus location.
    */
   int computeBestFocusVeryReduced(cv::Mat image, int imgHeight, int imgWidth);
+
+
+  std::vector<double> computeBestFocusReducedHorizontal(cv::Mat image, int imgHeight, int imgWidth);
 
   /**
    * @brief Adjusts the best focus location.
@@ -340,6 +347,9 @@ private:
    */
   cv::Mat roberts_kernelx;
   cv::Mat roberts_kernely;
+
+  cv::Mat reduced_roberts_kernelx;;
+  cv::Mat reduced_roberts_kernely;
 
   /**
    * @brief Stores the center of mass for visualization.

@@ -122,7 +122,8 @@ namespace SDLWindow
         bool searchComplete; /**< Flag indicating whether the search is complete. */
 
         // Scale bar parameters
-        double micronsPerPixel = 1.0; /**< Microns per pixel scaling factor for distance measurements. */
+        // double micronsPerPixel = 1.0; /**< Microns per pixel scaling factor for distance measurements. */
+        double micronsPerPixel; /**< Microns per pixel scaling factor for distance measurements. */
         bool showScaleBar; /**< Flag indicating whether to show the scale bar. */
 
 		// Stabilization offset for ROI display

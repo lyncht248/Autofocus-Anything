@@ -26,7 +26,7 @@
 #include <string>
 #include <thread>
 
-bool bSystemLogFlag = 1;         // 1 = log, 0 = no log
+bool bSystemLogFlag = 0;         // 1 = log, 0 = no log
 bool bSystemQueueLengthFlag = 0; // 1 = log, 0 = no log
 bool bSystemFramesFlag =
     0; // Used to track how each frame passes through the system
@@ -1364,11 +1364,11 @@ void System::onScaleBarToggled() {
 
 double System::getMicronsPerPixel(const std::string& magnification) {
     if (magnification == "12x") {
-        return 2.0; // Example value for 12x
+        return 2.939; // value for 12x
     } else if (magnification == "20x") {
-        return 1.8; //  value for 20x
+        return 1.815; //  value for 20x
     } else if (magnification == "32x") {
-        return 1.15; // value for 32x
+        return 1.165; // value for 32x
     }
     return 0.0; // Default or unknown magnification
 }

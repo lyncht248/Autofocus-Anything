@@ -157,9 +157,12 @@ static void drawScaleBarOverlay(SDL_Renderer *renderer) {
 
   // Choose a real-world length for the scale bar (e.g., 100 microns)
   double barLengthMicrons = 100.0;
+ // double barLengthPixels = 100;
+  //double barLengthMicrons = barLengthPixels * micronsPerPixel * zoomFactor;
 
   // Calculate how many pixels this is at the current zoom
-  int barLengthPixels = (int)(barLengthMicrons / micronsPerPixel * zoomFactor);
+  int barLengthPixels = (int)(barLengthMicrons / micronsPerPixel);
+
 
   int barHeight = 6;
   int margin = 20;
@@ -167,6 +170,8 @@ static void drawScaleBarOverlay(SDL_Renderer *renderer) {
   // Get window size
   int windowWidth, windowHeight;
   SDL_GetRendererOutputSize(renderer, &windowWidth, &windowHeight);
+  // std::cout << "Window width: " << windowWidth << ", height: " << windowHeight << std::endl;
+
 
   // Position: bottom left
   // int x = margin;
@@ -180,6 +185,11 @@ static void drawScaleBarOverlay(SDL_Renderer *renderer) {
   double zoomedScale = arscale * sdlwin->zoomFactor;
   double swidth = zoomedScale * sdlwin->raster.w;
   double sheight = zoomedScale * sdlwin->raster.h;
+
+
+  // Convert image pixels to screen pixels
+  int barLengthScreenPixels = (int)(barLengthPixels * zoomedScale);
+
 
   double centerx = (windowWidth - swidth) / 2.0;
   double centery = (windowHeight - sheight) / 2.0;
@@ -202,15 +212,15 @@ static void drawScaleBarOverlay(SDL_Renderer *renderer) {
   int y = visibleY + visibleH - margin - barHeight;
 
   if (x < margin) x = margin;
-  if (x + barLengthPixels > windowWidth - margin)
-      x = windowWidth - margin - barLengthPixels;
+  if (x + barLengthScreenPixels > windowWidth - margin)
+      x = windowWidth - margin - barLengthScreenPixels;
   if (y < margin) y = margin;
   if (y + barHeight > windowHeight - margin)
       y = windowHeight - margin - barHeight;
 
   // Draw the bar (white)
   SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-  SDL_Rect barRect = {x, y, barLengthPixels, barHeight};
+  SDL_Rect barRect = {x, y, (int)barLengthScreenPixels, barHeight};
   SDL_RenderFillRect(renderer, &barRect);
 
   // Draw border (black)
@@ -218,6 +228,23 @@ static void drawScaleBarOverlay(SDL_Renderer *renderer) {
   SDL_RenderDrawRect(renderer, &barRect);
 
 
+
+  // --- Add subdivisions (tick marks) ---
+  int numSubdivisions = 10; // e.g., 9 subdivisions = 10 ticks (including ends)
+  int tickHeightMajor = barHeight + 6; // Height for major ticks (ends)
+  int tickHeightMinor = barHeight + 2; // Height for minor ticks
+  SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); // White
+  for (int i = 0; i <= numSubdivisions; ++i) {
+    int tickX;
+    if (i == numSubdivisions) {
+      tickX = x + barLengthScreenPixels -1; // ensure last tick aligns exactly
+    } else {
+      tickX = x + (barLengthScreenPixels * i) / numSubdivisions;
+    }
+    int tickY1 = y; // top of bar
+      int tickY2 = tickY1 - ((i == 0 || i == numSubdivisions) ? tickHeightMajor : tickHeightMinor);
+      SDL_RenderDrawLine(renderer, tickX, tickY1, tickX, tickY2);
+  }
 
 
 
@@ -231,7 +258,7 @@ static void drawScaleBarOverlay(SDL_Renderer *renderer) {
       SDL_Surface *textSurface = TTF_RenderText_Solid(font, label, textColor);
       if (textSurface) {
           SDL_Texture *textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
-          SDL_Rect textRect = {x + barLengthPixels + 10, y + barHeight/2 - textSurface->h/2, textSurface->w, textSurface->h};
+          SDL_Rect textRect = {(int)(x + barLengthScreenPixels + 10), y + barHeight/2 - textSurface->h/2, textSurface->w, textSurface->h};
           SDL_RenderCopy(renderer, textTexture, NULL, &textRect);
           SDL_FreeSurface(textSurface);
           SDL_DestroyTexture(textTexture);
