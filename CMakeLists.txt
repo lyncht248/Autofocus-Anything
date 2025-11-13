@@ -11,6 +11,9 @@ find_package(OpenCV REQUIRED )
 
 find_package(PkgConfig REQUIRED)
 
+find_package(GSL REQUIRED)
+include_directories(${GSL_INCLUDE_DIRS})
+
 pkg_check_modules(GTKMM gtkmm-3.0)
 pkg_check_modules(TOON TooN)
 pkg_check_modules(SDL sdl2)
@@ -115,8 +118,7 @@ add_executable(hvi-gtk ${SOURCES})
 configure_file(${CMAKE_SOURCE_DIR}/lib/VimbaGigETL.cti ${CMAKE_BINARY_DIR}/VimbaGigETL.cti COPYONLY)
 
 #target_compile_options(hvi-gtk PRIVATE -Wall -Wextra)
-target_link_libraries(hvi-gtk ${GTKMM_LIBRARIES} ${TOON_LIBRARIES} ${OpenCV_LIBS} ${SDL_LIBRARIES} ${SDL2TTF_LIBRARIES} ${FMT_LIBRARIES} ${SPDLOG_LIBRARIES} cvd VimbaCPP rt pthread xeryon_lib ${CMAKE_SOURCE_DIR}/lib/libASICamera2.a -lusb-1.0)
-
+target_link_libraries(hvi-gtk ${GTKMM_LIBRARIES} ${TOON_LIBRARIES} ${OpenCV_LIBS} ${SDL_LIBRARIES} ${SDL2TTF_LIBRARIES} ${FMT_LIBRARIES} ${SPDLOG_LIBRARIES} cvd VimbaCPP rt pthread xeryon_lib ${CMAKE_SOURCE_DIR}/lib/libASICamera2.a -lusb-1.0 ${GSL_LIBRARIES})
 
 # Add Google Test
 include(FetchContent)
@@ -237,6 +239,7 @@ target_link_libraries(autofocus_test
     gtest
     gtest_main
     pthread
+    ${GSL_LIBRARIES}
 )
 
 # Add the test to CTest
@@ -254,6 +257,7 @@ target_link_libraries(new_device_calibration
     gtest
     gtest_main
     pthread
+    ${GSL_LIBRARIES}
 )
 
 # Add the test to CTest
@@ -269,6 +273,7 @@ target_link_libraries(pid_tuning_standalone
     PRIVATE
     autofocus_lib
     pthread
+    ${GSL_LIBRARIES}
 )
 
 # Create a library target for settings

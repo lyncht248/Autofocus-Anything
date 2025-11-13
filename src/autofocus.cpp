@@ -24,12 +24,13 @@
 #include <thread>
 #include <unistd.h>
 // #include <gtk/gtk.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_blas.h>
-#include <gsl/gsl_multifit_nlin.h>
+#include <gsl/gsl_multifit_nlinear.h>
 
 
 // #include <stdlib.h>
@@ -65,8 +66,8 @@ bool bSaveSharpnessCurves2 =
     0; // Saves text files with the sharpness curve data (no column means, saves
        // sharpest point in each row)
 
-bool bSaveAllImages = 0; // Saves all images, not just during autofocus-ing
-bool bRunGaussian = 0;          // For testing new Gaussian method
+bool bSaveAllImages = 1; // Saves all images, not just during autofocus-ing
+bool bRunGaussian = 1;          // For testing new Gaussian method
 bool bBlinking = 0;
 
 unsigned char *img_buf =
@@ -150,6 +151,16 @@ bool autofocus::initialize() {
         << std::endl;
     reducedBenchmarkFile.close();
   }
+
+    std::ofstream GSLBenchmarkFile("../output/focus_benchmark_GSL.csv");
+  if (GSLBenchmarkFile.is_open()) {
+    GSLBenchmarkFile
+        << "timestamp,total_time_us,resize_time_us,"
+           "roberts_time_us,column_time_us,offset_time_us,fit_time_us"
+        << std::endl;
+    GSLBenchmarkFile.close();
+  }
+
 
   std::ofstream leastSquaresBenchmarkFile(
       "../output/focus_benchmark_LeastSquares.csv");
@@ -389,7 +400,7 @@ void autofocus::run() {
         //     image, imHeight, imWidth); //  returns double
 
         // TRIAL
-        double locBestFocusDouble = computeBestFocusGaussian(
+        double locBestFocusDouble = computeBestFocusGSL(
             image, imHeight, imWidth); //  returns double
 
         // Store the current measured focus position globally
@@ -677,7 +688,7 @@ void autofocus::run() {
         // double locBestFocusDouble = computeBestFocusReduced(
         //     image, imHeight, imWidth); //  returns double
 
-        double locBestFocusDouble = computeBestFocusGaussian(
+        double locBestFocusDouble = computeBestFocusGSL(
             image, imHeight, imWidth); //  returns double
 
 
@@ -703,7 +714,7 @@ void autofocus::run() {
 
      
         // Use the reduced resolution result for all autofocus logic
-        if (bSaveImages) {
+        if (bSaveAllImages) {
           // Apply CLAHE to the image for saving (same as used in
           // computeBestFocus)
           // cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
@@ -3226,7 +3237,7 @@ struct data {
   double *t;
   double *y;
   size_t n;
-}
+};
 
 /* model function: a * exp( -1/2 * [ (t - b) / c ]^2 ) */
 double
@@ -3245,11 +3256,34 @@ int func_f (const gsl_vector * x, void *params, gsl_vector * f) {
   size_t i;
 
   for (i = 0; i < d->n; i++) {
-    double t = d->t[i];
+    double ti = d->t[i];
     double yi = d->y[i];
-    double y = gaussian(a,b,c,ti)
+    double y = gaussian(a,b,c,ti);
     gsl_vector_set (f, i, yi-y);
   }
+  return GSL_SUCCESS;
+}
+
+int
+func_df (const gsl_vector * x, void *params, gsl_matrix * J)
+{
+  struct data *d = (struct data *) params;
+  double a = gsl_vector_get(x, 0);
+  double b = gsl_vector_get(x, 1);
+  double c = gsl_vector_get(x, 2);
+  size_t i;
+
+  for (i = 0; i < d->n; ++i)
+    {
+      double ti = d->t[i];
+      double zi = (ti - b) / c;
+      double ei = exp(-0.5 * zi * zi);
+
+      gsl_matrix_set(J, i, 0, -ei);
+      gsl_matrix_set(J, i, 1, -(a / c) * ei * zi);
+      gsl_matrix_set(J, i, 2, -(a / c) * ei * zi * zi);
+    }
+
   return GSL_SUCCESS;
 }
 
@@ -3304,14 +3338,14 @@ callback(const size_t iter, void *params,
   /* compute reciprocal condition number of J(x) */
   gsl_multifit_nlinear_rcond(&rcond, w);
 
-  fprintf(stderr, "iter %2zu: a = %.4f, b = %.4f, c = %.4f, |a|/|v| = %.4f cond(J) = %8.4f, |f(x)| = %.4f\n",
-          iter,
-          gsl_vector_get(x, 0),
-          gsl_vector_get(x, 1),
-          gsl_vector_get(x, 2),
-          avratio,
-          1.0 / rcond,
-          gsl_blas_dnrm2(f));
+  // fprintf(stderr, "iter %2zu: a = %.4f, b = %.4f, c = %.4f, |a|/|v| = %.4f cond(J) = %8.4f, |f(x)| = %.4f\n",
+  //         iter,
+  //         gsl_vector_get(x, 0),
+  //         gsl_vector_get(x, 1),
+  //         gsl_vector_get(x, 2),
+  //         avratio,
+  //         1.0 / rcond,
+  //         gsl_blas_dnrm2(f));
 }
 
 void
@@ -3320,9 +3354,9 @@ solve_system(gsl_vector *x, gsl_multifit_nlinear_fdf *fdf,
 {
   const gsl_multifit_nlinear_type *T = gsl_multifit_nlinear_trust;
   const size_t max_iter = 200;
-  const double xtol = 1.0e-8;
-  const double gtol = 1.0e-8;
-  const double ftol = 1.0e-8;
+  const double xtol = 1.0e-3;
+  const double gtol = 1.0e-3;
+  const double ftol = 1.0e-3;
   const size_t n = fdf->n;
   const size_t p = fdf->p;
   gsl_multifit_nlinear_workspace *work =
@@ -3352,21 +3386,21 @@ solve_system(gsl_vector *x, gsl_multifit_nlinear_fdf *fdf,
 
   /* print summary */
 
-  fprintf(stderr, "NITER         = %zu\n", gsl_multifit_nlinear_niter(work));
-  fprintf(stderr, "NFEV          = %zu\n", fdf->nevalf);
-  fprintf(stderr, "NJEV          = %zu\n", fdf->nevaldf);
-  fprintf(stderr, "NAEV          = %zu\n", fdf->nevalfvv);
-  fprintf(stderr, "initial cost  = %.12e\n", chisq0);
-  fprintf(stderr, "final cost    = %.12e\n", chisq);
-  fprintf(stderr, "final x       = (%.12e, %.12e, %12e)\n",
-          gsl_vector_get(x, 0), gsl_vector_get(x, 1), gsl_vector_get(x, 2));
-  fprintf(stderr, "final cond(J) = %.12e\n", 1.0 / rcond);
+  // fprintf(stderr, "NITER         = %zu\n", gsl_multifit_nlinear_niter(work));
+  // fprintf(stderr, "NFEV          = %zu\n", fdf->nevalf);
+  // fprintf(stderr, "NJEV          = %zu\n", fdf->nevaldf);
+  // fprintf(stderr, "NAEV          = %zu\n", fdf->nevalfvv);
+  // fprintf(stderr, "initial cost  = %.12e\n", chisq0);
+  // fprintf(stderr, "final cost    = %.12e\n", chisq);
+  // fprintf(stderr, "final x       = (%.12e, %.12e, %12e)\n",
+  //         gsl_vector_get(x, 0), gsl_vector_get(x, 1), gsl_vector_get(x, 2));
+  // fprintf(stderr, "final cond(J) = %.12e\n", 1.0 / rcond);
 
   gsl_multifit_nlinear_free(work);
 }
 
 double
-autofocus::computeBestFocusGSL(v::Mat image, int imgHeight,
+autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
                                           int imgWidth) {
   auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -3396,6 +3430,292 @@ autofocus::computeBestFocusGSL(v::Mat image, int imgHeight,
   std::vector<double> columnMeans;
   columnMeansMatrix.copyTo(columnMeans);
   auto columnEnd = std::chrono::high_resolution_clock::now();
+
+  // Compute offset
+  auto offsetStart = std::chrono::high_resolution_clock::now();
+  const int offsetWindow = 50;
+  double offset_left = 0.0, offset_right = 0.0;
+  if (columnMeans.size() >= offsetWindow) {
+      offset_left = std::accumulate(columnMeans.begin(), columnMeans.begin() + offsetWindow, 0.0) / offsetWindow;
+      offset_right = std::accumulate(columnMeans.end() - offsetWindow, columnMeans.end(), 0.0) / offsetWindow;
+  } else if (!columnMeans.empty()) {
+      offset_left = std::accumulate(columnMeans.begin(), columnMeans.end(), 0.0) / columnMeans.size();
+      offset_right = std::accumulate(columnMeans.begin(), columnMeans.end(), 0.0) / columnMeans.size();
+  } else {
+      offset_left = 0.0; // or handle empty case as needed
+      offset_right = 0.0;
+  }
+  // Choose smallest offset and subtract, omitting negative values
+  double offset = std::min(offset_left, offset_right);
+  std::vector<double> x_values, y_values;
+  for (size_t i = 0; i < columnMeans.size(); i++) {
+      double adjusted_value = columnMeans[i] - offset;
+      y_values.push_back(adjusted_value);
+      x_values.push_back(static_cast<double>(i));
+  }
+  double y_max = *std::max_element(y_values.begin(), y_values.end());
+  auto offsetEnd = std::chrono::high_resolution_clock::now();
+
+  auto fittingStart = std::chrono::high_resolution_clock::now();
+  // Construct data for GSL fitting
+  struct data fit_data = { x_values.data(), y_values.data(), y_values.size() };
+
+  const size_t n = y_values.size();
+  const size_t p = 3; // number of parameters: a, b, c
+  gsl_vector *f = gsl_vector_alloc(n);
+  gsl_vector *x = gsl_vector_alloc(p);
+  gsl_multifit_nlinear_fdf fdf;
+  gsl_multifit_nlinear_parameters fdf_params =
+    gsl_multifit_nlinear_default_parameters();
+  
+  /* define function to be minimized */
+  fdf.f = func_f;
+  fdf.df = func_df;
+  fdf.fvv = func_fvv;
+  fdf.n = n;
+  fdf.p = p;
+  fdf.params = &fit_data;
+
+  /* initial guess for parameters */
+  gsl_vector_set(x, 0, y_max);
+  gsl_vector_set(x, 1, n / 2.0);
+  gsl_vector_set(x, 2, n / 4.0);
+
+  fdf_params.trs = gsl_multifit_nlinear_trs_lmaccel;
+  solve_system(x, &fdf, &fdf_params);
+
+  double A = gsl_vector_get(x, 0);
+  double B = gsl_vector_get(x, 1);
+  double C = gsl_vector_get(x, 2);
+  // printf("Fitted parameters: A=%.4f, B=%.4f, C=%.4f\n", A, B, C);
+  gsl_vector_free(f);
+  gsl_vector_free(x);
+
+  auto fittingEnd = std::chrono::high_resolution_clock::now();
+
+  // Visualise
+  lastSharpnessCurve = y_values;
+  if (bSaveImages) {
+    cv::Mat combined, colorResized;
+    double locBestFocusDouble = B; // Mean from GSL fit
+    if (!lastSharpnessCurve.empty()) {
+     try {
+        int scaledLocBestFocus =
+          static_cast<int>(std::round(locBestFocusDouble));
+
+        // Convert resized to color if it's grayscale to match the graph image
+        // type
+        if (resized.channels() == 1) {
+          cv::cvtColor(resized, colorResized, cv::COLOR_GRAY2BGR);
+        } else {
+          colorResized = resized.clone();
+        }
+
+       
+        // Create graph image with same width as resized image
+        int graphHeight = 200;
+        int graphWidth = colorResized.cols;
+        cv::Mat graphImage =
+            cv::Mat::zeros(graphHeight, graphWidth, CV_8UC3);
+
+
+        int curveWidth = lastSharpnessCurve.size();
+
+        // Find max value in sharpness curve for scaling
+        double maxSharpness =
+            lastSharpnessCurve.empty()
+                ? 0.0
+                : *std::max_element(lastSharpnessCurve.begin(),
+                                    lastSharpnessCurve.end());
+        double minSharpness =
+            lastSharpnessCurve.empty()
+                ? 0.0
+                : *std::min_element(lastSharpnessCurve.begin(),
+                                    lastSharpnessCurve.end());
+        double range = maxSharpness - minSharpness;
+
+        // Set y-axis range
+        double yAxisMin = 0.0;
+        double yAxisMax = maxSharpness;
+
+        // Scale based on sharpness curve range
+        double maxVal = yAxisMax;
+        if (maxVal <= 0)
+          maxVal = 1.0;
+
+        // Draw sharpness curve (blue) - map curve indices to correct x
+        // positions
+        for (size_t i = 1; i < lastSharpnessCurve.size(); i++) {
+          int x1, x2;
+
+          // If we have specific x indices, use them
+          if (!lastXIndices.empty()) {
+            x1 = lastXIndices[i - 1];
+            x2 = lastXIndices[i];
+          } else {
+            x1 = (i - 1);
+            x2 = i;
+          }
+
+          // Only draw if within graph bounds
+          if (x1 >= 0 && x2 < graphWidth) {
+            int y1 =
+                graphHeight -
+                static_cast<int>((lastSharpnessCurve[i - 1] / maxVal) *
+                                  (graphHeight - 50));
+            int y2 = graphHeight -
+                      static_cast<int>((lastSharpnessCurve[i] / maxVal) *
+                                      (graphHeight - 50));
+            cv::line(graphImage, cv::Point(x1, y1), cv::Point(x2, y2),
+                      cv::Scalar(255, 0, 0), 1); // Blue
+          }
+        }
+
+        // draw vertical line for locBestFocusDouble
+        cv::line(graphImage, cv::Point(locBestFocusDouble, 0),
+                  cv::Point(locBestFocusDouble, graphHeight),
+                  cv::Scalar(255, 255, 0), 2);
+
+        // Find amplitude of locBestFocus
+        int sharpnessIdx = static_cast<int>(std::round(locBestFocusDouble));
+        double sharpnessAtBest = (sharpnessIdx >= 0 && sharpnessIdx < lastSharpnessCurve.size())
+              ? lastSharpnessCurve[sharpnessIdx]
+              : 0.0;
+
+        // Display range, COM, amplitude of BestFocus position with double precision
+        
+        std::string rangeText =
+            "Range: " + std::to_string(range).substr(0, 6);
+        std::string comText =
+            "LoBF index: " + std::to_string(locBestFocusDouble).substr(0, 8);
+        std::string sharpnessText = "LoBF sharpness: " + std::to_string(sharpnessAtBest).substr(0, 8);
+        
+
+        // Add legend text and amplitude
+        cv::putText(graphImage, "Sharpness Curve", cv::Point(10, 20),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 0, 0),
+                    1);
+        cv::putText(graphImage, "Location of Best Focus", cv::Point(10, 40),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.5,
+                    cv::Scalar(255, 255, 0), 1);
+
+        // Place the values just below the legend
+        cv::putText(graphImage, sharpnessText, cv::Point(200, 20),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
+        cv::putText(graphImage, rangeText, cv::Point(450, 20),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
+        cv::putText(graphImage, comText, cv::Point(200, 40),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
+
+        // Draw axes on the graphImage
+        int tickLength = 6;
+        int numXTicks = 6;
+        int numYTicks = 4;
+
+        // Draw x-axis (horizontal line at the bottom)
+        cv::line(graphImage, cv::Point(0, graphHeight - 1), cv::Point(graphWidth - 1, graphHeight - 1), cv::Scalar(200, 200, 200), 1);
+
+        // Draw y-axis (vertical line at the left)
+        cv::line(graphImage, cv::Point(0, 0), cv::Point(0, graphHeight - 1), cv::Scalar(200, 200, 200), 1);
+
+        double x_min = *std::min_element(x_values.begin(), x_values.end());
+        double x_max = *std::max_element(x_values.begin(), x_values.end());
+        // Draw x-axis ticks and optional labels
+        for (int i = 0; i <= numXTicks; ++i) {
+          double xValue = x_min + (x_max - x_min) * i / numXTicks;
+          int x = static_cast<int>(xValue);
+          cv::line(graphImage, cv::Point(x, graphHeight - 1), 
+                  cv::Point(x, graphHeight - 1 - tickLength), 
+                  cv::Scalar(200, 200, 200), 1);
+          cv::putText(graphImage, std::to_string(static_cast<int>(xValue)), 
+                      cv::Point(x + 2, graphHeight - 1 - 5), 
+                      cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
+        }
+
+        for (int i = 0; i <= numYTicks; ++i) {
+            int y = graphHeight - static_cast<int>(i * (graphHeight - 50) / numYTicks);
+            double labelValue = yAxisMin + (yAxisMax - yAxisMin) * i / numYTicks;
+            cv::line(graphImage, cv::Point(0, y), cv::Point(tickLength, y), cv::Scalar(200, 200, 200), 1);
+            cv::putText(graphImage, cv::format("%.1f", labelValue), cv::Point(2, y - 2),
+                        cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
+        }
+
+
+
+
+        // Combine image and graph
+        cv::vconcat(colorResized, graphImage, combined);
+
+        // Save with integer filename
+        std::string FilePath = "../output/TiltedCam_Images/" +
+                                std::to_string(increment3) + "_" +
+                                std::to_string(static_cast<int>(
+                                    std::round(locBestFocusDouble))) +
+                                ".png";
+        cv::imwrite(FilePath, combined);
+      } catch (const std::exception &e) {
+        // Just save the original image if we can't combine
+        std::string FilePath = "../output/TiltedCam_Images/" +
+                                std::to_string(increment3) + "_" +
+                                std::to_string(static_cast<int>(
+                                    std::round(locBestFocusDouble))) +
+                                ".png";
+        cv::imwrite(FilePath, colorResized);
+        std::cout << "Error combining images: " << e.what() << std::endl;
+      }
+    } else {
+      // Just save the original image if no curve data
+      std::string FilePath = "../output/TiltedCam_Images/" +
+                              std::to_string(increment3) + "_" +
+                              std::to_string(static_cast<int>(
+                                  std::round(locBestFocusDouble))) +
+                              ".png";
+      cv::imwrite(FilePath, colorResized);
+    }
+    increment3++;
+    
+
+    };
+  auto endTime = std::chrono::high_resolution_clock::now();
+
+   // --- Timing log unchanged footprint, writing "com_time_us" as estimator time
+  // ---
+  auto totalTime =
+      std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+  auto resizeTime = std::chrono::duration_cast<std::chrono::microseconds>(
+      resizeEnd - resizeStart);
+  auto robertsTime = std::chrono::duration_cast<std::chrono::microseconds>(
+      robertsEnd - robertsStart);
+  auto columnTime = std::chrono::duration_cast<std::chrono::microseconds>(
+      columnEnd - columnStart);
+  auto offsetTime = std::chrono::duration_cast<std::chrono::microseconds>(
+      offsetEnd - offsetStart);
+  auto fittingTime = std::chrono::duration_cast<std::chrono::microseconds>(
+      fittingEnd - fittingStart);
+
+  try {
+    std::ofstream GSLBenchmarkFile("../output/focus_benchmark_GSL.csv",
+                                       std::ios::app);
+    if (GSLBenchmarkFile.is_open() && GSLBenchmarkFile.good()) {
+      auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::system_clock::now().time_since_epoch())
+                           .count();
+      // keep CSV header compatibility: write estimator time in the
+      // "com_time_us" column
+      GSLBenchmarkFile << timestamp << "," << totalTime.count() << ","
+                           << resizeTime.count() << ","
+                           << robertsTime.count() << "," 
+                           << columnTime.count() << ","
+                           << offsetTime.count() << "," 
+                           << fittingTime.count() << ","
+                           << std::endl;
+      GSLBenchmarkFile.close();
+    }
+  } catch (...) { /* ignore */
+  }
+
+
+  return B; // Return the mean (best focus position)
 }
 
 std::vector<double>

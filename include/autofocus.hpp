@@ -118,6 +118,7 @@ public:
 
 
   double computeBestFocusRatioGaussian(cv::Mat image, int imgHeight, int imgWidth);
+  double computeBestFocusGSL(cv::Mat image, int imgHeight, int imgWidth);
   double computeBestFocusGaussian(cv::Mat image, int imgHeight, int imgWidth);
 
   /**
