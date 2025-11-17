@@ -96,7 +96,6 @@ public:
 
 
 
-  double computeBestFocusRatioGaussian(cv::Mat image, int imgHeight, int imgWidth);
   double computeBestFocusGSL(cv::Mat image, int imgHeight, int imgWidth);
   double computeBestFocusGaussian(cv::Mat image, int imgHeight, int imgWidth);
 
@@ -302,8 +301,6 @@ private:
   cv::Mat roberts_kernelx;
   cv::Mat roberts_kernely;
 
-  cv::Mat reduced_roberts_kernelx;;
-  cv::Mat reduced_roberts_kernely;
 
   /**
    * @brief Stores the center of mass for visualization.

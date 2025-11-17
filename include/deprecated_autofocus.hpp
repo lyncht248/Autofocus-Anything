@@ -1,5 +1,12 @@
 
 
+
+
+
+  cv::Mat reduced_roberts_kernelx;;
+  cv::Mat reduced_roberts_kernely;
+
+
   /**
    * @brief Computes the location of the best focus.
    *
@@ -74,3 +81,5 @@
                               bool quadraticRefine,
                               double *out_plainCOM = nullptr);
 
+
+  double computeBestFocusRatioGaussian(cv::Mat image, int imgHeight, int imgWidth);
