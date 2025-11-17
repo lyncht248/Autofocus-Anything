@@ -101,7 +101,6 @@ public:
   double computeBestFocusGaussian(cv::Mat image, int imgHeight, int imgWidth);
 
 
-  std::vector<double> computeBestFocusReducedHorizontal(cv::Mat image, int imgHeight, int imgWidth);
 
   /**
    * @brief Adjusts the best focus location.
@@ -133,8 +132,7 @@ public:
     GaussianFitBrute
   };
 
-  // Switch methods at runtime
-  void setPeakLocator(PeakLocator m);
+
 
   // Power-COM tuning
   void setPowerCOMExponent(int p);          // integer >= 1, default 4
@@ -229,18 +227,6 @@ private:
                                      double amplitude, double offset,
                                      double std_dev_factor);
 
-  /**
-   * @brief Fits a normal curve to the sharpness curve using brute force.
-   *
-   * @param sharpnesscurve Input sharpness curve.
-   * @param amplitude Amplitude of the curve.
-   * @param offset Offset of the curve.
-   * @param std_dev_factor Standard deviation factor for the curve.
-   * @return Fitted sharpness curve as a vector of doubles.
-   */
-  std::vector<double>
-  fitnormalcurveBruteForce(std::vector<double> sharpnesscurve, double amplitude,
-                           double offset, double std_dev_factor);
 
   /**
    * @brief Calculates the error with amplitude and offset for the sharpness
@@ -364,19 +350,7 @@ private:
   double m_peakEmaBeta = 1.0; // 1.0 => smoothing disabled
   double m_prevMuReduced = std::numeric_limits<double>::quiet_NaN();
 
-  // Helper: Power-COM peak estimator
-  double estimatePeakPowerCOM(const std::vector<double> &f, int power,
-                              bool quadraticRefine,
-                              double *out_plainCOM = nullptr);
 
-  // Helper: truncated Gaussian peak estimator on the reduced-resolution curve
-  // domain [0..N-1] Returns μ̂ (in curve index units). Optionally returns μ_a,
-  // σ_a^2, and μ_[a,b].
-  double estimatePeakTruncatedGaussian(const std::vector<double> &f,
-                                       double sigmaPxReduced, int edgeAvgCount,
-                                       double eps, double *out_mu_a = nullptr,
-                                       double *out_sigma_a_sq = nullptr,
-                                       double *out_mu_ab = nullptr);
 
   Settings settings; ///< Settings object to manage configuration
 };
