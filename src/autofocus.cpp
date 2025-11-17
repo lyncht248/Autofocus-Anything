@@ -84,14 +84,14 @@ bool bNewMoveRel = 0;
 int desiredLocBestFocus;
 
 std::atomic<double> mmToMove = 0.0;
-int increment = 0;
-int increment2 = 0;
+int increment = 0; // For saving sharpness curves (text files)
+int increment2 = 0; // For saving images (png files)
 
 
 
 std::vector<double> lastSharpnessCurve;
 std::vector<double> lastXIndices;
-std::vector<double> lastFittedCurve;
+// std::vector<double> lastFittedCurve;
 
 static int totalFramesCaptured = 0;
 static int framesProcessed = 0;
@@ -1569,37 +1569,11 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   return B; // Return the mean (best focus position)
 }
 
-double autofocus::findCenterOfMass(const std::vector<double> &curve) {
-  double weightedSum = 0.0;
-  double totalWeight = 0.0;
-
-  for (int i = 0; i < curve.size(); i++) {
-    weightedSum += i * curve[i];
-    totalWeight += curve[i];
-  }
-
-  return totalWeight > 0 ? (weightedSum / totalWeight) : curve.size() / 2.0;
-}
 
 
 
-void autofocus::setTruncGaussSigmaFullRes(double sigmaPx) {
-  m_sigmaPxFullRes = sigmaPx;
-}
 
 
-
-void autofocus::setTruncGaussEdgeAveraging(int count) {
-  m_edgeAvgCount = std::max(1, count);
-}
-
-void autofocus::setPeakSmoothing(double beta) {
-  // clamp to (0,1]; beta=1 means "no smoothing"
-  m_peakEmaBeta = std::min(std::max(beta, 0.0), 1.0);
-  if (m_peakEmaBeta >= 1.0) {
-    m_prevMuReduced = std::numeric_limits<double>::quiet_NaN();
-  }
-}
 
 // Fast integer power helper function
 static inline double powi_pos(double x, int p) {
@@ -1646,7 +1620,6 @@ void autofocus::reloadSettings() {
 
 void autofocus::SaveImagesPnG(cv::Mat &resized, double locBestFocusDouble, double A, double C, int& increment2) {
 
-  // TODO get image and then resize??
 
   cv::Mat colorResized, combined;
   if (!lastSharpnessCurve.empty()) {

@@ -87,3 +87,49 @@
   // Power-COM tuning
   void setPowerCOMExponent(int p);          // integer >= 1, default 4
   void setPowerCOMQuadraticRefine(bool on); // sub-pixel parabola refine
+
+
+    // Peak locator selection
+  enum class PeakLocator {
+    CenterOfMass,
+    PowerCOM,
+    TruncatedGaussian,
+    GaussianFitBrute
+  };
+
+  PeakLocator m_peakLocator = PeakLocator::GaussianFitBrute;
+
+  /**
+   * @brief Calculates the center of mass for the given curve.
+   *
+   * @param curve Input curve.
+   * @return Center of mass value.
+   */
+  double findCenterOfMass(const std::vector<double> &curve);
+
+  // Power-COM parameters
+  int m_powerExponent = 4;          // default ^4
+  bool m_powerCOMQuadRefine = true; // parabolic refine on by default
+
+
+    // TruncatedGaussian parameters
+  double m_sigmaPxFullRes =
+      -1.0;               // <=0 => auto-estimate σ from σ_a (apparent var)
+  int m_edgeAvgCount = 5; // points to average at each edge
+
+  // Optional output smoothing (shared)
+  double m_peakEmaBeta = 1.0; // 1.0 => smoothing disabled
+  double m_prevMuReduced = std::numeric_limits<double>::quiet_NaN();
+
+  // Exponential smoothing of the *returned* peak (0<beta<=1). beta=1 disables
+  // smoothing.
+  void setPeakSmoothing(double beta);
+
+
+
+  // Set the assumed Gaussian sigma in **full-resolution pixels**. If <= 0, we
+  // auto-estimate from σ_a.
+  void setTruncGaussSigmaFullRes(double sigmaPx);
+  // How many points to average at each edge to estimate f(a), f(b). (>=1)
+  void setTruncGaussEdgeAveraging(int count);
+

@@ -1,30 +1,55 @@
 /* This file contains deprecated autofocus methods for reference and testing
 
 FLAGS
+bSaveAllImages - flag for saving all images (not only during autofocus)
+bSaveSharpnessCurves2 - flag for saving images from computeBestFocusReducedHorizontal
 
 FITTING
 - computeBestFocus:
     CLAHE, Gaussian Blur, Tenengrad, Column Means, 
     Hamming Window, fit normal curve (brute force)
+
 - computeBestFocusReduced:
+    Resize to 1/2 x 1/2, CLAHE, Gaussian blur,
+    Roberts Cross, Column Means, Hamming Window/moving Average,
+    Different PeakLocator options (Center of Mass, Truncated Gaussian, Power COM, GaussianFitBruteForce),
+
 - computeBestFocusVeryReduced:
     Resize to 1/4 x 1/4, CLAHE, Gaussian Blur, Roberts Cross,
     Column Means, Hamming Window, fit normal curve (brute force)
+
 - computeBestFocusReducedHorizontal:
     same as computeBestFocusReduced, but
     before taking Column Means, find sharpest point in each horizontal row and store
     (computes sharpest point for each row)
+
 - computeBestFocusRatioGaussian:
     Resize to 1/2 x 1/2, Roberts Cross, Column Means,
     Reduced Roberts Cross, Reduced Column Means,
-    Ratio of (standard RC column means) / (reduced RC column means) + 1,
+    Ratio of (standard RC column means) / (reduced RC column means) - 1,
     Least Square fitting of Gaussian to ratio curve (non-iterative)
+    (has code for coding A_inv manually and with built in c++ solve function)
 
+    
 HELPER FUNCTIONS
+- fitNormalCurveBruteForce (tries different parameters for fitting a Gaussian
+                            and compares to sharpness curve)
+- estimatePeakTruncatedGaussian (used in computeBestFocusReduced)
+- estimatePeakPowerCOM (used in computeBestFocusReduced)
+- setPowerCOMExponent (used in computeBestFocusReduced)
+- setPowerCOMQuadraticRefine (used in computeBestFocusReduced) 
+  (if true, does sub-pixel parabola refinement (i think))
+- setPeakLocator (used in computeBestFocusReduced)
+- setTruncGaussSigmaFullRes (used in computeBestFocusReduced)
+      sets assumed Gaussian sigma in full resolution pixels
+- setTruncGaussEdgeAveraging (used in computeBestFocusReduced)
+      sets number of pixels to average at edges for truncated Gaussian method
+- setPeakSmoothing (used in computeBestFocusReduced)
+      sets whether to do moving average smoothing on sharpness curve before peak finding
+- findCenterOfMass (used in computeBestFocusReduced)
+      finds the center of mass of the sharpness curve
 
-
-
-    */
+  */
 
 
 
@@ -33,6 +58,7 @@ bool bSaveSharpnessCurves2 =
     0; // Saves text files with the sharpness curve data (no column means, saves
        // sharpest point in each row)
 int increment3 = 0;
+
 
 
   // Initialize reduced resolution benchmark CSV file with headers
@@ -80,6 +106,7 @@ int increment3 = 0;
   // Define reduced Roberts Cross kernels
   reduced_roberts_kernelx = (cv::Mat_<double>(1, 2) << 1, -1);
   reduced_roberts_kernely = (cv::Mat_<double>(2, 1) << 1, -1);
+
 
 
 
@@ -266,6 +293,9 @@ int autofocus::computeBestFocus(cv::Mat image, int imgHeight, int imgWidth) {
   return locBestFocus +
          kernel / 2; // Note: kernel/2 offset needed for sliding window
 }
+
+
+
 
 
 
@@ -475,6 +505,8 @@ int autofocus::computeBestFocusVeryReduced(cv::Mat image, int imgHeight,
   // Scale the result back to full resolution and add kernel offset
   return (locBestFocus + kernel / 2) * 4; // Scale up by 4x for full resolution
 }
+
+
 
 
 
@@ -953,10 +985,7 @@ std::vector<double> autofocus::computeBestFocusReducedHorizontal(cv::Mat image, 
     // (mu_a_dbg is only available in TruncatedGaussian case, handled in switch
     // above)
 
-    
-
-
-
+  
   }
 
   // Save range of values after each stage for debugging
@@ -1032,10 +1061,6 @@ std::vector<double> autofocus::computeBestFocusReducedHorizontal(cv::Mat image, 
     //     }
     // }
 
-
-
-
-
     increment2++;
   }
 
@@ -1088,232 +1113,6 @@ std::vector<double> autofocus::computeBestFocusReducedHorizontal(cv::Mat image, 
 
 
 
-std::vector<double>
-autofocus::fitnormalcurveBruteForce(std::vector<double> sharpnesscurve,
-                                    double amplitude, double offset,
-                                    double std_dev_factor) {
-  // Fits a normal curve to the data. Should try to find a proper curve-fitting
-  // library...
-  std::vector<double> norm_curve;
-  std::vector<double> sum_of_diffs;
-  double std_dev =
-      std_dev_factor * (sharpnesscurve.size()); // now uses the parameter
-
-  // Calculates sum_of_elems, a vector showing how well each normal curve with
-  // mean j fits grad
-  for (int j = 0; j < sharpnesscurve.size(); j++) // Start from 0, not 1
-  {
-    // Generates normal curve for given mean j
-    std::vector<double> norm_curve_temp;
-    for (int i = 0; i < sharpnesscurve.size(); i++) {
-      double normResult =
-          normpdf(i, j, std_dev); // j is now the actual mean position
-      norm_curve_temp.push_back(normResult);
-    }
-    // scales so the max value (when i=j) is equal to the desired amplitude
-    double factor =
-        1.0 / *max_element(begin(norm_curve_temp), end(norm_curve_temp));
-    for (int i = 0; i < sharpnesscurve.size(); i++) {
-      norm_curve_temp[i] = norm_curve_temp[i] * factor * amplitude + offset;
-    }
-
-    // Calculates difference between norm curve and sharpness curve
-    std::vector<double> differences;
-    for (int z = 0; z < sharpnesscurve.size(); z++) {
-      double diff = abs(sharpnesscurve[z] - norm_curve_temp[z]);
-      differences.push_back(diff);
-    }
-    double sum_of_diff = std::accumulate(differences.begin(), differences.end(),
-                                         decltype(differences)::value_type(0));
-    sum_of_diffs.push_back(sum_of_diff);
-  }
-
-  // Picks the mean that has the lowest overall difference
-  int bestMeanIndex = distance(
-      begin(sum_of_diffs), min_element(begin(sum_of_diffs), end(sum_of_diffs)));
-  double mean = bestMeanIndex; // No +1 needed since j starts from 0
-
-  // Generates final norm_curve using the correct mean
-  for (int i = 0; i < sharpnesscurve.size(); i++) {
-    double normResult = normpdf(i, mean, std_dev);
-    norm_curve.push_back(normResult);
-  }
-  double factor = 1.0 / *max_element(begin(norm_curve), end(norm_curve));
-  for (int i = 0; i < (sharpnesscurve.size()); i++) {
-    norm_curve[i] = norm_curve[i] * factor * amplitude + offset;
-  }
-
-  std::vector<double> fittednormalcurve(norm_curve.begin(), norm_curve.end());
-  return fittednormalcurve;
-}
-
-
-void autofocus::setPeakLocator(PeakLocator m) { m_peakLocator = m; }
-
-
-
-// Discrete truncated-Gaussian correction on f[0..N-1] (non-negative).
-// sigmaPxReduced: Gaussian sigma in the same pixel units as f's x-axis (reduced
-// resolution). If sigmaPxReduced <= 0, we auto-estimate σ from apparent
-// variance σ_a^2. eps: threshold for the |t| test (per note in the memo);
-// default ~1e-2.
-double autofocus::estimatePeakTruncatedGaussian(
-    const std::vector<double> &f, double sigmaPxReduced, int edgeAvgCount,
-    double eps, double *out_mu_a, double *out_sigma_a_sq, double *out_mu_ab) {
-  const int N = static_cast<int>(f.size());
-  if (N <= 1) {
-    if (out_mu_a)
-      *out_mu_a = 0.0;
-    if (out_sigma_a_sq)
-      *out_sigma_a_sq = 0.0;
-    if (out_mu_ab)
-      *out_mu_ab = 0.0;
-    return 0.0;
-  }
-
-  // --- sums for μ_a and σ_a^2 (apparent, discrete) ---
-  double S0 = 0.0, S1 = 0.0, S2 = 0.0;
-  for (int i = 0; i < N; ++i) {
-    const double w = std::max(0.0, f[i]); // ensure non-negative
-    S0 += w;
-    S1 += w * i;
-    S2 += w * i * i;
-  }
-
-  if (S0 <= 1e-12) {
-    // degenerate: return middle as a safe value
-    const double mid = 0.5 * (N - 1);
-    if (out_mu_a)
-      *out_mu_a = mid;
-    if (out_sigma_a_sq)
-      *out_sigma_a_sq = 0.0;
-    if (out_mu_ab)
-      *out_mu_ab = mid;
-    return mid;
-  }
-
-  const double mu_a = S1 / S0;
-  const double sigma_a_sq = std::max(0.0, S2 / S0 - mu_a * mu_a);
-
-  // --- edge averages for f(a), f(b) (robust to noise) ---
-  const int k = std::min(
-      edgeAvgCount, std::max(1, N / 10)); // don't overreach on short signals
-  double fa = 0.0, fb = 0.0;
-  for (int i = 0; i < k; ++i)
-    fa += f[i];
-  for (int i = 0; i < k; ++i)
-    fb += f[N - 1 - i];
-  fa /= k;
-  fb /= k;
-
-  // --- μ_[a,b] with a=0, b=N-1 (discrete indices) ---
-  // μ_[a,b] = (b f(b) - a f(a)) / (f(b) - f(a))  with a=0 => μ_[a,b] = b f(b) /
-  // (f(b) - f(a))
-  double mu_ab;
-  const double denom_fb_fa = (fb - fa);
-  if (std::abs(denom_fb_fa) <= 1e-12) {
-    // symmetric edges -> μ_ab → ∞ ; in that case μ = μ_a (per note)
-    mu_ab = std::numeric_limits<double>::infinity();
-  } else {
-    mu_ab = (N - 1) * fb / denom_fb_fa;
-  }
-
-  // --- choose σ: user-provided (full-res) scaled to reduced, or auto from σ_a
-  // ---
-  double sigma_used = sigmaPxReduced;
-  if (sigma_used <= 0.0) {
-    // fallback: use sqrt(σ_a^2) but guard with a minimum to avoid near-zero
-    sigma_used = std::sqrt(std::max(sigma_a_sq, 1.0));
-  }
-
-  // --- t test: t = 2*(f(b)-f(a))/(f(b)+f(a)) ; if |t| < eps => use μ_a ---
-  const double denom_sum = fb + fa;
-  const double t =
-      (std::abs(denom_sum) <= 1e-12) ? 0.0 : (2.0 * (fb - fa) / denom_sum);
-
-  double mu_hat;
-  if (!std::isfinite(mu_ab) || std::abs(t) < eps) {
-    mu_hat = mu_a; // safe case near symmetric edges
-  } else {
-    const double denom = (mu_a - mu_ab);
-    if (std::abs(denom) <= 1e-9) {
-      mu_hat = mu_a; // avoid blow-ups
-    } else {
-      // Core formula: μ = μ_a + (σ_a^2 - σ^2) / (μ_a - μ_[a,b])
-      mu_hat = mu_a + (sigma_a_sq - sigma_used * sigma_used) / denom;
-    }
-  }
-
-  // Bound to observed domain to keep downstream code happy (drawing, indexing).
-  // This *doesn't* introduce discrete jumps; μ̂ approaches the bound smoothly.
-  mu_hat = std::clamp(mu_hat, 0.0, static_cast<double>(N - 1));
-
-  if (out_mu_a)
-    *out_mu_a = mu_a;
-  if (out_sigma_a_sq)
-    *out_sigma_a_sq = sigma_a_sq;
-  if (out_mu_ab)
-    *out_mu_ab = mu_ab;
-
-  return mu_hat;
-}
-
-
-
-
-double autofocus::estimatePeakPowerCOM(const std::vector<double> &v, int power,
-                                       bool quadraticRefine,
-                                       double *out_plainCOM) {
-  const int N = static_cast<int>(v.size());
-  if (N <= 0) {
-    if (out_plainCOM)
-      *out_plainCOM = 0.0;
-    return 0.0;
-  }
-
-  // Baseline subtract to suppress center pull from background
-  const double minv = *std::min_element(v.begin(), v.end());
-
-  // Optional: also compute plain COM for overlay/debug
-  if (out_plainCOM) {
-    double S0 = 0.0, S1 = 0.0;
-    for (int i = 0; i < N; ++i) {
-      const double w = std::max(0.0, v[i] - minv);
-      S0 += w;
-      S1 += w * i;
-    }
-    *out_plainCOM = (S0 > 1e-12) ? (S1 / S0) : 0.5 * (N - 1);
-  }
-
-  double sumw = 0.0, sumiw = 0.0;
-  for (int i = 0; i < N; ++i) {
-    double w = v[i] - minv;
-    if (w <= 0.0)
-      continue;
-    double wp = powi_pos(w, std::max(1, power)); // winner-take-most
-    sumw += wp;
-    sumiw += wp * i;
-  }
-
-  if (sumw <= 1e-12)
-    return 0.5 * (N - 1); // degenerate fallback
-
-  double idx = sumiw / sumw;
-
-  // Optional sub-pixel parabolic refine around nearest integer bin
-  if (quadraticRefine) {
-    int k = std::clamp((int)std::round(idx), 0, N - 1);
-    if (k > 0 && k < N - 1) {
-      double y1 = v[k - 1], y2 = v[k], y3 = v[k + 1];
-      double denom = 2.0 * y2 - y1 - y3;
-      if (std::fabs(denom) > 1e-12) {
-        double delta = 0.5 * (y1 - y3) / denom; // ~[-0.5, +0.5]
-        idx = std::clamp(k + delta, 0.0, (double)(N - 1));
-      }
-    }
-  }
-  return idx;
-}
 
 
 
@@ -1788,6 +1587,247 @@ double autofocus::computeBestFocusRatioGaussian(cv::Mat image, int imgHeight,
 }
 
 
+
+
+
+
+
+
+
+
+
+
+std::vector<double>
+autofocus::fitnormalcurveBruteForce(std::vector<double> sharpnesscurve,
+                                    double amplitude, double offset,
+                                    double std_dev_factor) {
+  // Fits a normal curve to the data. Should try to find a proper curve-fitting
+  // library...
+  std::vector<double> norm_curve;
+  std::vector<double> sum_of_diffs;
+  double std_dev =
+      std_dev_factor * (sharpnesscurve.size()); // now uses the parameter
+
+  // Calculates sum_of_elems, a vector showing how well each normal curve with
+  // mean j fits grad
+  for (int j = 0; j < sharpnesscurve.size(); j++) // Start from 0, not 1
+  {
+    // Generates normal curve for given mean j
+    std::vector<double> norm_curve_temp;
+    for (int i = 0; i < sharpnesscurve.size(); i++) {
+      double normResult =
+          normpdf(i, j, std_dev); // j is now the actual mean position
+      norm_curve_temp.push_back(normResult);
+    }
+    // scales so the max value (when i=j) is equal to the desired amplitude
+    double factor =
+        1.0 / *max_element(begin(norm_curve_temp), end(norm_curve_temp));
+    for (int i = 0; i < sharpnesscurve.size(); i++) {
+      norm_curve_temp[i] = norm_curve_temp[i] * factor * amplitude + offset;
+    }
+
+    // Calculates difference between norm curve and sharpness curve
+    std::vector<double> differences;
+    for (int z = 0; z < sharpnesscurve.size(); z++) {
+      double diff = abs(sharpnesscurve[z] - norm_curve_temp[z]);
+      differences.push_back(diff);
+    }
+    double sum_of_diff = std::accumulate(differences.begin(), differences.end(),
+                                         decltype(differences)::value_type(0));
+    sum_of_diffs.push_back(sum_of_diff);
+  }
+
+  // Picks the mean that has the lowest overall difference
+  int bestMeanIndex = distance(
+      begin(sum_of_diffs), min_element(begin(sum_of_diffs), end(sum_of_diffs)));
+  double mean = bestMeanIndex; // No +1 needed since j starts from 0
+
+  // Generates final norm_curve using the correct mean
+  for (int i = 0; i < sharpnesscurve.size(); i++) {
+    double normResult = normpdf(i, mean, std_dev);
+    norm_curve.push_back(normResult);
+  }
+  double factor = 1.0 / *max_element(begin(norm_curve), end(norm_curve));
+  for (int i = 0; i < (sharpnesscurve.size()); i++) {
+    norm_curve[i] = norm_curve[i] * factor * amplitude + offset;
+  }
+
+  std::vector<double> fittednormalcurve(norm_curve.begin(), norm_curve.end());
+  return fittednormalcurve;
+}
+
+
+void autofocus::setPeakLocator(PeakLocator m) { m_peakLocator = m; }
+
+
+
+// Discrete truncated-Gaussian correction on f[0..N-1] (non-negative).
+// sigmaPxReduced: Gaussian sigma in the same pixel units as f's x-axis (reduced
+// resolution). If sigmaPxReduced <= 0, we auto-estimate σ from apparent
+// variance σ_a^2. eps: threshold for the |t| test (per note in the memo);
+// default ~1e-2.
+double autofocus::estimatePeakTruncatedGaussian(
+    const std::vector<double> &f, double sigmaPxReduced, int edgeAvgCount,
+    double eps, double *out_mu_a, double *out_sigma_a_sq, double *out_mu_ab) {
+  const int N = static_cast<int>(f.size());
+  if (N <= 1) {
+    if (out_mu_a)
+      *out_mu_a = 0.0;
+    if (out_sigma_a_sq)
+      *out_sigma_a_sq = 0.0;
+    if (out_mu_ab)
+      *out_mu_ab = 0.0;
+    return 0.0;
+  }
+
+  // --- sums for μ_a and σ_a^2 (apparent, discrete) ---
+  double S0 = 0.0, S1 = 0.0, S2 = 0.0;
+  for (int i = 0; i < N; ++i) {
+    const double w = std::max(0.0, f[i]); // ensure non-negative
+    S0 += w;
+    S1 += w * i;
+    S2 += w * i * i;
+  }
+
+  if (S0 <= 1e-12) {
+    // degenerate: return middle as a safe value
+    const double mid = 0.5 * (N - 1);
+    if (out_mu_a)
+      *out_mu_a = mid;
+    if (out_sigma_a_sq)
+      *out_sigma_a_sq = 0.0;
+    if (out_mu_ab)
+      *out_mu_ab = mid;
+    return mid;
+  }
+
+  const double mu_a = S1 / S0;
+  const double sigma_a_sq = std::max(0.0, S2 / S0 - mu_a * mu_a);
+
+  // --- edge averages for f(a), f(b) (robust to noise) ---
+  const int k = std::min(
+      edgeAvgCount, std::max(1, N / 10)); // don't overreach on short signals
+  double fa = 0.0, fb = 0.0;
+  for (int i = 0; i < k; ++i)
+    fa += f[i];
+  for (int i = 0; i < k; ++i)
+    fb += f[N - 1 - i];
+  fa /= k;
+  fb /= k;
+
+  // --- μ_[a,b] with a=0, b=N-1 (discrete indices) ---
+  // μ_[a,b] = (b f(b) - a f(a)) / (f(b) - f(a))  with a=0 => μ_[a,b] = b f(b) /
+  // (f(b) - f(a))
+  double mu_ab;
+  const double denom_fb_fa = (fb - fa);
+  if (std::abs(denom_fb_fa) <= 1e-12) {
+    // symmetric edges -> μ_ab → ∞ ; in that case μ = μ_a (per note)
+    mu_ab = std::numeric_limits<double>::infinity();
+  } else {
+    mu_ab = (N - 1) * fb / denom_fb_fa;
+  }
+
+  // --- choose σ: user-provided (full-res) scaled to reduced, or auto from σ_a
+  // ---
+  double sigma_used = sigmaPxReduced;
+  if (sigma_used <= 0.0) {
+    // fallback: use sqrt(σ_a^2) but guard with a minimum to avoid near-zero
+    sigma_used = std::sqrt(std::max(sigma_a_sq, 1.0));
+  }
+
+  // --- t test: t = 2*(f(b)-f(a))/(f(b)+f(a)) ; if |t| < eps => use μ_a ---
+  const double denom_sum = fb + fa;
+  const double t =
+      (std::abs(denom_sum) <= 1e-12) ? 0.0 : (2.0 * (fb - fa) / denom_sum);
+
+  double mu_hat;
+  if (!std::isfinite(mu_ab) || std::abs(t) < eps) {
+    mu_hat = mu_a; // safe case near symmetric edges
+  } else {
+    const double denom = (mu_a - mu_ab);
+    if (std::abs(denom) <= 1e-9) {
+      mu_hat = mu_a; // avoid blow-ups
+    } else {
+      // Core formula: μ = μ_a + (σ_a^2 - σ^2) / (μ_a - μ_[a,b])
+      mu_hat = mu_a + (sigma_a_sq - sigma_used * sigma_used) / denom;
+    }
+  }
+
+  // Bound to observed domain to keep downstream code happy (drawing, indexing).
+  // This *doesn't* introduce discrete jumps; μ̂ approaches the bound smoothly.
+  mu_hat = std::clamp(mu_hat, 0.0, static_cast<double>(N - 1));
+
+  if (out_mu_a)
+    *out_mu_a = mu_a;
+  if (out_sigma_a_sq)
+    *out_sigma_a_sq = sigma_a_sq;
+  if (out_mu_ab)
+    *out_mu_ab = mu_ab;
+
+  return mu_hat;
+}
+
+
+
+
+double autofocus::estimatePeakPowerCOM(const std::vector<double> &v, int power,
+                                       bool quadraticRefine,
+                                       double *out_plainCOM) {
+  const int N = static_cast<int>(v.size());
+  if (N <= 0) {
+    if (out_plainCOM)
+      *out_plainCOM = 0.0;
+    return 0.0;
+  }
+
+  // Baseline subtract to suppress center pull from background
+  const double minv = *std::min_element(v.begin(), v.end());
+
+  // Optional: also compute plain COM for overlay/debug
+  if (out_plainCOM) {
+    double S0 = 0.0, S1 = 0.0;
+    for (int i = 0; i < N; ++i) {
+      const double w = std::max(0.0, v[i] - minv);
+      S0 += w;
+      S1 += w * i;
+    }
+    *out_plainCOM = (S0 > 1e-12) ? (S1 / S0) : 0.5 * (N - 1);
+  }
+
+  double sumw = 0.0, sumiw = 0.0;
+  for (int i = 0; i < N; ++i) {
+    double w = v[i] - minv;
+    if (w <= 0.0)
+      continue;
+    double wp = powi_pos(w, std::max(1, power)); // winner-take-most
+    sumw += wp;
+    sumiw += wp * i;
+  }
+
+  if (sumw <= 1e-12)
+    return 0.5 * (N - 1); // degenerate fallback
+
+  double idx = sumiw / sumw;
+
+  // Optional sub-pixel parabolic refine around nearest integer bin
+  if (quadraticRefine) {
+    int k = std::clamp((int)std::round(idx), 0, N - 1);
+    if (k > 0 && k < N - 1) {
+      double y1 = v[k - 1], y2 = v[k], y3 = v[k + 1];
+      double denom = 2.0 * y2 - y1 - y3;
+      if (std::fabs(denom) > 1e-12) {
+        double delta = 0.5 * (y1 - y3) / denom; // ~[-0.5, +0.5]
+        idx = std::clamp(k + delta, 0.0, (double)(N - 1));
+      }
+    }
+  }
+  return idx;
+}
+
+
+
+
+
 void autofocus::setPowerCOMExponent(int p) { m_powerExponent = std::max(1, p); }
 
 void autofocus::setPowerCOMQuadraticRefine(bool on) {
@@ -1795,7 +1835,57 @@ void autofocus::setPowerCOMQuadraticRefine(bool on) {
 }
 
 
-// bSaveImages in computeBestFocusGSL
+double autofocus::findCenterOfMass(const std::vector<double> &curve) {
+  double weightedSum = 0.0;
+  double totalWeight = 0.0;
+
+  for (int i = 0; i < curve.size(); i++) {
+    weightedSum += i * curve[i];
+    totalWeight += curve[i];
+  }
+
+  return totalWeight > 0 ? (weightedSum / totalWeight) : curve.size() / 2.0;
+}
+
+
+
+
+
+
+void autofocus::setTruncGaussSigmaFullRes(double sigmaPx) {
+  m_sigmaPxFullRes = sigmaPx;
+}
+
+
+
+void autofocus::setTruncGaussEdgeAveraging(int count) {
+  m_edgeAvgCount = std::max(1, count);
+}
+
+
+
+void autofocus::setPeakSmoothing(double beta) {
+  // clamp to (0,1]; beta=1 means "no smoothing"
+  m_peakEmaBeta = std::min(std::max(beta, 0.0), 1.0);
+  if (m_peakEmaBeta >= 1.0) {
+    m_prevMuReduced = std::numeric_limits<double>::quiet_NaN();
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// bSaveImages in computeBestFocusGSL (redundant code)
 if (bSaveImages) {
     cv::Mat combined, colorResized;
     if (!lastSharpnessCurve.empty()) {
@@ -1870,10 +1960,6 @@ if (bSaveImages) {
                       cv::Scalar(255, 0, 0), 1); // Blue
           }
         }
-
-
-
-
 
         // Draw Gaussian fit (red)
         std::vector<double> fittedCurve(lastSharpnessCurve.size());
@@ -1967,9 +2053,6 @@ if (bSaveImages) {
                         cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
         }
 
-
-
-
         // Combine image and graph
         cv::vconcat(colorResized, graphImage, combined);
 
@@ -2002,7 +2085,6 @@ if (bSaveImages) {
     increment3++;
 
     };
-
 
 
     if (bSaveAllImages) {
@@ -2041,11 +2123,6 @@ if (bSaveImages) {
                   cv::Mat::zeros(graphHeight, graphWidth, CV_8UC3);
 
                 int curveWidth = lastSharpnessCurve.size();
-
-
-
-
-
 
 
                 // // Find max value in sharpness curve for scaling
@@ -2115,7 +2192,6 @@ if (bSaveImages) {
                 }
 
 
-
                 // draw vertical line for locBestFocusDouble
                 cv::line(graphImage, cv::Point(locBestFocusDouble, 0),
                         cv::Point(locBestFocusDouble, graphHeight),
@@ -2151,9 +2227,6 @@ if (bSaveImages) {
                           cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
               cv::putText(graphImage, comText, cv::Point(200, 40),
                           cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
-
-
-              
   //             // Draw axes on the graphImage
               int tickLength = 6;
               int numXTicks = 6;
@@ -2193,8 +2266,6 @@ if (bSaveImages) {
 
   //axes
 
-
-
               // Combine image and graph
               cv::vconcat(colorResized, graphImage, combined);
 
@@ -2224,3 +2295,7 @@ if (bSaveImages) {
             cv::imwrite(FilePath, colorResized);
           }
         }
+
+
+
+

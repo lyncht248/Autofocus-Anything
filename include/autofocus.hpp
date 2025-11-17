@@ -95,8 +95,25 @@ public:
 
 
 
-
+  /**
+   * @brief Computes the best focus position using the GSL library (Non-linear least squares).
+   *
+   * @param image Input image.
+   * @param imgHeight Height of the image.
+   * @param imgWidth Width of the image.
+   * @return Best focus position.
+   */
   double computeBestFocusGSL(cv::Mat image, int imgHeight, int imgWidth);
+
+
+  /**
+   * @brief Computes the best focus position using an iterative algorithm for Gaussian fitting.
+   *
+   * @param image Input image.
+   * @param imgHeight Height of the image.
+   * @param imgWidth Width of the image.
+   * @return Best focus position.
+   */
   double computeBestFocusGaussian(cv::Mat image, int imgHeight, int imgWidth);
 
 
@@ -123,29 +140,35 @@ public:
    */
   double getPGain() const;
 
-  // Peak locator selection
-  enum class PeakLocator {
-    CenterOfMass,
-    PowerCOM,
-    TruncatedGaussian,
-    GaussianFitBrute
-  };
 
 
-
-
-  // Set the assumed Gaussian sigma in **full-resolution pixels**. If <= 0, we
-  // auto-estimate from σ_a.
-  void setTruncGaussSigmaFullRes(double sigmaPx);
-  // How many points to average at each edge to estimate f(a), f(b). (>=1)
-  void setTruncGaussEdgeAveraging(int count);
-
-  // Exponential smoothing of the *returned* peak (0<beta<=1). beta=1 disables
-  // smoothing.
-  void setPeakSmoothing(double beta);
-
+  /**
+   * @brief Saves sharpness curve data to a text file.
+   * 
+   * Saves data after all processing steps.
+   *
+   * @param resized Resized image (1/2).
+   * @param sharpness_float Image after Roberts Cross operation.
+   * @param columnMeans Mean sharpness values for each column.
+   * @param sharpnessCurve Sharpness curve data.
+   * @param increment Increment value for file naming.
+   */
   void SaveSharpnessTxt(const cv::Mat &resized, const cv::Mat& sharpness_float, 
     const std::vector<double> &columnMeans, const std::vector<double>& sharpnessCurve, int& increment);
+
+
+    /**
+     * @brief Saves images as PNG files.
+     * 
+     * Saves the resized image and, if available, 
+     * a combined image with the sharpness curve overlay, as well as the Gaussian fit.
+     * 
+     * @param resized Resized image (1/2)
+     * @param locBestFocusDouble Best focus location.
+     * @param A Amplitude of the Gaussian fit.
+     * @param C Variance of the Gaussian fit.
+     * @param increment2 Increment value for file naming.
+     */
   void SaveImagesPnG(cv::Mat &resized, double locBestFocusDouble, double A, double C, int& increment2);
 
   /**
@@ -253,13 +276,7 @@ private:
    */
   double normpdf(double x, double u, double s); // helper function
 
-  /**
-   * @brief Calculates the center of mass for the given curve.
-   *
-   * @param curve Input curve.
-   * @return Center of mass value.
-   */
-  double findCenterOfMass(const std::vector<double> &curve);
+
 
   /**
    * @brief Stops the autofocus thread.
@@ -333,20 +350,7 @@ private:
    */
   double Kd;
 
-  PeakLocator m_peakLocator = PeakLocator::GaussianFitBrute;
 
-  // Power-COM parameters
-  int m_powerExponent = 4;          // default ^4
-  bool m_powerCOMQuadRefine = true; // parabolic refine on by default
-
-  // TruncatedGaussian parameters
-  double m_sigmaPxFullRes =
-      -1.0;               // <=0 => auto-estimate σ from σ_a (apparent var)
-  int m_edgeAvgCount = 5; // points to average at each edge
-
-  // Optional output smoothing (shared)
-  double m_peakEmaBeta = 1.0; // 1.0 => smoothing disabled
-  double m_prevMuReduced = std::numeric_limits<double>::quiet_NaN();
 
 
 
