@@ -777,6 +777,7 @@ void autofocus::run() {
 
               // double x_min = *std::min_element(lastXIndices.begin(), lastXIndices.end());
               // double x_max = *std::max_element(lastXIndices.begin(), lastXIndices.end());
+              double x_min, x_max;
               if (lastXIndices.empty()) {
                   x_min = 0.0;
                   x_max = static_cast<double>(curveWidth - 1);
@@ -2015,6 +2016,28 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
           }
         }
 
+
+
+
+
+        // Draw Gaussian fit (red)
+        std::vector<double> fittedCurve(lastSharpnessCurve.size());
+        for (size_t i = 0; i < lastSharpnessCurve.size(); i++) {
+          fittedCurve[i] = gaussian(A, B, C, static_cast<double>(i));
+        }
+
+        // Scale Gaussian to match sharpness curve range
+        for (size_t i = 1; i < fittedCurve.size(); ++i) {
+            int x1 = i - 1;
+            int x2 = i;
+            int y1 = graphHeight - static_cast<int>((fittedCurve[i - 1] / maxVal) * (graphHeight - 50));
+            int y2 = graphHeight - static_cast<int>((fittedCurve[i] / maxVal) * (graphHeight - 50));
+            // Draw only if within bounds
+            if (x1 >= 0 && x2 < graphWidth) {
+                cv::line(graphImage, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 0, 255), 1); // Red
+          }
+        }
+
         // draw vertical line for locBestFocusDouble
         cv::line(graphImage, cv::Point(locBestFocusDouble, 0),
                   cv::Point(locBestFocusDouble, graphHeight),
@@ -2028,8 +2051,8 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
 
         // Display range, COM, amplitude of BestFocus position with double precision
         
-        std::string rangeText =
-            "Range: " + std::to_string(range).substr(0, 6);
+        // std::string rangeText =
+        //     "Range: " + std::to_string(range).substr(0, 6);
         std::string comText =
             "LoBF index: " + std::to_string(locBestFocusDouble).substr(0, 8);
         std::string sharpnessText = "LoBF sharpness: " + std::to_string(sharpnessAtBest).substr(0, 8);
@@ -2039,16 +2062,21 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
         cv::putText(graphImage, "Sharpness Curve", cv::Point(10, 20),
                     cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 0, 0),
                     1);
-        cv::putText(graphImage, "Location of Best Focus", cv::Point(10, 40),
+        // Optionally, add a legend
+        cv::putText(graphImage, "Gaussian Fit", cv::Point(10, 40),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 255), 1);
+
+        cv::putText(graphImage, "Location of Best Focus", cv::Point(175, 20),
                     cv::FONT_HERSHEY_SIMPLEX, 0.5,
                     cv::Scalar(255, 255, 0), 1);
+      
 
         // Place the values just below the legend
-        cv::putText(graphImage, sharpnessText, cv::Point(200, 20),
+        cv::putText(graphImage, sharpnessText, cv::Point(400, 20),
                     cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
-        cv::putText(graphImage, rangeText, cv::Point(450, 20),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
-        cv::putText(graphImage, comText, cv::Point(200, 40),
+        // cv::putText(graphImage, rangeText, cv::Point(450, 20),
+        //             cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
+        cv::putText(graphImage, comText, cv::Point(400, 40),
                     cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
 
         // Draw axes on the graphImage
