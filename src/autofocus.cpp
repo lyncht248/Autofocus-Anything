@@ -1261,6 +1261,7 @@ int func_f (const gsl_vector * x, void *params, gsl_vector * f) {
   double a = gsl_vector_get (x, 0);
   double b = gsl_vector_get (x, 1);
   double c = gsl_vector_get (x, 2);
+  // double d_offset = gsl_vector_get (x, 3);
   size_t i;
 
   for (i = 0; i < d->n; i++) {
@@ -1279,6 +1280,7 @@ func_df (const gsl_vector * x, void *params, gsl_matrix * J)
   double a = gsl_vector_get(x, 0);
   double b = gsl_vector_get(x, 1);
   double c = gsl_vector_get(x, 2);
+  // double d_offset = gsl_vector_get(x, 3);
   size_t i;
 
   for (i = 0; i < d->n; ++i)
@@ -1290,6 +1292,7 @@ func_df (const gsl_vector * x, void *params, gsl_matrix * J)
       gsl_matrix_set(J, i, 0, -ei);
       gsl_matrix_set(J, i, 1, -(a / c) * ei * zi);
       gsl_matrix_set(J, i, 2, -(a / c) * ei * zi * zi);
+      // gsl_matrix_set(J, i, 3, 1.0);
     }
 
   return GSL_SUCCESS;
@@ -1303,9 +1306,11 @@ func_fvv (const gsl_vector * x, const gsl_vector * v,
   double a = gsl_vector_get(x, 0);
   double b = gsl_vector_get(x, 1);
   double c = gsl_vector_get(x, 2);
+  // double d_offset = gsl_vector_get(x, 3);
   double va = gsl_vector_get(v, 0);
   double vb = gsl_vector_get(v, 1);
   double vc = gsl_vector_get(v, 2);
+  // double vd = gsl_vector_get(v, 3);
   size_t i;
 
   for (i = 0; i < d->n; ++i)
@@ -1346,11 +1351,12 @@ callback(const size_t iter, void *params,
   /* compute reciprocal condition number of J(x) */
   gsl_multifit_nlinear_rcond(&rcond, w);
 
-  // fprintf(stderr, "iter %2zu: a = %.4f, b = %.4f, c = %.4f, |a|/|v| = %.4f cond(J) = %8.4f, |f(x)| = %.4f\n",
+  // fprintf(stderr, "iter %2zu: a = %.4f, b = %.4f, c = %.4f, d_offset = %.4f, |a|/|v| = %.4f cond(J) = %8.4f, |f(x)| = %.4f\n",
   //         iter,
   //         gsl_vector_get(x, 0),
   //         gsl_vector_get(x, 1),
   //         gsl_vector_get(x, 2),
+  //         gsl_vector_get(x, 3),
   //         avratio,
   //         1.0 / rcond,
   //         gsl_blas_dnrm2(f));
@@ -1400,8 +1406,8 @@ solve_system(gsl_vector *x, gsl_multifit_nlinear_fdf *fdf,
   // fprintf(stderr, "NAEV          = %zu\n", fdf->nevalfvv);
   // fprintf(stderr, "initial cost  = %.12e\n", chisq0);
   // fprintf(stderr, "final cost    = %.12e\n", chisq);
-  // fprintf(stderr, "final x       = (%.12e, %.12e, %12e)\n",
-  //         gsl_vector_get(x, 0), gsl_vector_get(x, 1), gsl_vector_get(x, 2));
+  // fprintf(stderr, "final x       = (%.12e, %.12e, %12e, %12e)\n",
+  //         gsl_vector_get(x, 0), gsl_vector_get(x, 1), gsl_vector_get(x, 2), gsl_vector_get(x, 3));
   // fprintf(stderr, "final cond(J) = %.12e\n", 1.0 / rcond);
 
   gsl_multifit_nlinear_free(work);
@@ -1420,27 +1426,33 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
 
   // Roberts Cross gradients -> sharpness image (float)
   auto robertsStart = std::chrono::high_resolution_clock::now();
-  cv::Mat img_x, img_y;
-  cv::filter2D(resized, img_x, CV_16S, roberts_kernelx);
-  cv::filter2D(resized, img_y, CV_16S, roberts_kernely);
-  cv::Mat img_x_squared, img_y_squared, sum_xy;
-  cv::multiply(img_x, img_x, img_x_squared);
-  cv::multiply(img_y, img_y, img_y_squared);
-  cv::add(img_x_squared, img_y_squared, sum_xy);
-  cv::Mat sharpness_float;
-  sum_xy.convertTo(sharpness_float, CV_32F);
+  // cv::Mat img_x, img_y;
+  cv::filter2D(resized, img_x_preallocated, CV_16S, roberts_kernelx);
+  cv::filter2D(resized, img_y_preallocated, CV_16S, roberts_kernely);
+  // cv::Mat img_x_squared, img_y_squared, sum_xy;
+  cv::multiply(img_x_preallocated, img_x_preallocated, img_x_squared_preallocated);
+  cv::multiply(img_y_preallocated, img_y_preallocated, img_y_squared_preallocated);
+  cv::add(img_x_squared_preallocated, img_y_squared_preallocated, sum_xy_preallocated);
+  // cv::Mat sharpness_float;
+  sum_xy_preallocated.convertTo(sharpness_float_preallocated, CV_32F);
   auto robertsEnd = std::chrono::high_resolution_clock::now();
 
   // Column means
   auto columnStart = std::chrono::high_resolution_clock::now();
   cv::Mat columnMeansMatrix;
-  cv::reduce(sharpness_float, columnMeansMatrix, 0, cv::REDUCE_AVG, CV_64F);
+  cv::reduce(sharpness_float_preallocated, columnMeansMatrix, 0, cv::REDUCE_AVG, CV_64F);
   std::vector<double> columnMeans;
   columnMeansMatrix.copyTo(columnMeans);
   auto columnEnd = std::chrono::high_resolution_clock::now();
 
   // Compute offset
   auto offsetStart = std::chrono::high_resolution_clock::now();
+  // std::vector<double> y_values = columnMeans;
+  // std::vector<double> x_values;
+  // x_values.reserve(columnMeans.size());
+  // for (size_t i = 0; i < columnMeans.size(); i++) {
+  //     x_values.push_back(static_cast<double>(i));
+  //}
   const int offsetWindow = 50;
   double offset_left = 0.0, offset_right = 0.0;
   if (columnMeans.size() >= offsetWindow) {
@@ -1459,9 +1471,11 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   for (size_t i = 0; i < columnMeans.size(); i++) {
       double adjusted_value = columnMeans[i] - offset;
       y_values.push_back(adjusted_value);
+      // y_values.push_back(columnMeans[i]);
       x_values.push_back(static_cast<double>(i));
   }
   double y_max = *std::max_element(y_values.begin(), y_values.end());
+  // double y_min = *std::min_element(y_values.begin(), y_values.end());
   auto offsetEnd = std::chrono::high_resolution_clock::now();
 
   auto fittingStart = std::chrono::high_resolution_clock::now();
@@ -1488,6 +1502,7 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   gsl_vector_set(x, 0, y_max);
   gsl_vector_set(x, 1, n / 2.0);
   gsl_vector_set(x, 2, n / 4.0);
+  // gsl_vector_set(x, 3, y_min);  // Initial guess for offset
 
   fdf_params.trs = gsl_multifit_nlinear_trs_lmaccel;
   solve_system(x, &fdf, &fdf_params);
@@ -1495,6 +1510,7 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   double A = gsl_vector_get(x, 0);
   double B = gsl_vector_get(x, 1);
   double C = gsl_vector_get(x, 2);
+  // double D = gsl_vector_get(x, 3);
   // printf("Fitted parameters: A=%.4f, B=%.4f, C=%.4f\n", A, B, C);
   gsl_vector_free(f);
   gsl_vector_free(x);
@@ -1625,7 +1641,7 @@ void autofocus::reloadSettings() {
 
 // Helper function to save images (png files)
 // Input: resized image, locBestFocusDouble, 
-//        Gaussian fit parameters: A, B, C, 
+//        Gaussian fit parameters: A, C, (B is equal to locBestFocusDouble), D
 //        increment counter
 
 void autofocus::SaveImagesPnG(cv::Mat &resized, double locBestFocusDouble, double A, double C, int& increment2) {
