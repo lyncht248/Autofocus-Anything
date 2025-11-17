@@ -83,3 +83,7 @@
 
 
   double computeBestFocusRatioGaussian(cv::Mat image, int imgHeight, int imgWidth);
+
+  // Power-COM tuning
+  void setPowerCOMExponent(int p);          // integer >= 1, default 4
+  void setPowerCOMQuadraticRefine(bool on); // sub-pixel parabola refine

@@ -57,17 +57,12 @@ std::atomic<bool> bNewImage = 0; // Flag that is 1 for when the buffer image is
                                  // new, 0 when buffer image is old
 
 const long img_size = 1280 * 960; // Replace with actual image size
-bool bSaveImages =
-    1; // Saves images from the tilted camera to output folder. WARNING: will
-       // produce enourmous number of images and slow down the system!
-bool bSaveSharpnessCurves =
-    0; // Saves text files with the sharpness curve data, similar to above
-bool bSaveSharpnessCurves2 =
-    0; // Saves text files with the sharpness curve data (no column means, saves
-       // sharpest point in each row)
+bool bSaveImages = 1; // Saves images from the tilted camera to output folder. WARNING: will
+                      // produce enormous number of images and slow down the system!
+bool bSaveSharpnessCurves = 1; // Saves text files with the sharpness curve data, similar to above
+bool bRunContinuous = 1;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
 
-bool bSaveAllImages = 1; // Saves all images, not just during autofocus-ing
-bool bRunContinuous = 1;          // For testing new Gaussian method
+
 bool bBlinking = 0;
 
 unsigned char *img_buf =
@@ -91,7 +86,7 @@ int desiredLocBestFocus;
 std::atomic<double> mmToMove = 0.0;
 int increment = 0;
 int increment2 = 0;
-int increment3 = 0;
+
 
 
 std::vector<double> lastSharpnessCurve;
@@ -341,7 +336,7 @@ void autofocus::run() {
 
   while (!stop_thread.load()) {
 
-    // Sophia - debug
+    // Sophia - debugging
     if (bRunContinuous) {
       // Check if we have a new frame
       if (tiltedcam1.getLatestFrame(img_calc_buf, img_size)) {
@@ -349,6 +344,7 @@ void autofocus::run() {
         bNewImage = true;
         imgcount++;
         imgcountfile++;
+
         // Convert to OpenCV Mat - use reduced resolution for all processing
         cv::Mat image(imHeight, imWidth, CV_8UC1, img_calc_buf);
 
@@ -358,237 +354,7 @@ void autofocus::run() {
 
         // Store the current measured focus position globally
         currentMeasuredFocus.store(locBestFocusDouble);
-
-
-        // resize image to 1/2 resolution
-        cv::Mat image_resized_for_save;
-        cv::resize(image, image_resized_for_save, cv::Size(), 0.5, 0.5);
-
-
-        // locBestFocus is already in reduced resolution coordinates, so no
-        // additional scaling needed
-        int scaledLocBestFocus =
-            static_cast<int>(std::round(locBestFocusDouble));
-
-        if (bSaveAllImages) {
-            // Save raw image
-          std::string FilePath = "../output/TiltedCam_Images_raw/" +
-                                  std::to_string(imgcountfile - 1) + ".png";
-          cv::imwrite(FilePath, image);
-          
-
-          // Save processed image with sharpness and LoBF overlay
-          // Convert processed_img to color if it's grayscale to match the graph image
-          // type
-          cv::Mat colorResized;
-          if (image_resized_for_save.channels() == 1) {
-            cv::cvtColor(image_resized_for_save, colorResized, cv::COLOR_GRAY2BGR);
-          } else {
-            colorResized = image_resized_for_save.clone();
-          }
-
-
-          // draw vertical line for locBestFocusDouble
-          cv::line(colorResized, cv::Point(locBestFocusDouble, 0),
-                        cv::Point(locBestFocusDouble, colorResized.rows),
-                        cv::Scalar(255, 255, 0), 2);
-
-
-          cv::Mat combined;
-
-          // Draw graph if we have curve data
-          if (!lastSharpnessCurve.empty()) {
-            try {
-              // Create graph image with same width as resized image
-              int graphHeight = 200;
-              int graphWidth = colorResized.cols;
-              cv::Mat graphImage =
-                  cv::Mat::zeros(graphHeight, graphWidth, CV_8UC3);
-
-                int curveWidth = lastSharpnessCurve.size();
-
-
-
-
-
-
-
-                // // Find max value in sharpness curve for scaling
-                double maxSharpness =
-                    lastSharpnessCurve.empty()
-                        ? 0.0
-                        : *std::max_element(lastSharpnessCurve.begin(),
-                                            lastSharpnessCurve.end());
-                double minSharpness =
-                    lastSharpnessCurve.empty()
-                        ? 0.0
-                        : *std::min_element(lastSharpnessCurve.begin(),
-                                            lastSharpnessCurve.end());
-                double range = maxSharpness - minSharpness;
-
-                // Scale based on sharpness curve range
-                // double maxVal = maxSharpness;
-
-
-                // Set y-axis range
-                double yAxisMin = 0.0;
-                double yAxisMax = maxSharpness;
-                double maxVal = yAxisMax;
-
-                // double x_min = *std::min_element(lastXIndices.begin(), lastXIndices.end());
-                // double x_max = *std::max_element(lastXIndices.begin(), lastXIndices.end());
-                double x_min, x_max;
-                if (!lastXIndices.empty()) {
-                  x_min = *std::min_element(lastXIndices.begin(), lastXIndices.end());
-                  x_max = *std::max_element(lastXIndices.begin(), lastXIndices.end());
-                } else {
-                  x_min = 0.0;
-                  x_max = static_cast<double>(curveWidth - 1);
-                }
-
-
-                if (maxVal <= 0)
-                  maxVal = 1.0;
-
-                // Draw sharpness curve (blue) - map curve indices to correct x
-                // positions
-                for (size_t i = 1; i < lastSharpnessCurve.size(); i++) {
-                  int x1, x2;
-
-                  // If we have specific x indices, use them
-                  if (!lastXIndices.empty()) {
-                    x1 = lastXIndices[i - 1];
-                    x2 = lastXIndices[i];
-                  } else {
-                    x1 = (i - 1);
-                    x2 = i;
-                  }
-
-
-                  // Only draw if within graph bounds
-                  if (x1 >= 0 && x2 < graphWidth) {
-                    int y1 =
-                        graphHeight -
-                        static_cast<int>((lastSharpnessCurve[i - 1] / maxVal) *
-                                        (graphHeight - 50));
-                    int y2 = graphHeight -
-                            static_cast<int>((lastSharpnessCurve[i] / maxVal) *
-                                              (graphHeight - 50));
-                    cv::line(graphImage, cv::Point(x1, y1), cv::Point(x2, y2),
-                            cv::Scalar(255, 0, 0), 1); // Blue
-                  }
-                }
-
-
-
-                // draw vertical line for locBestFocusDouble
-                cv::line(graphImage, cv::Point(locBestFocusDouble, 0),
-                        cv::Point(locBestFocusDouble, graphHeight),
-                        cv::Scalar(255, 255, 0), 2); 
-
-        // Find amplitude of locBestFocus
-              int sharpnessIdx = static_cast<int>(std::round(locBestFocusDouble));
-              double sharpnessAtBest = (sharpnessIdx >= 0 && sharpnessIdx < lastSharpnessCurve.size())
-                    ? lastSharpnessCurve[sharpnessIdx]
-                    : 0.0;
-
-              // Display range, COM, amplitude of BestFocus position with double precision
-              
-              std::string rangeText =
-                  "Range: " + std::to_string(range).substr(0, 6);
-              std::string comText =
-                  "LoBF index: " + std::to_string(locBestFocusDouble).substr(0, 8);
-              std::string sharpnessText = "LoBF sharpness: " + std::to_string(sharpnessAtBest).substr(0, 8);
-              
-
-              // Add legend text and amplitude
-              cv::putText(graphImage, "Sharpness Curve", cv::Point(10, 20),
-                          cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 0, 0),
-                          1);
-              cv::putText(graphImage, "Location of Best Focus", cv::Point(10, 40),
-                          cv::FONT_HERSHEY_SIMPLEX, 0.5,
-                          cv::Scalar(255, 255, 0), 1);
-
-              // Place the values just below the legend
-              cv::putText(graphImage, sharpnessText, cv::Point(200, 20),
-                          cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
-              cv::putText(graphImage, rangeText, cv::Point(450, 20),
-                          cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
-              cv::putText(graphImage, comText, cv::Point(200, 40),
-                          cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
-
-
-              
-  //             // Draw axes on the graphImage
-              int tickLength = 6;
-              int numXTicks = 6;
-              int numYTicks = 4;
-  //             double plotHeight = graphHeight - 50; // Leave space for x-axis labels
-  //             double yOffset = 50;
-
-              // Draw x-axis (horizontal line at the bottom)
-              cv::line(graphImage, cv::Point(0, graphHeight - 1), cv::Point(graphWidth - 1, graphHeight - 1), cv::Scalar(200, 200, 200), 1);
-
-
-              // Draw y-axis (vertical line at the left)
-              cv::line(graphImage, cv::Point(0, 0), cv::Point(0, graphHeight - 1), cv::Scalar(200, 200, 200), 1);
-
-
-              // double x_min = *std::min_element(lastXIndices.begin(), lastXIndices.end());
-              // double x_max = *std::max_element(lastXIndices.begin(), lastXIndices.end());
-              // Draw x-axis ticks and optional labels
-              for (int i = 0; i <= numXTicks; ++i) {
-                double xValue = x_min + (x_max - x_min) * i / numXTicks;
-                int x = static_cast<int>(xValue);
-                cv::line(graphImage, cv::Point(x, graphHeight - 1), 
-                        cv::Point(x, graphHeight - 1 - tickLength), 
-                        cv::Scalar(200, 200, 200), 1);
-                cv::putText(graphImage, std::to_string(static_cast<int>(xValue)), 
-                            cv::Point(x + 2, graphHeight - 1 - 5), 
-                            cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
-              }
-
-              for (int i = 0; i <= numYTicks; ++i) {
-                  int y = graphHeight - static_cast<int>(i * (graphHeight - 50) / numYTicks);
-                  double labelValue = yAxisMin + (yAxisMax - yAxisMin) * i / numYTicks;
-                  cv::line(graphImage, cv::Point(0, y), cv::Point(tickLength, y), cv::Scalar(200, 200, 200), 1);
-                  cv::putText(graphImage, cv::format("%.1f", labelValue), cv::Point(2, y - 2),
-                              cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
-              }
-
-  //axes
-
-
-
-              // Combine image and graph
-              cv::vconcat(colorResized, graphImage, combined);
-
-              // Save with integer filename
-              std::string FilePath = "../output/TiltedCam_Images/" +
-                                      std::to_string(imgcountfile - 1) + "_" +
-                                      std::to_string(static_cast<int>(
-                                          std::round(locBestFocusDouble))) +
-                                      ".png";
-              cv::imwrite(FilePath, combined);
-            } catch (const std::exception &e) {
-              // Just save the original image if we can't combine
-              std::string FilePath = "../output/TiltedCam_Images/" +
-                                      std::to_string(imgcountfile - 1) + "_" +
-                                      std::to_string(static_cast<int>(
-                                          std::round(locBestFocusDouble))) +
-                                      ".png";
-              cv::imwrite(FilePath, colorResized);
-            }
-          } else {
-            // Just save the original image if no curve data
-            std::string FilePath = "../output/TiltedCam_Images/" +
-                                    std::to_string(imgcountfile - 1) + "_" +
-                                    std::to_string(static_cast<int>(
-                                        std::round(locBestFocusDouble))) +
-                                    ".png";
-            cv::imwrite(FilePath, colorResized);
-          }
-        }
+        
       };
 
     }
@@ -635,210 +401,6 @@ void autofocus::run() {
 
         lastTime = currentTime;
 
-     
-        // Use the reduced resolution result for all autofocus logic
-        if (bSaveImages) {
-
-          // resize image to 1/2 resolution
-          cv::Mat resized;
-          cv::resize(image, resized, cv::Size(), 0.5,
-                     0.5);
-
-          // locBestFocus is already in reduced resolution coordinates, so no
-          // additional scaling needed
-          int scaledLocBestFocus =
-              static_cast<int>(std::round(locBestFocusDouble));
-
-          // Draw vertical line at best focus position
-          cv::Point p1(scaledLocBestFocus, 0),
-              p2(scaledLocBestFocus, resized.rows);
-
-          // Convert resized to color if it's grayscale to match the graph image
-          // type
-          cv::Mat colorResized;
-          if (resized.channels() == 1) {
-            cv::cvtColor(resized, colorResized, cv::COLOR_GRAY2BGR);
-          } else {
-            colorResized = resized.clone();
-          }
-
-         
-
-          cv::Mat combined;
-
-          // Draw graph if we have curve data
-          if (!lastSharpnessCurve.empty()) {
-            try {
-              // Create graph image with same width as resized image
-              int graphHeight = 200;
-              int graphWidth = colorResized.cols;
-              cv::Mat graphImage =
-                  cv::Mat::zeros(graphHeight, graphWidth, CV_8UC3);
-
-
-              int curveWidth = lastSharpnessCurve.size();
-
-              // Find max value in sharpness curve for scaling
-              double maxSharpness =
-                  lastSharpnessCurve.empty()
-                      ? 0.0
-                      : *std::max_element(lastSharpnessCurve.begin(),
-                                          lastSharpnessCurve.end());
-              double minSharpness =
-                  lastSharpnessCurve.empty()
-                      ? 0.0
-                      : *std::min_element(lastSharpnessCurve.begin(),
-                                          lastSharpnessCurve.end());
-              double range = maxSharpness - minSharpness;
-
-              // Set y-axis range
-              double yAxisMin = 0.0;
-              double yAxisMax = maxSharpness;
-
-              // Scale based on sharpness curve range
-              double maxVal = yAxisMax;
-              if (maxVal <= 0)
-                maxVal = 1.0;
-
-              // Draw sharpness curve (blue) - map curve indices to correct x
-              // positions
-              for (size_t i = 1; i < lastSharpnessCurve.size(); i++) {
-                int x1, x2;
-
-                // If we have specific x indices, use them
-                if (!lastXIndices.empty()) {
-                  x1 = lastXIndices[i - 1];
-                  x2 = lastXIndices[i];
-                } else {
-                  x1 = (i - 1);
-                  x2 = i;
-                }
-
-                // Only draw if within graph bounds
-                if (x1 >= 0 && x2 < graphWidth) {
-                  int y1 =
-                      graphHeight -
-                      static_cast<int>((lastSharpnessCurve[i - 1] / maxVal) *
-                                       (graphHeight - 50));
-                  int y2 = graphHeight -
-                           static_cast<int>((lastSharpnessCurve[i] / maxVal) *
-                                            (graphHeight - 50));
-                  cv::line(graphImage, cv::Point(x1, y1), cv::Point(x2, y2),
-                           cv::Scalar(255, 0, 0), 1); // Blue
-                }
-              }
-
-              // draw vertical line for locBestFocusDouble
-              cv::line(graphImage, cv::Point(locBestFocusDouble, 0),
-                        cv::Point(locBestFocusDouble, graphHeight),
-                        cv::Scalar(255, 255, 0), 2);
-
-              // Find amplitude of locBestFocus
-              int sharpnessIdx = static_cast<int>(std::round(locBestFocusDouble));
-              double sharpnessAtBest = (sharpnessIdx >= 0 && sharpnessIdx < lastSharpnessCurve.size())
-                    ? lastSharpnessCurve[sharpnessIdx]
-                    : 0.0;
-
-              // Display range, COM, amplitude of BestFocus position with double precision
-              
-              std::string rangeText =
-                  "Range: " + std::to_string(range).substr(0, 6);
-              std::string comText =
-                  "LoBF index: " + std::to_string(locBestFocusDouble).substr(0, 8);
-              std::string sharpnessText = "LoBF sharpness: " + std::to_string(sharpnessAtBest).substr(0, 8);
-              
-
-              // Add legend text and amplitude
-              cv::putText(graphImage, "Sharpness Curve", cv::Point(10, 20),
-                          cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 0, 0),
-                          1);
-              cv::putText(graphImage, "Location of Best Focus", cv::Point(10, 40),
-                          cv::FONT_HERSHEY_SIMPLEX, 0.5,
-                          cv::Scalar(255, 255, 0), 1);
-
-              // Place the values just below the legend
-              cv::putText(graphImage, sharpnessText, cv::Point(200, 20),
-                          cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
-              cv::putText(graphImage, rangeText, cv::Point(450, 20),
-                          cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
-              cv::putText(graphImage, comText, cv::Point(200, 40),
-                          cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
-
-              // Draw axes on the graphImage
-              int tickLength = 6;
-              int numXTicks = 6;
-              int numYTicks = 4;
-
-              // Draw x-axis (horizontal line at the bottom)
-              cv::line(graphImage, cv::Point(0, graphHeight - 1), cv::Point(graphWidth - 1, graphHeight - 1), cv::Scalar(200, 200, 200), 1);
-
-              // Draw y-axis (vertical line at the left)
-              cv::line(graphImage, cv::Point(0, 0), cv::Point(0, graphHeight - 1), cv::Scalar(200, 200, 200), 1);
-
-              // double x_min = *std::min_element(lastXIndices.begin(), lastXIndices.end());
-              // double x_max = *std::max_element(lastXIndices.begin(), lastXIndices.end());
-              double x_min, x_max;
-              if (lastXIndices.empty()) {
-                  x_min = 0.0;
-                  x_max = static_cast<double>(curveWidth - 1);
-              } else {
-                  x_min = *std::min_element(lastXIndices.begin(), lastXIndices.end());
-                  x_max = *std::max_element(lastXIndices.begin(), lastXIndices.end());
-              }
-              // Draw x-axis ticks and optional labels
-              for (int i = 0; i <= numXTicks; ++i) {
-                double xValue = x_min + (x_max - x_min) * i / numXTicks;
-                int x = static_cast<int>(xValue);
-                cv::line(graphImage, cv::Point(x, graphHeight - 1), 
-                        cv::Point(x, graphHeight - 1 - tickLength), 
-                        cv::Scalar(200, 200, 200), 1);
-                cv::putText(graphImage, std::to_string(static_cast<int>(xValue)), 
-                            cv::Point(x + 2, graphHeight - 1 - 5), 
-                            cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
-              }
-
-              for (int i = 0; i <= numYTicks; ++i) {
-                  int y = graphHeight - static_cast<int>(i * (graphHeight - 50) / numYTicks);
-                  double labelValue = yAxisMin + (yAxisMax - yAxisMin) * i / numYTicks;
-                  cv::line(graphImage, cv::Point(0, y), cv::Point(tickLength, y), cv::Scalar(200, 200, 200), 1);
-                  cv::putText(graphImage, cv::format("%.1f", labelValue), cv::Point(2, y - 2),
-                              cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
-              }
-
-
-
-
-              // Combine image and graph
-              cv::vconcat(colorResized, graphImage, combined);
-
-              // Save with integer filename
-              std::string FilePath = "../output/TiltedCam_Images/" +
-                                      std::to_string(increment3) + "_" +
-                                      std::to_string(static_cast<int>(
-                                          std::round(locBestFocusDouble))) +
-                                      ".png";
-              cv::imwrite(FilePath, combined);
-            } catch (const std::exception &e) {
-              // Just save the original image if we can't combine
-              std::string FilePath = "../output/TiltedCam_Images/" +
-                                      std::to_string(increment3) + "_" +
-                                      std::to_string(static_cast<int>(
-                                          std::round(locBestFocusDouble))) +
-                                      ".png";
-              cv::imwrite(FilePath, colorResized);
-              std::cout << "Error combining images: " << e.what() << std::endl;
-            }
-          } else {
-            // Just save the original image if no curve data
-            std::string FilePath = "../output/TiltedCam_Images/" +
-                                    std::to_string(increment3) + "_" +
-                                    std::to_string(static_cast<int>(
-                                        std::round(locBestFocusDouble))) +
-                                    ".png";
-            cv::imwrite(FilePath, colorResized);
-            }
-          increment3++;
-        };
 
         // If imgcount==1, then the user has just turned on FindFocus or
         // HoldFocus
@@ -1414,12 +976,10 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
   // std::cout << std::endl;
 
 
-
-    std::string FileName = "GAUSSIAN_FIT_" + std::to_string(increment2);
-
     if (bSaveSharpnessCurves) {
+
     // UNCOMMENT TO SAVE TXT FILES
-    std::string FileName = "TESTING_GAUSSIAN_" + std::to_string(increment3);
+    std::string FileName = "TESTING_GAUSSIAN_" + std::to_string(increment2);
     std::string TextFile1 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_resized.txt";
     std::string TextFile2 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_robertscross.txt";
     // std::string TextFile3 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_reduced_robertscross.txt";
@@ -1454,6 +1014,9 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
 
     outputFile1.close();
     outputFile2.close();
+
+    SaveSharpnessTxt(resized, sharpness_float, columnMeans, lastSharpnessCurve, increment2);
+    increment2++;
   }
 
 
@@ -1941,213 +1504,13 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   // Visualise
   lastSharpnessCurve = y_values;
   if (bSaveImages) {
-    cv::Mat combined, colorResized;
     double locBestFocusDouble = B; // Mean from GSL fit
-    if (!lastSharpnessCurve.empty()) {
-     try {
-        int scaledLocBestFocus =
-          static_cast<int>(std::round(locBestFocusDouble));
+    SaveImagesPnG(resized, locBestFocusDouble, A, C, increment2);
+    increment2++;
 
-        // Convert resized to color if it's grayscale to match the graph image
-        // type
-        if (resized.channels() == 1) {
-          cv::cvtColor(resized, colorResized, cv::COLOR_GRAY2BGR);
-        } else {
-          colorResized = resized.clone();
-        }
-
-       
-        // Create graph image with same width as resized image
-        int graphHeight = 200;
-        int graphWidth = colorResized.cols;
-        cv::Mat graphImage =
-            cv::Mat::zeros(graphHeight, graphWidth, CV_8UC3);
+  }
 
 
-        int curveWidth = lastSharpnessCurve.size();
-
-        // Find max value in sharpness curve for scaling
-        double maxSharpness =
-            lastSharpnessCurve.empty()
-                ? 0.0
-                : *std::max_element(lastSharpnessCurve.begin(),
-                                    lastSharpnessCurve.end());
-        double minSharpness =
-            lastSharpnessCurve.empty()
-                ? 0.0
-                : *std::min_element(lastSharpnessCurve.begin(),
-                                    lastSharpnessCurve.end());
-        double range = maxSharpness - minSharpness;
-
-        // Set y-axis range
-        double yAxisMin = 0.0;
-        double yAxisMax = maxSharpness;
-
-        // Scale based on sharpness curve range
-        double maxVal = yAxisMax;
-        if (maxVal <= 0)
-          maxVal = 1.0;
-
-        // Draw sharpness curve (blue) - map curve indices to correct x
-        // positions
-        for (size_t i = 1; i < lastSharpnessCurve.size(); i++) {
-          int x1, x2;
-
-          // If we have specific x indices, use them
-          if (!lastXIndices.empty()) {
-            x1 = lastXIndices[i - 1];
-            x2 = lastXIndices[i];
-          } else {
-            x1 = (i - 1);
-            x2 = i;
-          }
-
-          // Only draw if within graph bounds
-          if (x1 >= 0 && x2 < graphWidth) {
-            int y1 =
-                graphHeight -
-                static_cast<int>((lastSharpnessCurve[i - 1] / maxVal) *
-                                  (graphHeight - 50));
-            int y2 = graphHeight -
-                      static_cast<int>((lastSharpnessCurve[i] / maxVal) *
-                                      (graphHeight - 50));
-            cv::line(graphImage, cv::Point(x1, y1), cv::Point(x2, y2),
-                      cv::Scalar(255, 0, 0), 1); // Blue
-          }
-        }
-
-
-
-
-
-        // Draw Gaussian fit (red)
-        std::vector<double> fittedCurve(lastSharpnessCurve.size());
-        for (size_t i = 0; i < lastSharpnessCurve.size(); i++) {
-          fittedCurve[i] = gaussian(A, B, C, static_cast<double>(i));
-        }
-
-        // Scale Gaussian to match sharpness curve range
-        for (size_t i = 1; i < fittedCurve.size(); ++i) {
-            int x1 = i - 1;
-            int x2 = i;
-            int y1 = graphHeight - static_cast<int>((fittedCurve[i - 1] / maxVal) * (graphHeight - 50));
-            int y2 = graphHeight - static_cast<int>((fittedCurve[i] / maxVal) * (graphHeight - 50));
-            // Draw only if within bounds
-            if (x1 >= 0 && x2 < graphWidth) {
-                cv::line(graphImage, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 0, 255), 1); // Red
-          }
-        }
-
-        // draw vertical line for locBestFocusDouble
-        cv::line(graphImage, cv::Point(locBestFocusDouble, 0),
-                  cv::Point(locBestFocusDouble, graphHeight),
-                  cv::Scalar(255, 255, 0), 2);
-
-        // Find amplitude of locBestFocus
-        int sharpnessIdx = static_cast<int>(std::round(locBestFocusDouble));
-        double sharpnessAtBest = (sharpnessIdx >= 0 && sharpnessIdx < lastSharpnessCurve.size())
-              ? lastSharpnessCurve[sharpnessIdx]
-              : 0.0;
-
-        // Display range, COM, amplitude of BestFocus position with double precision
-        
-        // std::string rangeText =
-        //     "Range: " + std::to_string(range).substr(0, 6);
-        std::string comText =
-            "LoBF index: " + std::to_string(locBestFocusDouble).substr(0, 8);
-        std::string sharpnessText = "LoBF sharpness: " + std::to_string(sharpnessAtBest).substr(0, 8);
-        
-
-        // Add legend text and amplitude
-        cv::putText(graphImage, "Sharpness Curve", cv::Point(10, 20),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 0, 0),
-                    1);
-        // Optionally, add a legend
-        cv::putText(graphImage, "Gaussian Fit", cv::Point(10, 40),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 255), 1);
-
-        cv::putText(graphImage, "Location of Best Focus", cv::Point(175, 20),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5,
-                    cv::Scalar(255, 255, 0), 1);
-      
-
-        // Place the values just below the legend
-        cv::putText(graphImage, sharpnessText, cv::Point(400, 20),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
-        // cv::putText(graphImage, rangeText, cv::Point(450, 20),
-        //             cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
-        cv::putText(graphImage, comText, cv::Point(400, 40),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
-
-        // Draw axes on the graphImage
-        int tickLength = 6;
-        int numXTicks = 6;
-        int numYTicks = 4;
-
-        // Draw x-axis (horizontal line at the bottom)
-        cv::line(graphImage, cv::Point(0, graphHeight - 1), cv::Point(graphWidth - 1, graphHeight - 1), cv::Scalar(200, 200, 200), 1);
-
-        // Draw y-axis (vertical line at the left)
-        cv::line(graphImage, cv::Point(0, 0), cv::Point(0, graphHeight - 1), cv::Scalar(200, 200, 200), 1);
-
-        double x_min = *std::min_element(x_values.begin(), x_values.end());
-        double x_max = *std::max_element(x_values.begin(), x_values.end());
-        // Draw x-axis ticks and optional labels
-        for (int i = 0; i <= numXTicks; ++i) {
-          double xValue = x_min + (x_max - x_min) * i / numXTicks;
-          int x = static_cast<int>(xValue);
-          cv::line(graphImage, cv::Point(x, graphHeight - 1), 
-                  cv::Point(x, graphHeight - 1 - tickLength), 
-                  cv::Scalar(200, 200, 200), 1);
-          cv::putText(graphImage, std::to_string(static_cast<int>(xValue)), 
-                      cv::Point(x + 2, graphHeight - 1 - 5), 
-                      cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
-        }
-
-        for (int i = 0; i <= numYTicks; ++i) {
-            int y = graphHeight - static_cast<int>(i * (graphHeight - 50) / numYTicks);
-            double labelValue = yAxisMin + (yAxisMax - yAxisMin) * i / numYTicks;
-            cv::line(graphImage, cv::Point(0, y), cv::Point(tickLength, y), cv::Scalar(200, 200, 200), 1);
-            cv::putText(graphImage, cv::format("%.1f", labelValue), cv::Point(2, y - 2),
-                        cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
-        }
-
-
-
-
-        // Combine image and graph
-        cv::vconcat(colorResized, graphImage, combined);
-
-        // Save with integer filename
-        std::string FilePath = "../output/TiltedCam_Images/" +
-                                std::to_string(increment3) + "_" +
-                                std::to_string(static_cast<int>(
-                                    std::round(locBestFocusDouble))) +
-                                ".png";
-        cv::imwrite(FilePath, combined);
-      } catch (const std::exception &e) {
-        // Just save the original image if we can't combine
-        std::string FilePath = "../output/TiltedCam_Images/" +
-                                std::to_string(increment3) + "_" +
-                                std::to_string(static_cast<int>(
-                                    std::round(locBestFocusDouble))) +
-                                ".png";
-        cv::imwrite(FilePath, colorResized);
-        std::cout << "Error combining images: " << e.what() << std::endl;
-      }
-    } else {
-      // Just save the original image if no curve data
-      std::string FilePath = "../output/TiltedCam_Images/" +
-                              std::to_string(increment3) + "_" +
-                              std::to_string(static_cast<int>(
-                                  std::round(locBestFocusDouble))) +
-                              ".png";
-      cv::imwrite(FilePath, colorResized);
-    }
-    increment3++;
-    
-
-    };
   auto endTime = std::chrono::high_resolution_clock::now();
 
    // --- Timing log unchanged footprint, writing "com_time_us" as estimator time
@@ -2208,11 +1571,7 @@ void autofocus::setTruncGaussSigmaFullRes(double sigmaPx) {
   m_sigmaPxFullRes = sigmaPx;
 }
 
-void autofocus::setPowerCOMExponent(int p) { m_powerExponent = std::max(1, p); }
 
-void autofocus::setPowerCOMQuadraticRefine(bool on) {
-  m_powerCOMQuadRefine = on;
-}
 
 void autofocus::setTruncGaussEdgeAveraging(int count) {
   m_edgeAvgCount = std::max(1, count);
@@ -2263,3 +1622,265 @@ void autofocus::reloadSettings() {
     }
   }
 }
+
+// Helper function to save images (png files)
+// Input: resized image, locBestFocusDouble, 
+//        Gaussian fit parameters: A, B, C, 
+//        increment counter
+
+void autofocus::SaveImagesPnG(cv::Mat &resized, double locBestFocusDouble, double A, double C, int& increment2) {
+
+  // TODO get image and then resize??
+
+  cv::Mat colorResized, combined;
+  if (!lastSharpnessCurve.empty()) {
+    try {
+      // Convert resized to color if it's grayscale to match the graph image
+      // type
+      if (resized.channels() == 1) {
+        cv::cvtColor(resized, colorResized, cv::COLOR_GRAY2BGR);
+      } else {
+        colorResized = resized.clone();
+    }
+
+    // Create graph image with same width as resized image
+    int graphHeight = 200;
+    int graphWidth = colorResized.cols;
+    cv::Mat graphImage =
+        cv::Mat::zeros(graphHeight, graphWidth, CV_8UC3);
+
+    int curveWidth = lastSharpnessCurve.size();
+
+    // Find max value in sharpness curve for scaling
+    double maxSharpness =
+        lastSharpnessCurve.empty()
+            ? 0.0
+            : *std::max_element(lastSharpnessCurve.begin(),
+                                lastSharpnessCurve.end());
+    double minSharpness =
+        lastSharpnessCurve.empty()
+            ? 0.0
+            : *std::min_element(lastSharpnessCurve.begin(),
+                                lastSharpnessCurve.end());
+    double range = maxSharpness - minSharpness;
+
+    // Set y-axis range
+    double yAxisMin = 0.0;
+    double yAxisMax = maxSharpness;
+
+    // Scale based on sharpness image
+    double maxVal = yAxisMax;
+    if (maxVal <= 0) {
+      maxVal = 1.0;
+    }
+
+    // Draw sharpness curve (blue)
+    for (size_t i = 1; i < lastSharpnessCurve.size(); i++) {
+      int x1, x2;
+
+      // If we have specific x indices, use them
+      if (!lastXIndices.empty()) {
+        x1 = lastXIndices[i - 1];
+        x2 = lastXIndices[i];
+      } else {
+        x1 = (i - 1);
+        x2 = i;
+      }
+
+      // Only draw if within graph bounds
+      if (x1 >= 0 && x2 < graphWidth) {
+        int y1 =
+            graphHeight -
+            static_cast<int>((lastSharpnessCurve[i - 1] / maxVal) *
+                              (graphHeight - 50));
+        int y2 = graphHeight -
+                  static_cast<int>((lastSharpnessCurve[i] / maxVal) *
+                                  (graphHeight - 50));
+        cv::line(graphImage, cv::Point(x1, y1), cv::Point(x2, y2),
+                  cv::Scalar(255, 0, 0), 1); // Blue
+      }
+    }
+
+
+    // Draw Gaussian fit (red)
+    double B = locBestFocusDouble; // Use locBestFocusDouble from GSL fit
+    std::vector<double> fittedCurve(lastSharpnessCurve.size());
+    for (size_t i = 0; i < lastSharpnessCurve.size(); i++) {
+      fittedCurve[i] = gaussian(A, B, C, static_cast<double>(i));
+    }
+
+    // Scale Gaussian to match sharpness curve range
+    for (size_t i = 1; i < fittedCurve.size(); ++i) {
+        int x1 = i - 1;
+        int x2 = i;
+        int y1 = graphHeight - static_cast<int>((fittedCurve[i - 1] / maxVal) * (graphHeight - 50));
+        int y2 = graphHeight - static_cast<int>((fittedCurve[i] / maxVal) * (graphHeight - 50));
+        // Draw only if within bounds
+        if (x1 >= 0 && x2 < graphWidth) {
+            cv::line(graphImage, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 0, 255), 1); // Red
+        }
+    }
+
+    // Draw vertical line for locBestFocusDouble
+    cv::line(graphImage, cv::Point(locBestFocusDouble, 0),
+              cv::Point(locBestFocusDouble, graphHeight),
+              cv::Scalar(255, 255, 0), 2);
+
+
+    // Find amplitude of locBestFocus
+    int sharpnessIdx = static_cast<int>(std::round(locBestFocusDouble));
+    double sharpnessAtBest = (sharpnessIdx >= 0 && sharpnessIdx < lastSharpnessCurve.size())
+          ? lastSharpnessCurve[sharpnessIdx]
+          : 0.0;
+
+    // Display range, COM, amplitude of BestFocus position with double precision
+
+        // std::string rangeText =
+        //     "Range: " + std::to_string(range).substr(0, 6);
+      std::string comText =
+          "LoBF index: " + std::to_string(locBestFocusDouble).substr(0, 8);
+      std::string sharpnessText = "LoBF sharpness: " + std::to_string(sharpnessAtBest).substr(0, 8);
+      
+    // Add legend text and amplitude
+    cv::putText(graphImage, "Sharpness Curve", cv::Point(10, 20),
+                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 0, 0),
+                1);
+    cv::putText(graphImage, "Gaussian Fit", cv::Point(10, 40),
+                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 255), 1);
+    cv::putText(graphImage, "Location of Best Focus", cv::Point(175, 20),
+                cv::FONT_HERSHEY_SIMPLEX, 0.5,
+                cv::Scalar(255, 255, 0), 1);
+    
+    // Place the values just below the legend
+    cv::putText(graphImage, sharpnessText, cv::Point(400, 20),
+                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
+    // cv::putText(graphImage, rangeText, cv::Point(450, 20),
+    //             cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
+    cv::putText(graphImage, comText, cv::Point(400, 40),
+                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
+
+    // Draw axes on the graphImage
+    int tickLength = 6;
+    int numXTicks = 6;
+    int numYTicks = 4;
+
+    // Draw x-axis (horizontal line at the bottom)
+    cv::line(graphImage, cv::Point(0, graphHeight - 1), 
+      cv::Point(graphWidth - 1, graphHeight - 1), cv::Scalar(200, 200, 200), 1);
+    
+    // Draw y-axis (vertical line at the left)
+    cv::line(graphImage, cv::Point(0, 0), cv::Point(0, graphHeight - 1), cv::Scalar(200, 200, 200), 1);
+
+    double x_min, x_max;
+    if (!lastXIndices.empty()) {
+      x_min = *std::min_element(lastXIndices.begin(), lastXIndices.end());
+      x_max = *std::max_element(lastXIndices.begin(), lastXIndices.end());
+    } else {
+      x_min = 0;
+      x_max = lastSharpnessCurve.size() - 1;
+    }
+
+    // Draw x-axis ticks and optional labels
+    for (int i = 0; i <= numXTicks; ++i) {
+      double xValue = x_min + (x_max - x_min) * i / numXTicks;
+      int x = static_cast<int>(xValue);
+      cv::line(graphImage, cv::Point(x, graphHeight - 1), 
+        cv::Point(x, graphHeight - 1 - tickLength), 
+        cv::Scalar(200, 200, 200), 1);
+      cv::putText(graphImage, std::to_string(static_cast<int>(xValue)), 
+                  cv::Point(x + 2, graphHeight - 1 - 5), 
+                  cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
+    }
+
+    for (int i = 0; i <= numYTicks; ++i) {
+        int y = graphHeight - static_cast<int>(i * (graphHeight - 50) / numYTicks);
+        double labelValue = yAxisMin + (yAxisMax - yAxisMin) * i / numYTicks;
+        cv::line(graphImage, cv::Point(0, y), cv::Point(tickLength, y), cv::Scalar(200, 200, 200), 1);
+        cv::putText(graphImage, cv::format("%.1f", labelValue), cv::Point(2, y - 2),
+                    cv::FONT_HERSHEY_PLAIN, 0.7, cv::Scalar(180,180,180), 1);
+    }
+
+    // Combine image and graph
+    cv::vconcat(colorResized, graphImage, combined);
+
+    // Save with integer filename
+    std::string FilePath = "../output/TiltedCam_Images_png/" +
+                            std::to_string(increment2) + "_" +
+                            std::to_string(static_cast<int>(
+                                std::round(locBestFocusDouble))) +
+                            ".png";
+    cv::imwrite(FilePath, combined);
+    } catch (const std::exception &e) {
+      // Just save the original image if we can't combine
+      std::string FilePath = "../output/TiltedCam_Images_png/" +
+                              std::to_string(increment2) + "_" +
+                              std::to_string(static_cast<int>(
+                                  std::round(locBestFocusDouble))) +
+                              ".png";
+      cv::imwrite(FilePath, colorResized);
+      std::cout << "Error combining images: " << e.what() << std::endl;
+    }
+    
+  } else {
+    // Just save the original image if no curve data
+    std::string FilePath = "../output/TiltedCam_Images_png/" +
+                            std::to_string(increment2) + "_" +
+                            std::to_string(static_cast<int>(
+                                std::round(locBestFocusDouble))) +
+                            ".png";
+    cv::imwrite(FilePath, colorResized);
+  }  
+  increment2++;
+}
+
+// Helper function to save sharpness curves as text files
+// input: resized image, image after roberts cross (sharpness_float),
+//        column means vector, sharpness curve vector, increment counter
+void autofocus::SaveSharpnessTxt(const cv::Mat &resized, const cv::Mat& sharpness_float, 
+  const std::vector<double> &columnMeans, const std::vector<double>& sharpnessCurve, int& increment) {
+    std::string fileName = "SHARPNESS_CURVE_" + std::to_string(increment);
+    std::string TextFile1 = "../output/SharpnessCurves/" + fileName + "_resized.txt";
+    std::string TextFile2 = "../output/SharpnessCurves/" + fileName + "_roberts_cross.txt";
+    std::string TextFile3 = "../output/SharpnessCurves/" + fileName + "_column_means.txt";
+    std::string TextFile4 = "../output/SharpnessCurves/" + fileName + "_sharpness_curve.txt";
+
+    std::ofstream outputFile1(TextFile1);
+    std::ofstream outputFile2(TextFile2);
+    std::ofstream outputFile3(TextFile3);
+    std::ofstream outputFile4(TextFile4);
+
+    std::ostream_iterator<double> output_iterator1(outputFile1, ",");
+    for (int i = 0; i < resized.rows; ++i) {
+      const uchar* row_ptr = resized.ptr<uchar>(i);
+      for (int j = 0; j < resized.cols; ++j) {
+        outputFile1 << static_cast<double>(row_ptr[j]) << ",";
+      }
+    }
+    outputFile1 << "\n";
+
+    std::ostream_iterator<double> output_iterator2(outputFile2, ",");
+    for (int i = 0; i < sharpness_float.rows; ++i) {
+      const float* row_ptr = sharpness_float.ptr<float>(i);
+      for (int j = 0; j < sharpness_float.cols; ++j) {
+        outputFile2 << static_cast<double>(row_ptr[j]) << ",";
+      }
+    }
+    outputFile2 << "\n";
+
+    std::ostream_iterator<double> output_iterator3(outputFile3, ",");
+    std::copy(columnMeans.begin(), columnMeans.end(), output_iterator3);
+    outputFile3 << "\n";
+
+
+    std::ostream_iterator<double> output_iterator4(outputFile4, ",");
+    std::copy(sharpnessCurve.begin(), sharpnessCurve.end(), output_iterator4);
+    outputFile4 << "\n";
+
+
+    outputFile1.close();
+    outputFile2.close();
+    outputFile3.close();
+    outputFile4.close();
+    increment++;
+
+  }

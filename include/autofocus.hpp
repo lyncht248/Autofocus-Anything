@@ -133,9 +133,6 @@ public:
 
 
 
-  // Power-COM tuning
-  void setPowerCOMExponent(int p);          // integer >= 1, default 4
-  void setPowerCOMQuadraticRefine(bool on); // sub-pixel parabola refine
 
   // Set the assumed Gaussian sigma in **full-resolution pixels**. If <= 0, we
   // auto-estimate from σ_a.
@@ -146,6 +143,10 @@ public:
   // Exponential smoothing of the *returned* peak (0<beta<=1). beta=1 disables
   // smoothing.
   void setPeakSmoothing(double beta);
+
+  void SaveSharpnessTxt(const cv::Mat &resized, const cv::Mat& sharpness_float, 
+    const std::vector<double> &columnMeans, const std::vector<double>& sharpnessCurve, int& increment);
+  void SaveImagesPnG(cv::Mat &resized, double locBestFocusDouble, double A, double C, int& increment2);
 
   /**
    * @brief Gets the lens object.
