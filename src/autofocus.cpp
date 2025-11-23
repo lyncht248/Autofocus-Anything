@@ -57,10 +57,10 @@ std::atomic<bool> bNewImage = 0; // Flag that is 1 for when the buffer image is
                                  // new, 0 when buffer image is old
 
 const long img_size = 1280 * 960; // Replace with actual image size
-bool bSaveImages = 1; // Saves images from the tilted camera to output folder. WARNING: will
+bool bSaveImages = 0; // Saves images from the tilted camera to output folder. WARNING: will
                       // produce enormous number of images and slow down the system!
-bool bSaveSharpnessCurves = 1; // Saves text files with the sharpness curve data, similar to above
-bool bRunContinuous = 1;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
+bool bSaveSharpnessCurves = 0; // Saves text files with the sharpness curve data, similar to above
+bool bRunContinuous = 0;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
 
 
 bool bBlinking = 0;
@@ -158,7 +158,6 @@ bool autofocus::initialize() {
   img_x_squared_preallocated = cv::Mat::zeros(imHeight, imWidth, CV_32F);
   img_y_squared_preallocated = cv::Mat::zeros(imHeight, imWidth, CV_32F);
   sum_xy_preallocated = cv::Mat::zeros(imHeight, imWidth, CV_32F);
-  sharpness_float_preallocated = cv::Mat::zeros(imHeight, imWidth, CV_32F);
   imageofinterest_preallocated = cv::Mat::zeros(imHeight, 16, CV_8UC1);
 
   // Pre-allocate Roberts Cross kernels
@@ -1429,55 +1428,55 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   // cv::Mat img_x, img_y;
   cv::filter2D(resized, img_x_preallocated, CV_16S, roberts_kernelx);
   cv::filter2D(resized, img_y_preallocated, CV_16S, roberts_kernely);
-  // cv::Mat img_x_squared, img_y_squared, sum_xy;
+  cv::Mat img_x_squared, img_y_squared, sum_xy;
   cv::multiply(img_x_preallocated, img_x_preallocated, img_x_squared_preallocated);
   cv::multiply(img_y_preallocated, img_y_preallocated, img_y_squared_preallocated);
   cv::add(img_x_squared_preallocated, img_y_squared_preallocated, sum_xy_preallocated);
-  // cv::Mat sharpness_float;
-  sum_xy_preallocated.convertTo(sharpness_float_preallocated, CV_32F);
   auto robertsEnd = std::chrono::high_resolution_clock::now();
 
   // Column means
   auto columnStart = std::chrono::high_resolution_clock::now();
   cv::Mat columnMeansMatrix;
-  cv::reduce(sharpness_float_preallocated, columnMeansMatrix, 0, cv::REDUCE_AVG, CV_64F);
-  std::vector<double> columnMeans;
-  columnMeansMatrix.copyTo(columnMeans);
+  cv::reduce(sum_xy_preallocated, columnMeansMatrix, 0, cv::REDUCE_AVG, CV_32F);
+  // Use the Mat data directly with pointer(no copy)
+  int cols = columnMeansMatrix.cols;
+  const float* colPtr = cols > 0 ? columnMeansMatrix.ptr<float>(0) : nullptr;
   auto columnEnd = std::chrono::high_resolution_clock::now();
 
   // Compute offset
   auto offsetStart = std::chrono::high_resolution_clock::now();
-  // std::vector<double> y_values = columnMeans;
-  // std::vector<double> x_values;
-  // x_values.reserve(columnMeans.size());
-  // for (size_t i = 0; i < columnMeans.size(); i++) {
-  //     x_values.push_back(static_cast<double>(i));
-  //}
   const int offsetWindow = 50;
   double offset_left = 0.0, offset_right = 0.0;
-  if (columnMeans.size() >= offsetWindow) {
-      offset_left = std::accumulate(columnMeans.begin(), columnMeans.begin() + offsetWindow, 0.0) / offsetWindow;
-      offset_right = std::accumulate(columnMeans.end() - offsetWindow, columnMeans.end(), 0.0) / offsetWindow;
-  } else if (!columnMeans.empty()) {
-      offset_left = std::accumulate(columnMeans.begin(), columnMeans.end(), 0.0) / columnMeans.size();
-      offset_right = std::accumulate(columnMeans.begin(), columnMeans.end(), 0.0) / columnMeans.size();
+  if (cols > 0 && colPtr) {
+      int w = std::min(offsetWindow, cols);
+      // Use OpenCV's optimized sum on column subranges (columnMeansMatrix is CV_32F)
+      cv::Mat left = columnMeansMatrix.colRange(0, w);
+      cv::Mat right = columnMeansMatrix.colRange(cols - w, cols);
+      double leftSum = cv::sum(left)[0];
+      double rightSum = cv::sum(right)[0];
+      offset_left = leftSum / static_cast<double>(w);
+      offset_right = rightSum / static_cast<double>(w);
   } else {
-      offset_left = 0.0; // or handle empty case as needed
+      offset_left = 0.0;
       offset_right = 0.0;
   }
-  // Choose smallest offset and subtract, omitting negative values
   double offset = std::min(offset_left, offset_right);
-  std::vector<double> x_values, y_values;
-  for (size_t i = 0; i < columnMeans.size(); i++) {
-      double adjusted_value = columnMeans[i] - offset;
+
+  // Build x_values / y_values converting floats to doubles as needed
+  std::vector<double> x_values;
+  std::vector<double> y_values;
+  x_values.reserve(cols);
+  y_values.reserve(cols);
+  for (int i = 0; i < cols; ++i) {
+      double adjusted_value = (colPtr ? static_cast<double>(colPtr[i]) : 0.0) - offset;
       y_values.push_back(adjusted_value);
-      // y_values.push_back(columnMeans[i]);
       x_values.push_back(static_cast<double>(i));
   }
   double y_max = *std::max_element(y_values.begin(), y_values.end());
-  // double y_min = *std::min_element(y_values.begin(), y_values.end());
+
   auto offsetEnd = std::chrono::high_resolution_clock::now();
 
+  // Gaussian Fitting using GSL
   auto fittingStart = std::chrono::high_resolution_clock::now();
   // Construct data for GSL fitting
   struct data fit_data = { x_values.data(), y_values.data(), y_values.size() };
@@ -1502,7 +1501,6 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   gsl_vector_set(x, 0, y_max);
   gsl_vector_set(x, 1, n / 2.0);
   gsl_vector_set(x, 2, n / 4.0);
-  // gsl_vector_set(x, 3, y_min);  // Initial guess for offset
 
   fdf_params.trs = gsl_multifit_nlinear_trs_lmaccel;
   solve_system(x, &fdf, &fdf_params);
@@ -1510,22 +1508,20 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   double A = gsl_vector_get(x, 0);
   double B = gsl_vector_get(x, 1);
   double C = gsl_vector_get(x, 2);
-  // double D = gsl_vector_get(x, 3);
   // printf("Fitted parameters: A=%.4f, B=%.4f, C=%.4f\n", A, B, C);
   gsl_vector_free(f);
   gsl_vector_free(x);
+  B = std::clamp(B, -320.0, 960.0); // Clamp B to valid range
 
   auto fittingEnd = std::chrono::high_resolution_clock::now();
 
   // Visualise
-  lastSharpnessCurve = y_values;
   if (bSaveImages) {
+    lastSharpnessCurve = y_values;
     double locBestFocusDouble = B; // Mean from GSL fit
     SaveImagesPnG(resized, locBestFocusDouble, A, C, increment2);
     increment2++;
-
   }
-
 
   auto endTime = std::chrono::high_resolution_clock::now();
 
