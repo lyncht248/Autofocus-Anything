@@ -105,6 +105,20 @@ public:
    */
   double computeBestFocusGSL(cv::Mat image, int imgHeight, int imgWidth);
 
+  /**
+   * @brief Computes the best focus position using the Eigen Levenberg-Marquardt algorithm.
+   * 
+   * Faster alternative to GSL-based fitting.
+   *
+   * @param image Input image.
+   * @param imgHeight Height of the image.
+   * @param imgWidth Width of the image.
+   * @return Best focus position.
+
+  */
+
+  double computeBestFocusEigenLM(cv::Mat image, int imgHeight, int imgWidth);
+
 
   /**
    * @brief Computes the best focus position using an iterative algorithm for Gaussian fitting.
@@ -276,6 +290,8 @@ private:
    */
   double normpdf(double x, double u, double s); // helper function
 
+  std::ofstream debugLogFile; ///< Debug log file stream
+
 
 
   /**
@@ -355,6 +371,8 @@ private:
 
 
   Settings settings; ///< Settings object to manage configuration
+
+  void logEvent(const std::string& event, const std::string& details);
 };
 
 #endif // AUTOFOCUS_H

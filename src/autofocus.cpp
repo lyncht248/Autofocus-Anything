@@ -32,6 +32,9 @@
 #include <gsl/gsl_blas.h>
 #include <gsl/gsl_multifit_nlinear.h>
 
+#include <Eigen/Dense>
+#include <unsupported/Eigen/LevenbergMarquardt>
+
 
 // #include <stdlib.h>
 // #include <stdio.h>
@@ -108,6 +111,10 @@ std::atomic<double> currentMeasuredFocus{
 autofocus::autofocus()
     : lens1(), tiltedcam1(), stop_thread(false), settings("") {
 
+  debugLogFile.open("debug_log.csv", std::ios::out | std::ios::app);
+  if (debugLogFile.is_open()) {
+    debugLogFile << "Timestamp,Event,Details\n";
+  }
   try {
     // Load settings during construction
     settings.load();
@@ -145,6 +152,15 @@ bool autofocus::initialize() {
            "roberts_time_us,column_time_us,offset_time_us,fit_time_us"
         << std::endl;
     GSLBenchmarkFile.close();
+  }
+
+  std::ofstream EigenLMBenchmarkFile("../output/focus_benchmark_EigenLM.csv");
+  if (EigenLMBenchmarkFile.is_open()) {
+    EigenLMBenchmarkFile
+        << "timestamp,total_time_us,resize_time_us,"
+           "roberts_time_us,column_time_us,offset_time_us,fit_time_us, no. of iterations"
+        << std::endl;
+    EigenLMBenchmarkFile.close();
   }
 
 
@@ -349,8 +365,14 @@ void autofocus::run() {
         cv::Mat image(imHeight, imWidth, CV_8UC1, img_calc_buf);
 
 
+        // double locBestFocusDouble = computeBestFocusGSL(
+        //     image, imHeight, imWidth); //  returns double
+
         double locBestFocusDouble = computeBestFocusGSL(
             image, imHeight, imWidth); //  returns double
+
+        // std::cout << "locBestFocus (GSL): " << locBestFocusDouble << std::endl;
+        // std::cout << "locBestFocus (EigenLM): " << locBestFocusEigenLM << std::endl;
 
         // Store the current measured focus position globally
         currentMeasuredFocus.store(locBestFocusDouble);
@@ -377,8 +399,11 @@ void autofocus::run() {
         // double locBestFocusDouble = computeBestFocusReduced(
         //     image, imHeight, imWidth); //  returns double
 
-        double locBestFocusDouble = computeBestFocusGSL(
+        double locBestFocusDouble = computeBestFocusEigenLM(
             image, imHeight, imWidth); //  returns double
+
+        // double locBestFocusDouble = computeBestFocusGSL(
+        //     image, imHeight, imWidth); //  returns double
 
 
         // Store the current measured focus position globally
@@ -1506,9 +1531,14 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   fdf_params.trs = gsl_multifit_nlinear_trs_lmaccel;
   solve_system(x, &fdf, &fdf_params);
 
+  // std::cout << "GSL initial params: a=" << y_max << ", b=" << n / 2.0 << ", c=" << n / 4.0 << std::endl;
+
+  // std::cout << "GSL size of x,y: " << x_values.size() << ", " << y_values.size() << std::endl;
+
   double A = gsl_vector_get(x, 0);
   double B = gsl_vector_get(x, 1);
   double C = gsl_vector_get(x, 2);
+  // double D = gsl_vector_get(x, 3);
   // printf("Fitted parameters: A=%.4f, B=%.4f, C=%.4f\n", A, B, C);
   gsl_vector_free(f);
   gsl_vector_free(x);
@@ -1566,6 +1596,206 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
 }
 
 
+
+// Functor used in Eigen LM (see below) 
+struct LMFunctor : Eigen::DenseFunctor<double> {
+  const std::vector<double>& x_values;
+  const std::vector<double>& y_values;
+
+  LMFunctor(const std::vector<double>& x_values_, const std::vector<double>& y_values_)
+      : Eigen::DenseFunctor<double>(3, x_values_.size()), x_values(x_values_), y_values(y_values_) {}
+
+
+  // Eigen::MatrixXd measuredValues; // 2-column matrix: col 0 = x data, col 1 = y data
+
+  // LMFunctor(const std::vector<double>& x_values_, const std::vector<double>& y_values_)
+  //     : x_values(x_values_), y_values(y_values_) {}
+
+
+
+    // int df(const Eigen::VectorXd &x, Eigen::MatrixXd &fjac) const {
+    //   return -1; // Tells Eigen to use numerical differentiation
+    // }
+
+
+    // Compute residuals
+    int operator()(const Eigen::VectorXd &x, Eigen::VectorXd &fvec) const {
+      int n = x_values.size();
+      fvec.resize(n);
+      double a = x[0], b = x[1], c = x[2];
+      for (int i = 0; i < n; ++i) {
+          double ti = x_values[i];
+          double yi = y_values[i];
+            double yfit = gaussian(a, b, c, ti);
+            
+            fvec[i] = yi - yfit;
+        }
+        return 0;
+    }
+};
+
+
+
+
+
+
+
+
+
+
+// Implement Eigen LM - supposedly faster than GSL
+double
+autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
+                                          int imgWidth) {
+  auto startTime = std::chrono::high_resolution_clock::now();
+
+  // Resize to 1/2 x 1/2
+  // auto resizeStart = std::chrono::high_resolution_clock::now();
+  // cv::Mat resized;
+  // cv::resize(image, resized, cv::Size(), 0.5, 0.5);
+  // auto resizeEnd = std::chrono::high_resolution_clock::now();
+
+  // Roberts Cross gradients -> sharpness image (float)
+  auto robertsStart = std::chrono::high_resolution_clock::now();
+  // cv::Mat img_x, img_y;
+  cv::filter2D(image, img_x_preallocated, CV_16S, roberts_kernelx);
+  cv::filter2D(image, img_y_preallocated, CV_16S, roberts_kernely);
+  cv::Mat img_x_squared, img_y_squared, sum_xy;
+  cv::multiply(img_x_preallocated, img_x_preallocated, img_x_squared_preallocated);
+  cv::multiply(img_y_preallocated, img_y_preallocated, img_y_squared_preallocated);
+  cv::add(img_x_squared_preallocated, img_y_squared_preallocated, sum_xy_preallocated);
+  auto robertsEnd = std::chrono::high_resolution_clock::now();
+
+  // Column means
+  auto columnStart = std::chrono::high_resolution_clock::now();
+  cv::Mat columnMeansMatrix;
+  cv::reduce(sum_xy_preallocated, columnMeansMatrix, 0, cv::REDUCE_AVG, CV_32F);
+  // Use the Mat data directly with pointer(no copy)
+  int cols = columnMeansMatrix.cols;
+  const float* colPtr = cols > 0 ? columnMeansMatrix.ptr<float>(0) : nullptr;
+  auto columnEnd = std::chrono::high_resolution_clock::now();
+
+  // Compute offset
+  auto offsetStart = std::chrono::high_resolution_clock::now();
+  const int offsetWindow = 50;
+  double offset_left = 0.0, offset_right = 0.0;
+  if (cols > 0 && colPtr) {
+      int w = std::min(offsetWindow, cols);
+      // Use OpenCV's optimized sum on column subranges (columnMeansMatrix is CV_32F)
+      cv::Mat left = columnMeansMatrix.colRange(0, w);
+      cv::Mat right = columnMeansMatrix.colRange(cols - w, cols);
+      double leftSum = cv::sum(left)[0];
+      double rightSum = cv::sum(right)[0];
+      offset_left = leftSum / static_cast<double>(w);
+      offset_right = rightSum / static_cast<double>(w);
+  } else {
+      offset_left = 0.0;
+      offset_right = 0.0;
+  }
+  double offset = std::min(offset_left, offset_right);
+
+  // Build x_values / y_values converting floats to doubles as needed
+  std::vector<double> x_values;
+  std::vector<double> y_values;
+  x_values.reserve(cols);
+  y_values.reserve(cols);
+  for (int i = 0; i < cols; ++i) {
+      double adjusted_value = (colPtr ? static_cast<double>(colPtr[i]) : 0.0) - offset;
+      y_values.push_back(adjusted_value);
+      x_values.push_back(static_cast<double>(i));
+  }
+  double y_max = *std::max_element(y_values.begin(), y_values.end());
+
+  auto offsetEnd = std::chrono::high_resolution_clock::now();
+
+  // Gaussian Fitting using GSL
+  auto fittingStart = std::chrono::high_resolution_clock::now();
+  // Construct data for GSL fitting
+  // struct data fit_data = { x_values.data(), y_values.data(), y_values.size() };
+
+  const size_t n = y_values.size();
+  const size_t p = 3; // number of parameters: a, b, c
+  gsl_vector *f = gsl_vector_alloc(n);
+  gsl_vector *x = gsl_vector_alloc(p);
+  gsl_multifit_nlinear_fdf fdf;
+  gsl_multifit_nlinear_parameters fdf_params =
+    gsl_multifit_nlinear_default_parameters();
+  
+  /* define function to be minimized */
+  fdf.f = func_f;
+  fdf.df = func_df;
+  fdf.fvv = func_fvv;
+  fdf.n = n;
+  fdf.p = p;
+  fdf.params = &fit_data;
+
+  /* initial guess for parameters */
+  gsl_vector_set(x, 0, y_max);
+  gsl_vector_set(x, 1, n / 2.0);
+  gsl_vector_set(x, 2, n / 4.0);
+
+  fdf_params.trs = gsl_multifit_nlinear_trs_lmaccel;
+  solve_system(x, &fdf, &fdf_params);
+
+  double A = gsl_vector_get(x, 0);
+  double B = gsl_vector_get(x, 1);
+  double C = gsl_vector_get(x, 2);
+  // printf("Fitted parameters: A=%.4f, B=%.4f, C=%.4f\n", A, B, C);
+  gsl_vector_free(f);
+  gsl_vector_free(x);
+  B = std::clamp(B, -320.0, 960.0); // Clamp B to valid range
+
+  auto fittingEnd = std::chrono::high_resolution_clock::now();
+
+  // Visualise
+  if (bSaveImages) {
+    lastSharpnessCurve = y_values;
+    double locBestFocusDouble = B; // Mean from GSL fit
+    SaveImagesPnG(image, locBestFocusDouble, A, C, increment2);
+  }
+
+  auto endTime = std::chrono::high_resolution_clock::now();
+
+   // --- Timing log unchanged footprint, writing "com_time_us" as estimator time
+  // ---
+  auto totalTime =
+      std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+  // auto resizeTime = std::chrono::duration_cast<std::chrono::microseconds>(
+      // resizeEnd - resizeStart);
+  auto robertsTime = std::chrono::duration_cast<std::chrono::microseconds>(
+      robertsEnd - robertsStart);
+  auto columnTime = std::chrono::duration_cast<std::chrono::microseconds>(
+      columnEnd - columnStart);
+  auto offsetTime = std::chrono::duration_cast<std::chrono::microseconds>(
+      offsetEnd - offsetStart);
+  auto fittingTime = std::chrono::duration_cast<std::chrono::microseconds>(
+      fittingEnd - fittingStart);
+
+  try {
+    std::ofstream EigenLMBenchmarkFile("../output/focus_benchmark_EigenLM.csv",
+                                       std::ios::app);
+    if (EigenLMBenchmarkFile.is_open() && EigenLMBenchmarkFile.good()) {
+      auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::system_clock::now().time_since_epoch())
+                           .count();
+      // keep CSV header compatibility: write estimator time in the
+      // "com_time_us" column
+      GSLBenchmarkFile << timestamp << "," << totalTime.count() << ","
+                          //  << resizeTime.count() << ","
+                           << robertsTime.count() << "," 
+                           << columnTime.count() << ","
+                           << offsetTime.count() << "," 
+                           << fittingTime.count() << ","
+                           << lm.nfev() << ","
+                           << std::endl;
+      EigenLMBenchmarkFile.close();
+    }
+  } catch (...) { /* ignore */
+  }
+
+
+  return B; // Return the mean (best focus position)
+}
 
 
 
@@ -1869,3 +2099,12 @@ void autofocus::SaveSharpnessTxt(const cv::Mat &resized, const cv::Mat& sharpnes
     increment++;
 
   }
+
+
+  void autofocus::logEvent(const std::string& event, const std::string& details) {
+    if (debugLogFile.is_open()) {
+      auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+      debugLogFile << std::put_time(std::localtime(&now), "%F %T") << "," << event << "," << details << "\n";
+      debugLogFile.flush();
+  }
+}

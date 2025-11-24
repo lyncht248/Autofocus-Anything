@@ -14,6 +14,9 @@ find_package(PkgConfig REQUIRED)
 find_package(GSL REQUIRED)
 include_directories(${GSL_INCLUDE_DIRS})
 
+# find_package(Eigen3 REQUIRED)
+include_directories(/usr/include/eigen3)
+
 pkg_check_modules(GTKMM gtkmm-3.0)
 pkg_check_modules(TOON TooN)
 pkg_check_modules(SDL sdl2)
