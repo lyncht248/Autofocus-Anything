@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
     lens& lensController = focusController.getLens();
 
     // Kp values to test (from smaller to larger)
-    std::vector<double> kpValues = {0.0006, 0.0009, 0.0012, 0.0015, 0.0018, 0.0021};
+    std::vector<double> kpValues = {0.0021, 0.0026, 0.0031};//{0.0006, 0.0009, 0.0012, 0.0015, 0.0018, 0.0021};
     
     // Test parameters
     const int startFocus = 130;
@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
     std::this_thread::sleep_for(std::chrono::seconds(2));
     
     // Scale factor for image processing
-    double scale = 0.5;
+    double scale = 1;//0.5;
     
     // Image buffer setup
     const int imgWidth = camera.getImageWidth();

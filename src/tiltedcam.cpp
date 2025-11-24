@@ -101,7 +101,7 @@ bool tiltedcam::initialize()
     // ASISetControlValue(0,  ASI_EXPOSURE, 15, ASI_TRUE);
     // ASISetControlValue(0, ASI_BANDWIDTHOVERLOAD, 90, ASI_TRUE);
 
-    if (ASISetROIFormat(0, 1280, 960, 1, ASI_IMG_RAW8) == ASI_SUCCESS)
+    if (ASISetROIFormat(0, 640, 480, 2, ASI_IMG_RAW8) == ASI_SUCCESS)
     {
         // if (ASISetROIFormat(0, 320, 240, 1, ASI_IMG_RAW8) == ASI_SUCCESS) {
         if (bTiltedCamLogFlag)

@@ -59,11 +59,11 @@ bool bAutofocusLogFlag = 0; // Flag that is 1 for when the autofocus log is
 std::atomic<bool> bNewImage = 0; // Flag that is 1 for when the buffer image is
                                  // new, 0 when buffer image is old
 
-const long img_size = 1280 * 960; // Replace with actual image size
-bool bSaveImages = 1; // Saves images from the tilted camera to output folder. WARNING: will
+const long img_size = 640 * 480; // Replace with actual image size
+bool bSaveImages = 0; // Saves images from the tilted camera to output folder. WARNING: will
                       // produce enormous number of images and slow down the system!
 bool bSaveSharpnessCurves = 0; // Saves text files with the sharpness curve data, similar to above
-bool bRunContinuous = 1;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
+bool bRunContinuous = 0;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
 
 
 bool bBlinking = 0;
@@ -148,7 +148,8 @@ bool autofocus::initialize() {
   std::ofstream GSLBenchmarkFile("../output/focus_benchmark_GSL.csv");
   if (GSLBenchmarkFile.is_open()) {
     GSLBenchmarkFile
-        << "timestamp,total_time_us,resize_time_us,"
+        // << "timestamp,total_time_us,resize_time_us,"
+         << "timestamp,total_time_us,"
            "roberts_time_us,column_time_us,offset_time_us,fit_time_us"
         << std::endl;
     GSLBenchmarkFile.close();
@@ -399,7 +400,7 @@ void autofocus::run() {
         // double locBestFocusDouble = computeBestFocusReduced(
         //     image, imHeight, imWidth); //  returns double
 
-        double locBestFocusDouble = computeBestFocusEigenLM(
+        double locBestFocusDouble = computeBestFocusGSL(
             image, imHeight, imWidth); //  returns double
 
         // double locBestFocusDouble = computeBestFocusGSL(
@@ -1444,16 +1445,16 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   auto startTime = std::chrono::high_resolution_clock::now();
 
   // Resize to 1/2 x 1/2
-  auto resizeStart = std::chrono::high_resolution_clock::now();
-  cv::Mat resized;
-  cv::resize(image, resized, cv::Size(), 0.5, 0.5);
-  auto resizeEnd = std::chrono::high_resolution_clock::now();
+  // auto resizeStart = std::chrono::high_resolution_clock::now();
+  // cv::Mat resized;
+  // cv::resize(image, resized, cv::Size(), 0.5, 0.5);
+  // auto resizeEnd = std::chrono::high_resolution_clock::now();
 
   // Roberts Cross gradients -> sharpness image (float)
   auto robertsStart = std::chrono::high_resolution_clock::now();
   // cv::Mat img_x, img_y;
-  cv::filter2D(resized, img_x_preallocated, CV_16S, roberts_kernelx);
-  cv::filter2D(resized, img_y_preallocated, CV_16S, roberts_kernely);
+  cv::filter2D(image, img_x_preallocated, CV_16S, roberts_kernelx);
+  cv::filter2D(image, img_y_preallocated, CV_16S, roberts_kernely);
   // cv::Mat img_x_squared, img_y_squared, sum_xy;
   cv::multiply(img_x_preallocated, img_x_preallocated, img_x_squared_preallocated);
   cv::multiply(img_y_preallocated, img_y_preallocated, img_y_squared_preallocated);
@@ -1499,8 +1500,13 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
       // y_values.push_back(columnMeans[i]);
       x_values.push_back(static_cast<double>(i));
   }
-  double y_max = *std::max_element(y_values.begin(), y_values.end());
-  // double y_min = *std::min_element(y_values.begin(), y_values.end());
+  // Find the max value and its location as initial guess
+  // double y_max = *std::max_element(y_values.begin(), y_values.end());
+  auto maxIt = std::max_element(y_values.begin(), y_values.end());
+  double y_max = *maxIt;
+  size_t idx = std::distance(y_values.begin(), maxIt);
+  double x_at_y_max = x_values[idx];
+
   auto offsetEnd = std::chrono::high_resolution_clock::now();
 
   auto fittingStart = std::chrono::high_resolution_clock::now();
@@ -1525,7 +1531,7 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
 
   /* initial guess for parameters */
   gsl_vector_set(x, 0, y_max);
-  gsl_vector_set(x, 1, n / 2.0);
+  gsl_vector_set(x, 1, n/2.0);
   gsl_vector_set(x, 2, n / 4.0);
   // gsl_vector_set(x, 3, y_min);  // Initial guess for offset
 
@@ -1550,7 +1556,7 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   lastSharpnessCurve = y_values;
   if (bSaveImages) {
     double locBestFocusDouble = B; // Mean from GSL fit
-    SaveImagesPnG(resized, locBestFocusDouble, A, C, increment2);
+    SaveImagesPnG(image, locBestFocusDouble, A, C, increment2);
     increment2++;
 
   }
@@ -1562,8 +1568,8 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   // ---
   auto totalTime =
       std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
-  auto resizeTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      resizeEnd - resizeStart);
+  // auto resizeTime = std::chrono::duration_cast<std::chrono::microseconds>(
+  //     resizeEnd - resizeStart);
   auto robertsTime = std::chrono::duration_cast<std::chrono::microseconds>(
       robertsEnd - robertsStart);
   auto columnTime = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -1583,7 +1589,7 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
       // keep CSV header compatibility: write estimator time in the
       // "com_time_us" column
       GSLBenchmarkFile << timestamp << "," << totalTime.count() << ","
-                           << resizeTime.count() << ","
+                          //  << resizeTime.count() << ","
                            << robertsTime.count() << "," 
                            << columnTime.count() << ","
                            << offsetTime.count() << "," 
