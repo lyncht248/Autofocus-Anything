@@ -60,7 +60,7 @@ std::atomic<bool> bNewImage = 0; // Flag that is 1 for when the buffer image is
                                  // new, 0 when buffer image is old
 
 const long img_size = 1280 * 960; // Replace with actual image size
-bool bSaveImages = 0; // Saves images from the tilted camera to output folder. WARNING: will
+bool bSaveImages = 1; // Saves images from the tilted camera to output folder. WARNING: will
                       // produce enormous number of images and slow down the system!
 bool bSaveSharpnessCurves = 0; // Saves text files with the sharpness curve data, similar to above
 bool bRunContinuous = 1;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
@@ -158,7 +158,7 @@ bool autofocus::initialize() {
   if (EigenLMBenchmarkFile.is_open()) {
     EigenLMBenchmarkFile
         << "timestamp,total_time_us,resize_time_us,"
-           "roberts_time_us,column_time_us,offset_time_us,fit_time_us"
+           "roberts_time_us,column_time_us,offset_time_us,fit_time_us, no. of iterations"
         << std::endl;
     EigenLMBenchmarkFile.close();
   }
@@ -365,14 +365,14 @@ void autofocus::run() {
         cv::Mat image(imHeight, imWidth, CV_8UC1, img_calc_buf);
 
 
-        double locBestFocusDouble = computeBestFocusGSL(
+        // double locBestFocusDouble = computeBestFocusGSL(
+        //     image, imHeight, imWidth); //  returns double
+
+        double locBestFocusDouble = computeBestFocusEigenLM(
             image, imHeight, imWidth); //  returns double
 
-        double locBestFocusEigenLM = computeBestFocusEigenLM(
-            image, imHeight, imWidth); //  returns double
-
-        std::cout << "locBestFocus (GSL): " << locBestFocusDouble << std::endl;
-        std::cout << "locBestFocus (EigenLM): " << locBestFocusEigenLM << std::endl;
+        // std::cout << "locBestFocus (GSL): " << locBestFocusDouble << std::endl;
+        // std::cout << "locBestFocus (EigenLM): " << locBestFocusEigenLM << std::endl;
 
         // Store the current measured focus position globally
         currentMeasuredFocus.store(locBestFocusDouble);
@@ -401,6 +401,9 @@ void autofocus::run() {
 
         double locBestFocusDouble = computeBestFocusEigenLM(
             image, imHeight, imWidth); //  returns double
+
+        // double locBestFocusDouble = computeBestFocusGSL(
+        //     image, imHeight, imWidth); //  returns double
 
 
         // Store the current measured focus position globally
@@ -1719,8 +1722,9 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   Eigen::VectorXd params(3);
   params << y_max, n / 2.0, n / 4.0; // Initial guess
 
-  int max_iterations = 200;
-  double epsilon = 1e-5;
+  int max_iterations = 100;
+  double epsilon = 1e-6;
+
 
 
   LMFunctor functor(x_values, y_values);
@@ -1735,36 +1739,37 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
 
 
 
-  // Eigen::VectorXd residuals(y_values.size());
-  // functor(params, residuals);
-  // std::cout << "Initial residuals: " << residuals.transpose() << std::endl;
-
 
   int status = lm.minimize(params);
 
+  // std::cout << "Index: " << params(1) << std::endl;
+
 
   double A, B, C;
-  if (status == 0 || status == 1 || status == 2) {
-      // Fitting succeeded
-      B = params(1);
-      A = params(0);
-      C = params(2);
-      std::cout << "No. of iterations: " << lm.nfev() << std::endl;
-      std::cout << "Status: " << status << std::endl;
-      // std::cout << "Eigen A: " << A << std::endl;
-      // std::cout << "Eigen B: " << B << std::endl;
-      // std::cout << "Eigen C: " << C << std::endl;
-      // std::cout << "WORKED no. of iter: " << lm.nfev() << std::endl;
+  A = params(0);
+  B = params(1);
+  C = params(2);
+  // if (status == 0 || status == 1 || status == 2) {
+  //     // Fitting succeeded
+  //     B = params(1);
+  //     A = params(0);
+  //     C = params(2);
+  //     std::cout << "No. of iterations: " << lm.nfev() << std::endl;
+  //     std::cout << "Status: " << status << std::endl;
+  //     // std::cout << "Eigen A: " << A << std::endl;
+  //     // std::cout << "Eigen B: " << B << std::endl;
+  //     // std::cout << "Eigen C: " << C << std::endl;
+  //     // std::cout << "WORKED no. of iter: " << lm.nfev() << std::endl;
 
-  } else {
-      // Fitting failed
-      std::cout << "Eigen LM fitting failed with status: " << status << std::endl;
-      // std::cout << "No. of iterations: " << lm.nfev() << std::endl;
-      // std::cout << "Eigen A: " << params(0) << std::endl;
-      // std::cout << "Eigen B: " << params(1) << std::endl;
-      // std::cout << "Eigen C: " << params(2) << std::endl;
+  // } else {
+  //     // Fitting failed
+  //     std::cout << "Eigen LM fitting failed with status: " << status << std::endl;
+  //     // std::cout << "No. of iterations: " << lm.nfev() << std::endl;
+  //     // std::cout << "Eigen A: " << params(0) << std::endl;
+  //     // std::cout << "Eigen B: " << params(1) << std::endl;
+  //     // std::cout << "Eigen C: " << params(2) << std::endl;
 
-  }
+  // }
 
 
   // printf("Eigen Fitted parameters: A=%.4f, B=%.4f, C=%.4f\n", A, B, C);
@@ -1775,6 +1780,7 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   // Visualise
   lastSharpnessCurve = y_values;
   if (bSaveImages) {
+
     double locBestFocusDouble = B; // Mean from fit
     SaveImagesPnG(resized, locBestFocusDouble, A, C, increment2);
     increment2++;
@@ -1814,6 +1820,7 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
                            << columnTime.count() << ","
                            << offsetTime.count() << "," 
                            << fittingTime.count() << ","
+                           << lm.nfev() << ","
                            << std::endl;
       EigenLMBenchmarkFile.close();
     }
