@@ -56,7 +56,7 @@ bool bAutofocusLogFlag = 0; // Flag that is 1 for when the autofocus log is
 std::atomic<bool> bNewImage = 0; // Flag that is 1 for when the buffer image is
                                  // new, 0 when buffer image is old
 
-const long img_size = 1280 * 960; // Replace with actual image size
+const long img_size = 640 * 480;//1280 * 960; // Replace with actual image size
 bool bSaveImages = 0; // Saves images from the tilted camera to output folder. WARNING: will
                       // produce enormous number of images and slow down the system!
 bool bSaveSharpnessCurves = 0; // Saves text files with the sharpness curve data, similar to above
@@ -141,7 +141,7 @@ bool autofocus::initialize() {
   std::ofstream GSLBenchmarkFile("../output/focus_benchmark_GSL.csv");
   if (GSLBenchmarkFile.is_open()) {
     GSLBenchmarkFile
-        << "timestamp,total_time_us,resize_time_us,"
+        << "timestamp,total_time_us,"
            "roberts_time_us,column_time_us,offset_time_us,fit_time_us"
         << std::endl;
     GSLBenchmarkFile.close();
@@ -152,6 +152,7 @@ bool autofocus::initialize() {
   int imWidth = tiltedcam1.getImageWidth();
   int imHeight = tiltedcam1.getImageHeight();
 
+  
   blurred_preallocated = cv::Mat::zeros(imHeight, imWidth, CV_8UC1);
   img_x_preallocated = cv::Mat::zeros(imHeight, imWidth, CV_16S);
   img_y_preallocated = cv::Mat::zeros(imHeight, imWidth, CV_16S);
@@ -1418,16 +1419,16 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   auto startTime = std::chrono::high_resolution_clock::now();
 
   // Resize to 1/2 x 1/2
-  auto resizeStart = std::chrono::high_resolution_clock::now();
-  cv::Mat resized;
-  cv::resize(image, resized, cv::Size(), 0.5, 0.5);
-  auto resizeEnd = std::chrono::high_resolution_clock::now();
+  // auto resizeStart = std::chrono::high_resolution_clock::now();
+  // cv::Mat resized;
+  // cv::resize(image, resized, cv::Size(), 0.5, 0.5);
+  // auto resizeEnd = std::chrono::high_resolution_clock::now();
 
   // Roberts Cross gradients -> sharpness image (float)
   auto robertsStart = std::chrono::high_resolution_clock::now();
   // cv::Mat img_x, img_y;
-  cv::filter2D(resized, img_x_preallocated, CV_16S, roberts_kernelx);
-  cv::filter2D(resized, img_y_preallocated, CV_16S, roberts_kernely);
+  cv::filter2D(image, img_x_preallocated, CV_16S, roberts_kernelx);
+  cv::filter2D(image, img_y_preallocated, CV_16S, roberts_kernely);
   cv::Mat img_x_squared, img_y_squared, sum_xy;
   cv::multiply(img_x_preallocated, img_x_preallocated, img_x_squared_preallocated);
   cv::multiply(img_y_preallocated, img_y_preallocated, img_y_squared_preallocated);
@@ -1519,8 +1520,7 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   if (bSaveImages) {
     lastSharpnessCurve = y_values;
     double locBestFocusDouble = B; // Mean from GSL fit
-    SaveImagesPnG(resized, locBestFocusDouble, A, C, increment2);
-    increment2++;
+    SaveImagesPnG(image, locBestFocusDouble, A, C, increment2);
   }
 
   auto endTime = std::chrono::high_resolution_clock::now();
@@ -1529,8 +1529,8 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   // ---
   auto totalTime =
       std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
-  auto resizeTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      resizeEnd - resizeStart);
+  // auto resizeTime = std::chrono::duration_cast<std::chrono::microseconds>(
+      // resizeEnd - resizeStart);
   auto robertsTime = std::chrono::duration_cast<std::chrono::microseconds>(
       robertsEnd - robertsStart);
   auto columnTime = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -1550,7 +1550,7 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
       // keep CSV header compatibility: write estimator time in the
       // "com_time_us" column
       GSLBenchmarkFile << timestamp << "," << totalTime.count() << ","
-                           << resizeTime.count() << ","
+                          //  << resizeTime.count() << ","
                            << robertsTime.count() << "," 
                            << columnTime.count() << ","
                            << offsetTime.count() << "," 
@@ -1614,7 +1614,7 @@ void autofocus::reloadSettings() {
 //        Gaussian fit parameters: A, C, (B is equal to locBestFocusDouble), D
 //        increment counter
 
-void autofocus::SaveImagesPnG(cv::Mat &resized, double locBestFocusDouble, double A, double C, int& increment2) {
+void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double A, double C, int& increment2) {
 
 
   cv::Mat colorResized, combined;
@@ -1622,10 +1622,10 @@ void autofocus::SaveImagesPnG(cv::Mat &resized, double locBestFocusDouble, doubl
     try {
       // Convert resized to color if it's grayscale to match the graph image
       // type
-      if (resized.channels() == 1) {
-        cv::cvtColor(resized, colorResized, cv::COLOR_GRAY2BGR);
+      if (image.channels() == 1) {
+        cv::cvtColor(image, colorResized, cv::COLOR_GRAY2BGR);
       } else {
-        colorResized = resized.clone();
+        colorResized = image.clone();
     }
 
     // Create graph image with same width as resized image
