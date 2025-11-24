@@ -368,7 +368,7 @@ void autofocus::run() {
         // double locBestFocusDouble = computeBestFocusGSL(
         //     image, imHeight, imWidth); //  returns double
 
-        double locBestFocusDouble = computeBestFocusEigenLM(
+        double locBestFocusDouble = computeBestFocusGSL(
             image, imHeight, imWidth); //  returns double
 
         // std::cout << "locBestFocus (GSL): " << locBestFocusDouble << std::endl;
