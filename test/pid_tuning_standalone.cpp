@@ -53,13 +53,16 @@ int main(int argc, char **argv) {
     lens& lensController = focusController.getLens();
 
     // Kp values to test (from smaller to larger)
-    std::vector<double> kpValues = {0.0021, 0.0026, 0.0031};//{0.0006, 0.0009, 0.0012, 0.0015, 0.0018, 0.0021};
+    std::vector<double> kpValues = {1e-4, 2e-4, 3e-4, 3.5e-4, 4e-4};//{0.0006, 0.0009, 0.0012, 0.0015, 0.0018, 0.0021};
+    // std::vector<double> kpValues = {1e-6, 5e-6, 1e-5, 1.5e-6, 2e-5};
     
     // Test parameters
-    const int startFocus = 130;
-    const int targetFocus = 530;
+    // const int startFocus = 130;
+    // const int targetFocus = 530;
+    const int startFocus = 620;
+    const int targetFocus = 20;
     const int tolerance = 6;  // Same tolerance used in autofocus.cpp
-    const int testTimeout = 20000;  // 20 seconds in milliseconds
+    const int testTimeout = 5000;  // 20 seconds in milliseconds
     
     // Results storage
     struct TestResult {
@@ -135,7 +138,7 @@ int main(int argc, char **argv) {
         double ki = 0.0;         // no integral gain
         double kd = 0.0;         // no derivative gain for cleaner test
         
-        PID pid(dt, max, min, kp, kd, ki);
+        PID pid(dt, max, min, kp, kd, 0.0);
         
         // First ensure we're close to the starting focus
         std::cout << "Positioning to initial focus location..." << std::endl;

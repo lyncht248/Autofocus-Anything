@@ -528,9 +528,9 @@ MainWindow::MainWindow()
     kpSpin.set_range(0.0, 0.1);         // Adjust range as needed
     kpSpin.set_value(settings.getKp()); // Read Kp value from settings
 
-    kpSpin.set_increments(0.0001,
+    kpSpin.set_increments(0.000001,
                           0.1); // Enable +/- buttons with step increments
-    kpSpin.set_digits(4);       // Allow 4 decimal places for Kp
+    kpSpin.set_digits(5);       // Allow 4 decimal places for Kp
     kpLabel.set_tooltip_text("Proportional gain constant (autofocus)");
 
     // Spin button for Kd
@@ -538,9 +538,9 @@ MainWindow::MainWindow()
     Gtk::SpinButton kdSpin;
     kdSpin.set_range(0.0, 0.1);         //
     kdSpin.set_value(settings.getKd()); // Read Kd value from settings
-    kdSpin.set_increments(0.00001,
+    kdSpin.set_increments(0.0000001,
                           0.1); // Enable +/- buttons with step increments
-    kdSpin.set_digits(5);       // Allow 5 decimal places for Kd
+    kdSpin.set_digits(6);       // Allow 5 decimal places for Kd
     kdLabel.set_tooltip_text("Derivative gain constant (autofocus)");
 
     // Spin button for higher frequency (FREQ)

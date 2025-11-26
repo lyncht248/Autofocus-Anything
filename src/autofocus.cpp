@@ -5,6 +5,7 @@
 #include "logfile.hpp"
 #include "main.hpp"
 #include "mainwindow.hpp"
+// #include "pid.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -345,6 +346,9 @@ void autofocus::run() {
   double filteredLocBestFocus = 0.0; // Will be initialized on first frame
   bool isFirstFrame = true;
   const double derivativeFilterAlpha = 0.1; // Low-pass filter for measurement
+  
+  // Calculate movement using PID
+  // PID pid(dt, max, min, Kp, Kd, Ki);
 
   if (bAutofocusLogFlag) {
     logger->info("[autofocus::run] while thread loop about to start");
@@ -426,7 +430,6 @@ void autofocus::run() {
 
         lastTime = currentTime;
 
-
         // If imgcount==1, then the user has just turned on FindFocus or
         // HoldFocus
         if (imgcount == 1) {
@@ -443,6 +446,12 @@ void autofocus::run() {
             }
           }
         }
+
+        // (Shan testing) Use PID directly to calculate movement
+        // double moveAmount = pid.calculate(desiredLocBestFocus, locBestFocusDouble) * -1.0;
+        // mmToMove = moveAmount;
+        // bNewMoveRel = 1;
+        // moved = (std::abs(moveAmount) > 1e-12);
 
         // Filter the measurement for derivative term only
         if (isFirstFrame) {
@@ -463,10 +472,10 @@ void autofocus::run() {
 
         // Scale P gain based on error magnitude
         double errorMagnitude = abs(currentError);
-        double pScaleFactor;
+        double pScaleFactor = 1.0;
         if (errorMagnitude <= 3.0) {
           pScaleFactor = 0.13;
-        } else if (errorMagnitude >= 130.0) {
+        } else if (errorMagnitude >= 100.0) {
           pScaleFactor = 1.0;
         } else {
           // Linear interpolation between 3 pixels (0.1x) and 100 pixels (1.0x)
@@ -476,10 +485,12 @@ void autofocus::run() {
 
         // Apply directional multiplier for downward moves (positive errors)
         double effectiveKp = Kp;
+        double effectiveKd = Kd;
         if (currentError > 0) {
           // Moving toward more positive values (340→320, 320→300) - these were
           // slower
-          effectiveKp *= 1.0; // 20% more aggressive for downward moves
+          effectiveKp = 2.24e-3;
+          effectiveKd = 1.06e-4;
         }
 
         double pSignal = effectiveKp * currentError * pScaleFactor;
@@ -491,7 +502,8 @@ void autofocus::run() {
         // Calculate derivative using filtered error
         double rawDerivative =
             (filteredCurrentError - filteredPreviousError) / dt;
-        double dSignal = Kd * rawDerivative;
+        // double dSignal = Kd * rawDerivative;
+        double dSignal = effectiveKd * rawDerivative;
 
         // Total PD signal
         double totalPdSignal = pSignal + dSignal;
@@ -597,6 +609,7 @@ void autofocus::run() {
             mmToMove = totalPdSignal * -1.0;
             bNewMoveRel = 1;
             moved = 1;
+            // std::cout << "mmToMove: " << mmToMove << "\n";
 
             // //// OSCILLATION DETECTION
             // //Adding to locBestFocusHistory when outside TOL band
@@ -1851,24 +1864,17 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   int status = lm.minimize(params);
 
 
-  double A, B, C; //, D;
+  double A, B, C;
   A = params(0);
   B = params(1);
   C = params(2);
-  // D = params(3);
 
-
-  // std::cout << "Status: " << status << ", iterations: " << lm.nfev() << std::endl;
+  // std::cout << "Eigen LM fitted parameters: A=" << A << ", B=" << B << ", C=" << C << std::endl;
 
   // return B and C to original range
   B = (B + 0.5) * n; // Convert back to original range
   C = C * n; // Scale C back to original range
     
-  // Print B less than -320
-  // if (B < -320.0) {
-  //   std::cout << "Warning: B original: " << B << std::endl;
-  //   std::cout << "Status: " << status << ", iterations: " << lm.nfev() << std::endl;
-  // }
 
 
   B = std::clamp(B, -30.0, 700.0); // Clamp B to valid range
@@ -1885,7 +1891,6 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   if (bSaveSharpnessCurves) {
     // Implement this
     lastSharpnessCurve = y_values;
-    // SaveSharpnessTxt()
   }
 
   auto endTime = std::chrono::high_resolution_clock::now();
