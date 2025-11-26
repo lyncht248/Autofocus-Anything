@@ -167,8 +167,8 @@ public:
    * @param sharpnessCurve Sharpness curve data.
    * @param increment Increment value for file naming.
    */
-  void SaveSharpnessTxt(const cv::Mat &resized, const cv::Mat& sharpness_float, 
-    const std::vector<double> &columnMeans, const std::vector<double>& sharpnessCurve, int& increment);
+  void SaveSharpnessTxt(const cv::Mat &resized, const std::vector<double>& x_values,
+    const std::vector<double>& y_values, double A, double B, double C, int& niter, int& increment);
 
 
     /**
@@ -183,7 +183,7 @@ public:
      * @param C Variance of the Gaussian fit.
      * @param increment2 Increment value for file naming.
      */
-  void SaveImagesPnG(cv::Mat &resized, double locBestFocusDouble, double A, double C, int& increment2);
+  void SaveImagesPnG(cv::Mat &resized, double locBestFocusDouble, double A, double C, double D, int& increment2, int status = -1);
 
   /**
    * @brief Gets the lens object.
