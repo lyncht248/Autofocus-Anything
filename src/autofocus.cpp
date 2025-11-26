@@ -1041,7 +1041,7 @@ double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
     outputFile1.close();
     outputFile2.close();
 
-    SaveSharpnessTxt(resized, sharpness_float, columnMeans, lastSharpnessCurve, increment2);
+    // SaveSharpnessTxt(resized, sharpness_float, columnMeans, lastSharpnessCurve, increment2);
     increment2++;
   }
 
@@ -1388,7 +1388,7 @@ callback(const size_t iter, void *params,
   //         gsl_blas_dnrm2(f));
 }
 
-void
+int
 solve_system(gsl_vector *x, gsl_multifit_nlinear_fdf *fdf,
              gsl_multifit_nlinear_parameters *params)
 {
@@ -1437,6 +1437,9 @@ solve_system(gsl_vector *x, gsl_multifit_nlinear_fdf *fdf,
   // fprintf(stderr, "final cond(J) = %.12e\n", 1.0 / rcond);
 
   gsl_multifit_nlinear_free(work);
+
+  int n_iter = gsl_multifit_nlinear_niter(work);
+  return n_iter;
 }
 
 double
@@ -1456,10 +1459,8 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
 
   // Roberts Cross gradients -> sharpness image (float)
   auto robertsStart = std::chrono::high_resolution_clock::now();
-  // cv::Mat img_x, img_y;
   cv::filter2D(image, img_x_preallocated, CV_16S, roberts_kernelx);
   cv::filter2D(image, img_y_preallocated, CV_16S, roberts_kernely);
-  // cv::Mat img_x_squared, img_y_squared, sum_xy;
   cv::multiply(img_x_preallocated, img_x_preallocated, img_x_squared_preallocated);
   cv::multiply(img_y_preallocated, img_y_preallocated, img_y_squared_preallocated);
   cv::add(img_x_squared_preallocated, img_y_squared_preallocated, sum_xy_preallocated);
@@ -1503,6 +1504,11 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
       y_values.push_back(adjusted_value);
       x_values.push_back(static_cast<double>(i));
   }
+  // Move the x_values
+  const size_t n = y_values.size();
+  std::transform(x_values.begin(), x_values.end(), x_values.begin(),
+               [n](double x) { return (x / n) - 0.5; });
+
   // Find the max value and its location as initial guess
   // double y_max = *std::max_element(y_values.begin(), y_values.end());
   auto maxIt = std::max_element(y_values.begin(), y_values.end());
@@ -1517,7 +1523,7 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   // Construct data for GSL fitting
   struct data fit_data = { x_values.data(), y_values.data(), y_values.size() };
 
-  const size_t n = y_values.size();
+  // const size_t n = y_values.size();
   const size_t p = 3; // number of parameters: a, b, c
   gsl_vector *f = gsl_vector_alloc(n);
   gsl_vector *x = gsl_vector_alloc(p);
@@ -1535,11 +1541,11 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
 
   /* initial guess for parameters */
   gsl_vector_set(x, 0, y_max);
-  gsl_vector_set(x, 1, n/2.0);
-  gsl_vector_set(x, 2, n / 4.0);
+  gsl_vector_set(x, 1, x_at_y_max); // Use x at max y as initial guess for mean
+  gsl_vector_set(x, 2, 0.25);
 
   fdf_params.trs = gsl_multifit_nlinear_trs_lmaccel;
-  solve_system(x, &fdf, &fdf_params);
+  int niter = solve_system(x, &fdf, &fdf_params);
 
   // std::cout << "GSL initial params: a=" << y_max << ", b=" << n / 2.0 << ", c=" << n / 4.0 << std::endl;
 
@@ -1552,6 +1558,11 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   // printf("Fitted parameters: A=%.4f, B=%.4f, C=%.4f\n", A, B, C);
   gsl_vector_free(f);
   gsl_vector_free(x);
+
+  B += 0.5; // Rescale back
+  B *= n;
+  C *= n;
+
   B = std::clamp(B, -320.0, 960.0); // Clamp B to valid range
 
   auto fittingEnd = std::chrono::high_resolution_clock::now();
@@ -1561,8 +1572,13 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
     lastSharpnessCurve = y_values;
     double locBestFocusDouble = B; // Mean from GSL fit
     SaveImagesPnG(image, locBestFocusDouble, A, C, increment2);
-    increment2++;
 
+  }
+
+  if (bSaveSharpnessCurves) {
+    std::transform(x_values.begin(), x_values.end(), x_values.begin(),
+               [n](double x) { return (x+0.5)*n; });
+    SaveSharpnessTxt(image, x_values, y_values, A, B, C, niter, increment);
   }
 
   auto endTime = std::chrono::high_resolution_clock::now();
@@ -1723,40 +1739,65 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
 
   // Gaussian Fitting using GSL
   auto fittingStart = std::chrono::high_resolution_clock::now();
-  // Construct data for GSL fitting
-  // struct data fit_data = { x_values.data(), y_values.data(), y_values.size() };
-
-  const size_t n = y_values.size();
-  const size_t p = 3; // number of parameters: a, b, c
-  gsl_vector *f = gsl_vector_alloc(n);
-  gsl_vector *x = gsl_vector_alloc(p);
-  gsl_multifit_nlinear_fdf fdf;
-  gsl_multifit_nlinear_parameters fdf_params =
-    gsl_multifit_nlinear_default_parameters();
+    int n = y_values.size();
+  int p = 3; // number of parameters: a, b, c
   
-  /* define function to be minimized */
-  fdf.f = func_f;
-  fdf.df = func_df;
-  fdf.fvv = func_fvv;
-  fdf.n = n;
-  fdf.p = p;
-  fdf.params = &fit_data;
+  Eigen::VectorXd params(3);
+  params << y_max, n / 2.0, n / 4.0; // Initial guess
 
-  /* initial guess for parameters */
-  gsl_vector_set(x, 0, y_max);
-  gsl_vector_set(x, 1, n / 2.0);
-  gsl_vector_set(x, 2, n / 4.0);
+  int max_iterations = 100;
+  double epsilon = 1e-6;
 
-  fdf_params.trs = gsl_multifit_nlinear_trs_lmaccel;
-  solve_system(x, &fdf, &fdf_params);
 
-  double A = gsl_vector_get(x, 0);
-  double B = gsl_vector_get(x, 1);
-  double C = gsl_vector_get(x, 2);
-  // printf("Fitted parameters: A=%.4f, B=%.4f, C=%.4f\n", A, B, C);
-  gsl_vector_free(f);
-  gsl_vector_free(x);
-  B = std::clamp(B, -320.0, 960.0); // Clamp B to valid range
+
+  LMFunctor functor(x_values, y_values);
+  Eigen::NumericalDiff<LMFunctor> numDiff(functor);
+
+  Eigen::LevenbergMarquardt<Eigen::NumericalDiff<LMFunctor>> lm(numDiff);
+
+  lm.setXtol(epsilon);
+  lm.setMaxfev(max_iterations);
+  lm.setGtol(epsilon);
+  lm.setFtol(epsilon);
+
+
+
+
+  int status = lm.minimize(params);
+
+  // std::cout << "Index: " << params(1) << std::endl;
+
+
+  double A, B, C;
+  A = params(0);
+  B = params(1);
+  C = params(2);
+  // if (status == 0 || status == 1 || status == 2) {
+  //     // Fitting succeeded
+  //     B = params(1);
+  //     A = params(0);
+  //     C = params(2);
+  //     std::cout << "No. of iterations: " << lm.nfev() << std::endl;
+  //     std::cout << "Status: " << status << std::endl;
+  //     // std::cout << "Eigen A: " << A << std::endl;
+  //     // std::cout << "Eigen B: " << B << std::endl;
+  //     // std::cout << "Eigen C: " << C << std::endl;
+  //     // std::cout << "WORKED no. of iter: " << lm.nfev() << std::endl;
+
+  // } else {
+  //     // Fitting failed
+  //     std::cout << "Eigen LM fitting failed with status: " << status << std::endl;
+  //     // std::cout << "No. of iterations: " << lm.nfev() << std::endl;
+  //     // std::cout << "Eigen A: " << params(0) << std::endl;
+  //     // std::cout << "Eigen B: " << params(1) << std::endl;
+  //     // std::cout << "Eigen C: " << params(2) << std::endl;
+
+  // }
+
+
+  // printf("Eigen Fitted parameters: A=%.4f, B=%.4f, C=%.4f\n", A, B, C);
+
+
 
   auto fittingEnd = std::chrono::high_resolution_clock::now();
 
@@ -1793,7 +1834,7 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
                            .count();
       // keep CSV header compatibility: write estimator time in the
       // "com_time_us" column
-      GSLBenchmarkFile << timestamp << "," << totalTime.count() << ","
+      EigenLMBenchmarkFile << timestamp << "," << totalTime.count() << ","
                           //  << resizeTime.count() << ","
                            << robertsTime.count() << "," 
                            << columnTime.count() << ","
@@ -2064,51 +2105,34 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
 // Helper function to save sharpness curves as text files
 // input: resized image, image after roberts cross (sharpness_float),
 //        column means vector, sharpness curve vector, increment counter
-void autofocus::SaveSharpnessTxt(const cv::Mat &resized, const cv::Mat& sharpness_float, 
-  const std::vector<double> &columnMeans, const std::vector<double>& sharpnessCurve, int& increment) {
+void autofocus::SaveSharpnessTxt(const cv::Mat &resized,  const std::vector<double>& x_values, const std::vector<double>& y_values, double A, double B, double C, int& niter, int& increment) {
     std::string fileName = "SHARPNESS_CURVE_" + std::to_string(increment);
-    std::string TextFile1 = "../output/SharpnessCurves/" + fileName + "_resized.txt";
-    std::string TextFile2 = "../output/SharpnessCurves/" + fileName + "_roberts_cross.txt";
-    std::string TextFile3 = "../output/SharpnessCurves/" + fileName + "_column_means.txt";
-    std::string TextFile4 = "../output/SharpnessCurves/" + fileName + "_sharpness_curve.txt";
+    std::string TextFile1 = "../output/SharpnessCurves/" + fileName + "_x_values.txt";
+    std::string TextFile2 = "../output/SharpnessCurves/" + fileName + "_y_values.txt";
+    std::string TextFile3 = "../output/SharpnessCurves/" + fileName + "_fit_params.txt";
 
     std::ofstream outputFile1(TextFile1);
     std::ofstream outputFile2(TextFile2);
     std::ofstream outputFile3(TextFile3);
-    std::ofstream outputFile4(TextFile4);
 
-    std::ostream_iterator<double> output_iterator1(outputFile1, ",");
-    for (int i = 0; i < resized.rows; ++i) {
-      const uchar* row_ptr = resized.ptr<uchar>(i);
-      for (int j = 0; j < resized.cols; ++j) {
-        outputFile1 << static_cast<double>(row_ptr[j]) << ",";
-      }
+    for (const auto& val : x_values) {
+        outputFile1 << val << "\n";
     }
-    outputFile1 << "\n";
-
-    std::ostream_iterator<double> output_iterator2(outputFile2, ",");
-    for (int i = 0; i < sharpness_float.rows; ++i) {
-      const float* row_ptr = sharpness_float.ptr<float>(i);
-      for (int j = 0; j < sharpness_float.cols; ++j) {
-        outputFile2 << static_cast<double>(row_ptr[j]) << ",";
-      }
+    for (const auto& val : y_values) {
+        outputFile2 << val << "\n";
     }
-    outputFile2 << "\n";
+    outputFile3 << "A: " << A << "\n";
+    outputFile3 << "B: " << B << "\n";
+    outputFile3 << "C: " << C << "\n";
+    outputFile3 << "Niter: " << niter << "\n";
 
-    std::ostream_iterator<double> output_iterator3(outputFile3, ",");
-    std::copy(columnMeans.begin(), columnMeans.end(), output_iterator3);
-    outputFile3 << "\n";
-
-
-    std::ostream_iterator<double> output_iterator4(outputFile4, ",");
-    std::copy(sharpnessCurve.begin(), sharpnessCurve.end(), output_iterator4);
-    outputFile4 << "\n";
+  
 
 
     outputFile1.close();
     outputFile2.close();
     outputFile3.close();
-    outputFile4.close();
+
     increment++;
 
   }

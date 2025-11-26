@@ -167,8 +167,8 @@ public:
    * @param sharpnessCurve Sharpness curve data.
    * @param increment Increment value for file naming.
    */
-  void SaveSharpnessTxt(const cv::Mat &resized, const cv::Mat& sharpness_float, 
-    const std::vector<double> &columnMeans, const std::vector<double>& sharpnessCurve, int& increment);
+  void SaveSharpnessTxt(const cv::Mat &resized, const std::vector<double>& x_values,
+    const std::vector<double>& y_values, double A, double B, double C, int& niter, int& increment);
 
 
     /**
