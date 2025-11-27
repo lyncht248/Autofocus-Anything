@@ -2036,10 +2036,11 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
 
     // Set y-axis range
     double yAxisMin = 0.0;
-    double yAxisMax = maxSharpness;
+    double yAxisMax = 1.0; // maxSharpness;
 
     // Scale based on sharpness image
-    double maxVal = yAxisMax;
+    //double maxVal = yAxisMax;
+    double maxVal = maxSharpness;
     if (maxVal <= 0) {
       maxVal = 1.0;
     }
@@ -2061,10 +2062,10 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
       if (x1 >= 0 && x2 < graphWidth) {
         int y1 =
             graphHeight -
-            static_cast<int>((lastSharpnessCurve[i - 1] / maxVal) *
+            static_cast<int>((lastSharpnessCurve[i - 1] / yAxisMax) *
                               (graphHeight - 50));
         int y2 = graphHeight -
-                  static_cast<int>((lastSharpnessCurve[i] / maxVal) *
+                  static_cast<int>((lastSharpnessCurve[i] / yAxisMax) *
                                   (graphHeight - 50));
         cv::line(graphImage, cv::Point(x1, y1), cv::Point(x2, y2),
                   cv::Scalar(255, 0, 0), 1); // Blue
@@ -2083,8 +2084,8 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
     for (size_t i = 1; i < fittedCurve.size(); ++i) {
         int x1 = i - 1;
         int x2 = i;
-        int y1 = graphHeight - static_cast<int>((fittedCurve[i - 1] / maxVal) * (graphHeight - 50));
-        int y2 = graphHeight - static_cast<int>((fittedCurve[i] / maxVal) * (graphHeight - 50));
+        int y1 = graphHeight - static_cast<int>((fittedCurve[i - 1] / yAxisMax) * (graphHeight - 50));
+        int y2 = graphHeight - static_cast<int>((fittedCurve[i] / yAxisMax) * (graphHeight - 50));
         // Draw only if within bounds
         if (x1 >= 0 && x2 < graphWidth) {
             cv::line(graphImage, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 0, 255), 1); // Red
