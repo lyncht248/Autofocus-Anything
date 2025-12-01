@@ -57,10 +57,10 @@ int main(int argc, char **argv) {
     // std::vector<double> kpValues = {1e-6, 5e-6, 1e-5, 1.5e-6, 2e-5};
     
     // Test parameters
-    // const int startFocus = 130;
-    // const int targetFocus = 530;
-    const int startFocus = 620;
-    const int targetFocus = 20;
+    const int startFocus = 130;
+    const int targetFocus = 530;
+    // const int startFocus = 620;
+    // const int targetFocus = 20;
     const int tolerance = 6;  // Same tolerance used in autofocus.cpp
     const int testTimeout = 5000;  // 20 seconds in milliseconds
     

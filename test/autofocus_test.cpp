@@ -60,7 +60,7 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
   const long img_size = imgWidth * imgHeight;
   unsigned char *buffer = new unsigned char[img_size];
 
-  double scale = 0.5; // Same scale used in autofocus::run
+  double scale = 1; // Same scale used in autofocus::run
 
   // Starting lens positions to test (updated for current bounds: MIN=-15.0,
   // MAX=0.0) Using more conservative positions to avoid boundary issues
@@ -142,7 +142,7 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
       cv::Mat resized;
       cv::resize(image, resized, cv::Size(), scale, scale);
 
-      currentFocus = focusController->computeBestFocusGSL(resized, resized.rows,
+      currentFocus = focusController->computeBestFocusEigenLM(resized, resized.rows,
                                                        resized.cols);
 
       std::cout << "Current best focus location: " << currentFocus << " pixels";
@@ -232,7 +232,7 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
         cv::Mat resized;
         cv::resize(image, resized, cv::Size(), scale, scale);
 
-        int focus = focusController->computeBestFocusGSL(resized, resized.rows,
+        int focus = focusController->computeBestFocusEigenLM(resized, resized.rows,
                                                       resized.cols);
 
         // Add this measurement to our average
@@ -312,7 +312,7 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
         cv::Mat resized;
         cv::resize(image, resized, cv::Size(), scale, scale);
 
-        int focus = focusController->computeBestFocusGSL(resized, resized.rows,
+        int focus = focusController->computeBestFocusEigenLM(resized, resized.rows,
                                                       resized.cols);
 
         // Add this measurement to our average

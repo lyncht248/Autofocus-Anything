@@ -54,17 +54,17 @@
 
 // 0.0057 mm per pixel is the average!!!!
 
-bool bAutofocusLogFlag = 0; // Flag that is 1 for when the autofocus log is
+bool bAutofocusLogFlag = 1; // Flag that is 1 for when the autofocus log is
                             // being written to, 0 when it is not
 
 std::atomic<bool> bNewImage = 0; // Flag that is 1 for when the buffer image is
                                  // new, 0 when buffer image is old
 
 const long img_size = 640 * 480; // Replace with actual image size
-bool bSaveImages = 0; // Saves images from the tilted camera to output folder. WARNING: will
+bool bSaveImages = 1; // Saves images from the tilted camera to output folder. WARNING: will
                       // produce enormous number of images and slow down the system!
 bool bSaveSharpnessCurves = 0; // Saves text files with the sharpness curve data, similar to above
-bool bRunContinuous = 0;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
+bool bRunContinuous = 1;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
 
 
 bool bBlinking = 0;
@@ -613,11 +613,11 @@ void autofocus::run() {
         //     blink = 0;
         //   }
         // } else {
-        //   // Use double precision measurement for tolerance checking
-        //   if (abs(locBestFocusDouble - desiredLocBestFocus) <= tol) {
-        //     // std::cout << ", in TOL band\n";
-        //     moved = 0;
-        //   } else {
+          // Use double precision measurement for tolerance checking
+          // if (abs(locBestFocusDouble - desiredLocBestFocus) <= tol) {
+          //   // std::cout << ", in TOL band\n";
+          //   moved = 0;
+          // } else {
         //     // Use the double precision PD signal - NO CASTING!
         //     mmToMove = totalPdSignal * -1.0;
         //     bNewMoveRel = 1;
@@ -1535,7 +1535,7 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   for (int i = 0; i < cols; ++i) {
       double adjusted_value = (colPtr ? static_cast<double>(colPtr[i]) : 0.0) - offset;
       y_values.push_back(adjusted_value);
-      x_values.push_back(static_cast<double>(i));
+        x_values.push_back(static_cast<double>(i));
   }
   // Move the x_values
   const size_t n = y_values.size();
@@ -1690,7 +1690,16 @@ struct LMFunctor : Eigen::DenseFunctor<double> {
         // Analytical jacobian
         int n = x_values.size();
         fjac.resize(n, 3); // 3 parameters: a, b, c
+
+
+
         double a = x[0], b = x[1], c = x[2];
+
+        // try logc
+        // double a = x[0], b = x[1], logc = x[2];
+        // double c = std::exp(logc);
+
+
         for (int i = 0; i < n; ++i) {
             double ti = x_values[i];
             double zi = (ti - b) / c;
@@ -1731,6 +1740,12 @@ struct LMFunctor : Eigen::DenseFunctor<double> {
       int n = x_values.size();
       fvec.resize(n);
       double a = x[0], b = x[1], c = x[2]; // , offset=x[3];
+
+      // try logc
+      // double a = x[0], b = x[1], logc = x[2];
+      // double c = std::exp(logc);
+
+
       for (int i = 0; i < n; ++i) {
           double ti = x_values[i];
           double yi = y_values[i];
@@ -1814,7 +1829,7 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
 
   // Build x_values / y_values converting floats to doubles as needed
   std::vector<double> x_values;
-  std::vector<double> y_values;
+  std::vector<double> y_values, y_original, y_pos;
   x_values.reserve(cols);
   y_values.reserve(cols);
   for (int i = 0; i < cols; ++i) {
@@ -1822,22 +1837,51 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
       y_values.push_back(adjusted_value);
       // y_values.push_back(colPtr ? static_cast<double>(colPtr[i]) : 0.0);
       x_values.push_back(static_cast<double>(i));
+      y_original.push_back(colPtr ? static_cast<double>(colPtr[i]) : 0.0);
+
+      // Keep positive values
+      if (adjusted_value < 0.0) {
+          y_pos.push_back(0.0);
+      } else {
+          y_pos.push_back(adjusted_value);
+      }
   }
 
   // // Normalise x to [-0.5, 0.5] range
   int n = y_values.size();
   std::transform(
       x_values.begin(), x_values.end(), x_values.begin(),
-      [n](double x) { return x / static_cast<double>(n) - 0.5; }
-  );
+      [n](double x) { return (x / n) - 0.5; });
 
-  double y_max = *std::max_element(y_values.begin(), y_values.end());
+
+  // double y_max = *std::max_element(y_values.begin(), y_values.end());
   // double y_min = *std::min_element(y_values.begin(), y_values.end());
+
+
+
+
 
   // Get x value at y max
   auto maxIt = std::max_element(y_values.begin(), y_values.end());
   size_t idx = std::distance(y_values.begin(), maxIt);
   double x_at_y_max = x_values[idx];
+
+
+  double y_max = *maxIt;
+
+  // Normalise y values to [0,1]
+  std::transform(
+      y_values.begin(), y_values.end(), y_values.begin(),
+      [n, y_max](double y) { return y / y_max ; }
+  );
+
+  // Normalise y positive
+  // std::transform(
+  //     y_pos.begin(), y_pos.end(), y_pos.begin(),
+  //     [n, y_max](double y) { return y / y_max ; }
+  // );
+
+
 
   auto offsetEnd = std::chrono::high_resolution_clock::now();
 
@@ -1851,12 +1895,12 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   
   Eigen::VectorXd params(p);
   params << y_max, x_at_y_max, 1.0 / 4.0; //, y_min; // Initial guess
-
+// x_at_y_max
   // std::cout << "Initial D: " << y_min << std::endl;
 
   int max_iterations = 500;
-  double epsilon = 1e-6;
-  double epsilon_g = 1e-8;
+  double epsilon = 1e-4;
+  double epsilon_g = 1e-4;
 
 
 
@@ -1877,16 +1921,20 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   int status = lm.minimize(params);
 
 
-  double A, B, C;
+  double A, B, C, logC;
   A = params(0);
   B = params(1);
   C = params(2);
+  // C = std::exp(logC);
 
   // std::cout << "Eigen LM fitted parameters: A=" << A << ", B=" << B << ", C=" << C << std::endl;
 
   // return B and C to original range
   B = (B + 0.5) * n; // Convert back to original range
   C = C * n; // Scale C back to original range
+
+
+  // std::cout << "LoBF: " << B << std::endl;
     
 
 
@@ -1896,7 +1944,10 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
 
   // Visualise
   if (bSaveImages) {
-    lastSharpnessCurve = y_values;
+    // lastSharpnessCurve = y_values;
+
+    // Plot values before offset subtraction
+    lastSharpnessCurve = y_values;//y_original;
     double locBestFocusDouble = B; // Mean from fit
     SaveImagesPnG(image, locBestFocusDouble, A, C, increment2, status);
   }
@@ -2036,7 +2087,7 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
 
     // Set y-axis range
     double yAxisMin = 0.0;
-    double yAxisMax = 1.0; // maxSharpness;
+    double yAxisMax = 300.0; //1.0; // maxSharpness;
 
     // Scale based on sharpness image
     //double maxVal = yAxisMax;
