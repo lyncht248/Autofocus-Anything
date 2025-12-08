@@ -1784,88 +1784,84 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
 
   // Moving Average
   auto MovAvgStart = std::chrono::high_resolution_clock::now();
-  std::vector<double> sharpnesscurve;
+  // Convolution with 1/movAvgWindow kernel
   const int movAvgWindow = 20;
-  for (int i = 0; i < cols - movAvgWindow; i++) {
-    double regionSharpnessScore = 0.0;
-    for (int k = 0; k < movAvgWindow; k++) {
-      regionSharpnessScore += colPtr[i + k];
-    }
-    regionSharpnessScore /= movAvgWindow; // Normalize by kernel size
-    sharpnesscurve.push_back(regionSharpnessScore);
-  }
-  // auto MovAvgEnd = std::chrono::high_resolution_clock::now();
+  cv::Mat kernel = cv::Mat::ones(1, movAvgWindow, CV_32F) / static_cast<float>(movAvgWindow);
+  cv::Mat movAvgResult;
+  cv::filter2D(columnMeansMatrix, movAvgResult, -1, kernel);
+
+  double min_signal, max_signal;
+  cv::minMaxLoc(columnMeansMatrix, &min_signal, &max_signal);
 
   // Calculate Signal to Noise Ratio (SNR)
 
   // signal = max - min
-  double max_signal = *std::max_element(sharpnesscurve.begin(), sharpnesscurve.end());
-  double min_signal = *std::min_element(sharpnesscurve.begin(), sharpnesscurve.end());
   double signal = max_signal - min_signal;
 
-  // noise = std of signal
-  // double meanNoise = std::accumulate(sharpnesscurve.begin(), sharpnesscurve.end(), 0.0) / sharpnesscurve.size();
-  // double sq_sum = std::inner_product(sharpnesscurve.begin(), sharpnesscurve.end(), sharpnesscurve.begin(), 0.0);
-  // double varNoise = (sq_sum / sharpnesscurve.size()) - (meanNoise * meanNoise);
-  // double noise = std::sqrt(varNoise);
-
-  // or noise = min(sharpnesscurve)
-  // double noise = min_signal;
+  // noise = std(raw signal - moving average)
+  cv::Mat Diff;
+  cv::subtract(columnMeansMatrix, movAvgResult, Diff);
+  double meanNoise = cv::mean(Diff)[0];
+  double sq_sum = cv::sum(Diff.mul(Diff))[0];
+  double varNoise = (sq_sum / Diff.total()) - (meanNoise * meanNoise);
+  double noise = std::sqrt(varNoise);
 
   // SNR
-  // double SNR = (noise > 0.0) ? (signal / noise) : 0.0;
+  double SNR = (noise > 0.0) ? (signal / noise) : 0.0;
 
   // std::cout << "Signal: " << signal << ", Noise: " << noise << ", SNR: " << SNR << std::endl;
   
-  double sq_sum, varNoise, noise, SNR;
   auto movAvgEnd = std::chrono::high_resolution_clock::now();
 
 
 
   // Compute offset
   auto offsetStart = std::chrono::high_resolution_clock::now();
-  const int offsetWindow = 50;
-  double offset_left = 0.0, offset_right = 0.0;
 
-  if (cols > 0 && colPtr) {
-      int w = std::min(offsetWindow, cols);
-      // Use OpenCV's optimized sum on column subranges (columnMeansMatrix is CV_32F)
-      cv::Mat left = columnMeansMatrix.colRange(0, w);
-      cv::Mat right = columnMeansMatrix.colRange(cols - w, cols);
-      double leftSum = cv::sum(left)[0];
-      double rightSum = cv::sum(right)[0];
-      offset_left = leftSum / static_cast<double>(w);
-      offset_right = rightSum / static_cast<double>(w);
+  // Moving Average
+  double offset = min_signal;
+  // const int offsetWindow = 50;
+  // double offset_left = 0.0, offset_right = 0.0;
+
+  // if (cols > 0 && colPtr) {
+  //     int w = std::min(offsetWindow, cols);
+  //     // Use OpenCV's optimized sum on column subranges (columnMeansMatrix is CV_32F)
+  //     cv::Mat left = columnMeansMatrix.colRange(0, w);
+  //     cv::Mat right = columnMeansMatrix.colRange(cols - w, cols);
+  //     double leftSum = cv::sum(left)[0];
+  //     double rightSum = cv::sum(right)[0];
+  //     offset_left = leftSum / static_cast<double>(w);
+  //     offset_right = rightSum / static_cast<double>(w);
 
 
-      // calculate noise as std of min(left, right)
+  //     // calculate noise as std of min(left, right)
 
-      if (offset_left < offset_right) {
-          // left is smaller
-          cv::Mat left_sq;
-          cv::multiply(left, left, left_sq);
-          sq_sum = cv::sum(left_sq)[0];
-          varNoise = (sq_sum / static_cast<double>(w)) - (offset_left * offset_left);
-          noise = std::sqrt(varNoise);
-          SNR = (noise > 0.0) ? (signal / noise) : 0.0;
+  //     if (offset_left < offset_right) {
+  //         // left is smaller
+  //         cv::Mat left_sq;
+  //         cv::multiply(left, left, left_sq);
+  //         sq_sum = cv::sum(left_sq)[0];
+  //         varNoise = (sq_sum / static_cast<double>(w)) - (offset_left * offset_left);
+  //         noise = std::sqrt(varNoise);
+  //         SNR = (noise > 0.0) ? (signal / noise) : 0.0;
 
 
         
-      } else {
-          // right is smaller
-          cv::Mat right_sq;
-          cv::multiply(right, right, right_sq);
-          sq_sum = cv::sum(right_sq)[0];
-          varNoise = (sq_sum / static_cast<double>(w)) - (offset_right * offset_right);
-          noise = std::sqrt(varNoise);
-          SNR = (noise > 0.0) ? (signal / noise) : 0.0;
+  //     } else {
+  //         // right is smaller
+  //         cv::Mat right_sq;
+  //         cv::multiply(right, right, right_sq);
+  //         sq_sum = cv::sum(right_sq)[0];
+  //         varNoise = (sq_sum / static_cast<double>(w)) - (offset_right * offset_right);
+  //         noise = std::sqrt(varNoise);
+  //         SNR = (noise > 0.0) ? (signal / noise) : 0.0;
 
-      }
-  } else {
-      offset_left = 0.0;
-      offset_right = 0.0;
-  }
-  double offset = std::min(offset_left, offset_right);
+  //     }
+  // } else {
+  //     offset_left = 0.0;
+  //     offset_right = 0.0;
+  // }
+  // double offset = std::min(offset_left, offset_right);
 
 
   // Compute offset - after Moving Average
@@ -1927,7 +1923,7 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   // std::cout << "Initial D: " << y_min << std::endl;
 
   int max_iterations = 500;
-  double epsilon = 1e-6;
+  double epsilon = 1e-5;
   double epsilon_g = 1e-8;
 
 
@@ -1989,6 +1985,9 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   // Visualise
   if (bSaveImages) {
     lastSharpnessCurve = y_values;
+    std::vector<double> movAvgCurve;
+    movAvgResult.reshape(1,1).copyTo(movAvgCurve);
+    lastMovAvgCurve = movAvgCurve;
     double locBestFocusDouble = B; // Mean from fit
     SaveImagesPnG(image, locBestFocusDouble, A, C, SNR, increment2, status);
   }
@@ -2130,13 +2129,13 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
 
     // Set y-axis range
     double yAxisMin = 0.0;
-    double yAxisMax = maxSharpness;
+    double yAxisMax = 255.0;
 
     // Scale based on sharpness image
-    double maxVal = yAxisMax;
-    if (maxVal <= 0) {
-      maxVal = 1.0;
-    }
+    // double maxVal = yAxisMax;
+    // if (maxVal <= 0) {
+    //   maxVal = 1.0;
+    // }
 
     // Draw sharpness curve (blue)
     for (size_t i = 1; i < lastSharpnessCurve.size(); i++) {
@@ -2155,10 +2154,10 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
       if (x1 >= 0 && x2 < graphWidth) {
         int y1 =
             graphHeight -
-            static_cast<int>((lastSharpnessCurve[i - 1] / maxVal) *
+            static_cast<int>((lastSharpnessCurve[i - 1] / yAxisMax) *
                               (graphHeight - 50));
         int y2 = graphHeight -
-                  static_cast<int>((lastSharpnessCurve[i] / maxVal) *
+                  static_cast<int>((lastSharpnessCurve[i] / yAxisMax) *
                                   (graphHeight - 50));
         cv::line(graphImage, cv::Point(x1, y1), cv::Point(x2, y2),
                   cv::Scalar(255, 0, 0), 1); // Blue
@@ -2167,7 +2166,7 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
 
 
     // Draw Gaussian fit (red)
-    double B = locBestFocusDouble; // Use locBestFocusDouble from GSL fit
+    double B = locBestFocusDouble; // Use locBestFocusDouble from EigenLM fit
     std::vector<double> fittedCurve(lastSharpnessCurve.size());
     for (size_t i = 0; i < lastSharpnessCurve.size(); i++) {
       fittedCurve[i] = gaussian(A, B, C, static_cast<double>(i));
@@ -2177,11 +2176,25 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
     for (size_t i = 1; i < fittedCurve.size(); ++i) {
         int x1 = i - 1;
         int x2 = i;
-        int y1 = graphHeight - static_cast<int>((fittedCurve[i - 1] / maxVal) * (graphHeight - 50));
-        int y2 = graphHeight - static_cast<int>((fittedCurve[i] / maxVal) * (graphHeight - 50));
+        int y1 = graphHeight - static_cast<int>((fittedCurve[i - 1] / yAxisMax) * (graphHeight - 50));
+        int y2 = graphHeight - static_cast<int>((fittedCurve[i] / yAxisMax) * (graphHeight - 50));
         // Draw only if within bounds
         if (x1 >= 0 && x2 < graphWidth) {
             cv::line(graphImage, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 0, 255), 1); // Red
+        }
+    }
+
+    // Draw moving average curve
+    if (!lastMovAvgCurve.empty()) {
+      for (size_t i = 1; i < lastMovAvgCurve.size(); i++) {
+        int x1 = i - 1;
+        int x2 = i;
+        int y1 = graphHeight - static_cast<int>((lastMovAvgCurve[i - 1] / yAxisMax) * (graphHeight - 50));
+        int y2 = graphHeight - static_cast<int>((lastMovAvgCurve[i] / yAxisMax) * (graphHeight - 50));
+        // Draw only if within bounds
+        if (x1 >= 0 && x2 < graphWidth) {
+            cv::line(graphImage, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0), 1); // Green
+        }
         }
     }
 
