@@ -91,7 +91,8 @@ std::atomic<double> mmToMove = 0.0;
 int increment = 0; // For saving sharpness curves (text files)
 int increment2 = 0; // For saving images (png files)
 
-
+// Initialise variable to store previous valid B value (see computeBestFocusEigenLM)
+double lastValidB = 0.0;
 
 std::vector<double> lastSharpnessCurve;
 std::vector<double> lastXIndices;
@@ -160,7 +161,7 @@ bool autofocus::initialize() {
   if (EigenLMBenchmarkFile.is_open()) {
     EigenLMBenchmarkFile
         << "timestamp,total_time_us, gaussian_time_us,"
-           "roberts_time_us,column_time_us,offset_time_us,fit_time_us, no. of iterations"
+           "roberts_time_us,column_time_us,offset_time_us,moving_average_time_us, fit_time_us, no. of iterations"
         << std::endl;
     EigenLMBenchmarkFile.close();
   }
@@ -1591,7 +1592,7 @@ autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
   if (bSaveImages) {
     lastSharpnessCurve = y_values;
     double locBestFocusDouble = B; // Mean from GSL fit
-    SaveImagesPnG(image, locBestFocusDouble, A, C, increment2);
+    SaveImagesPnG(image, locBestFocusDouble, A, C, 0, increment2);
     increment2++;
 
   }
@@ -1763,8 +1764,8 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   // Roberts Cross gradients -> sharpness image (float)
   auto robertsStart = std::chrono::high_resolution_clock::now();
   // cv::Mat img_x, img_y;
-  cv::filter2D(image, img_x_preallocated, CV_16S, roberts_kernelx);
-  cv::filter2D(image, img_y_preallocated, CV_16S, roberts_kernely);
+  cv::filter2D(blurred, img_x_preallocated, CV_16S, roberts_kernelx);
+  cv::filter2D(blurred, img_y_preallocated, CV_16S, roberts_kernely);
   cv::Mat img_x_squared, img_y_squared, sum_xy;
   cv::multiply(img_x_preallocated, img_x_preallocated, img_x_squared_preallocated);
   cv::multiply(img_y_preallocated, img_y_preallocated, img_y_squared_preallocated);
@@ -1780,10 +1781,52 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   const float* colPtr = cols > 0 ? columnMeansMatrix.ptr<float>(0) : nullptr;
   auto columnEnd = std::chrono::high_resolution_clock::now();
 
+
+  // Moving Average
+  auto MovAvgStart = std::chrono::high_resolution_clock::now();
+  std::vector<double> sharpnesscurve;
+  const int movAvgWindow = 20;
+  for (int i = 0; i < cols - movAvgWindow; i++) {
+    double regionSharpnessScore = 0.0;
+    for (int k = 0; k < movAvgWindow; k++) {
+      regionSharpnessScore += colPtr[i + k];
+    }
+    regionSharpnessScore /= movAvgWindow; // Normalize by kernel size
+    sharpnesscurve.push_back(regionSharpnessScore);
+  }
+  // auto MovAvgEnd = std::chrono::high_resolution_clock::now();
+
+  // Calculate Signal to Noise Ratio (SNR)
+
+  // signal = max - min
+  double max_signal = *std::max_element(sharpnesscurve.begin(), sharpnesscurve.end());
+  double min_signal = *std::min_element(sharpnesscurve.begin(), sharpnesscurve.end());
+  double signal = max_signal - min_signal;
+
+  // noise = std of signal
+  // double meanNoise = std::accumulate(sharpnesscurve.begin(), sharpnesscurve.end(), 0.0) / sharpnesscurve.size();
+  // double sq_sum = std::inner_product(sharpnesscurve.begin(), sharpnesscurve.end(), sharpnesscurve.begin(), 0.0);
+  // double varNoise = (sq_sum / sharpnesscurve.size()) - (meanNoise * meanNoise);
+  // double noise = std::sqrt(varNoise);
+
+  // or noise = min(sharpnesscurve)
+  // double noise = min_signal;
+
+  // SNR
+  // double SNR = (noise > 0.0) ? (signal / noise) : 0.0;
+
+  // std::cout << "Signal: " << signal << ", Noise: " << noise << ", SNR: " << SNR << std::endl;
+  
+  double sq_sum, varNoise, noise, SNR;
+  auto movAvgEnd = std::chrono::high_resolution_clock::now();
+
+
+
   // Compute offset
   auto offsetStart = std::chrono::high_resolution_clock::now();
   const int offsetWindow = 50;
   double offset_left = 0.0, offset_right = 0.0;
+
   if (cols > 0 && colPtr) {
       int w = std::min(offsetWindow, cols);
       // Use OpenCV's optimized sum on column subranges (columnMeansMatrix is CV_32F)
@@ -1793,11 +1836,50 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
       double rightSum = cv::sum(right)[0];
       offset_left = leftSum / static_cast<double>(w);
       offset_right = rightSum / static_cast<double>(w);
+
+
+      // calculate noise as std of min(left, right)
+
+      if (offset_left < offset_right) {
+          // left is smaller
+          cv::Mat left_sq;
+          cv::multiply(left, left, left_sq);
+          sq_sum = cv::sum(left_sq)[0];
+          varNoise = (sq_sum / static_cast<double>(w)) - (offset_left * offset_left);
+          noise = std::sqrt(varNoise);
+          SNR = (noise > 0.0) ? (signal / noise) : 0.0;
+
+
+        
+      } else {
+          // right is smaller
+          cv::Mat right_sq;
+          cv::multiply(right, right, right_sq);
+          sq_sum = cv::sum(right_sq)[0];
+          varNoise = (sq_sum / static_cast<double>(w)) - (offset_right * offset_right);
+          noise = std::sqrt(varNoise);
+          SNR = (noise > 0.0) ? (signal / noise) : 0.0;
+
+      }
   } else {
       offset_left = 0.0;
       offset_right = 0.0;
   }
   double offset = std::min(offset_left, offset_right);
+
+
+  // Compute offset - after Moving Average
+  // const int offsetWindow = 50;
+  // double offset_left = 0.0, offset_right = 0.0;
+  // int w = std::min(offsetWindow, static_cast<int>(sharpnesscurve.size()));
+  // if (w > 0) {
+  //   offset_left = std::accumulate(sharpnesscurve.begin(), sharpnesscurve.begin() + w, 0.0) / static_cast<double>(w);
+  //   offset_right = std::accumulate(sharpnesscurve.end() - w, sharpnesscurve.end(), 0.0) / static_cast<double>(w);
+  // } else {
+  //   offset_left = 0.0;
+  //   offset_right = 0.0;
+  // }
+  // double offset = std::min(offset_left, offset_right);
 
   // Build x_values / y_values converting floats to doubles as needed
   std::vector<double> x_values;
@@ -1807,8 +1889,12 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   for (int i = 0; i < cols; ++i) {
       double adjusted_value = (colPtr ? static_cast<double>(colPtr[i]) : 0.0) - offset;
       y_values.push_back(adjusted_value);
-      // y_values.push_back(colPtr ? static_cast<double>(colPtr[i]) : 0.0);
       x_values.push_back(static_cast<double>(i));
+
+      // after moving average
+      // double adjusted_value = (sharpnesscurve[i] - offset);
+      // y_values.push_back(adjusted_value);
+      // x_values.push_back(static_cast<double>(i));
   }
 
   // // Normalise x to [-0.5, 0.5] range
@@ -1827,7 +1913,6 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   double x_at_y_max = x_values[idx];
 
   auto offsetEnd = std::chrono::high_resolution_clock::now();
-
 
 
 
@@ -1869,15 +1954,35 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   B = params(1);
   C = params(2);
 
+
+  // std::cout << "Status: " << status << ", iterations: " << lm.nfev() << std::endl;
   // std::cout << "Eigen LM fitted parameters: A=" << A << ", B=" << B << ", C=" << C << std::endl;
 
   // return B and C to original range
   B = (B + 0.5) * n; // Convert back to original range
   C = C * n; // Scale C back to original range
     
+  // If B less than -30 or greater than 700, use previous value and log warning
+  if (B < -30.0 || B > 700.0) {
+    if (bAutofocusLogFlag) {
+      logger->warn("[autofocus::computeBestFocusEigenLM] Fitted B out of range: {}. Using previous value: {}",
+                    B, lastValidB);
+    }
+
+    B = lastValidB; // Use previous valid value
 
 
-  B = std::clamp(B, -30.0, 700.0); // Clamp B to valid range
+    // Debugging
+    // std::cout << "Warning: B original: " << B << std::endl;
+    // std::cout << "Status: " << status << ", iterations: " << lm.nfev() << std::endl;
+  
+  }
+  else {
+    lastValidB = B; // Update last valid B
+  }
+
+
+  // B = std::clamp(B, -320.0, 960.0); // Clamp B to valid range
 
   auto fittingEnd = std::chrono::high_resolution_clock::now();
 
@@ -1885,7 +1990,7 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   if (bSaveImages) {
     lastSharpnessCurve = y_values;
     double locBestFocusDouble = B; // Mean from fit
-    SaveImagesPnG(image, locBestFocusDouble, A, C, increment2, status);
+    SaveImagesPnG(image, locBestFocusDouble, A, C, SNR, increment2, status);
   }
 
   if (bSaveSharpnessCurves) {
@@ -1895,8 +2000,7 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
 
   auto endTime = std::chrono::high_resolution_clock::now();
 
-   // --- Timing log unchanged footprint, writing "com_time_us" as estimator time
-  // ---
+   // --- Timing log // ---
   auto totalTime =
       std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
   // auto resizeTime = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -1907,6 +2011,8 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
       robertsEnd - robertsStart);
   auto columnTime = std::chrono::duration_cast<std::chrono::microseconds>(
       columnEnd - columnStart);
+  auto movAvgTime = std::chrono::duration_cast<std::chrono::microseconds>(
+      movAvgEnd - MovAvgStart);
   auto offsetTime = std::chrono::duration_cast<std::chrono::microseconds>(
       offsetEnd - offsetStart);
   auto fittingTime = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -1926,6 +2032,7 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
                             << gaussianTime.count() << ","
                            << robertsTime.count() << "," 
                            << columnTime.count() << ","
+                           << movAvgTime.count() << ","
                            << offsetTime.count() << "," 
                            << fittingTime.count() << ","
                            << lm.nfev() << ","
@@ -1986,7 +2093,7 @@ void autofocus::reloadSettings() {
 //        Gaussian fit parameters: A, C, (B is equal to locBestFocusDouble)
 //        increment counter
 
-void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double A, double C, int& increment2, int status) {
+void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double A, double C, double signal, int& increment2, int status) {
 
 
   cv::Mat colorResized, combined;
@@ -2098,6 +2205,8 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
           "LoBF index: " + std::to_string(locBestFocusDouble).substr(0, 8);
       std::string sharpnessText = "LoBF sharpness: " + std::to_string(sharpnessAtBest).substr(0, 8);
 
+      std::string SignalText = "SNR: " + std::to_string(signal).substr(0, 6);
+
       // Display status text on graph
       std::string statusText = "Status: " + std::to_string(status);
 
@@ -2117,6 +2226,9 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
     cv::putText(graphImage, rangeText, cv::Point(175, 40),
                 cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
     cv::putText(graphImage, comText, cv::Point(400, 40),
+                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
+
+    cv::putText(graphImage, SignalText, cv::Point(175, 60),
                 cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
 
     cv::putText(graphImage, statusText, cv::Point(400, 60),

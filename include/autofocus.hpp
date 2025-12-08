@@ -183,7 +183,7 @@ public:
      * @param C Variance of the Gaussian fit.
      * @param increment2 Increment value for file naming.
      */
-  void SaveImagesPnG(cv::Mat &resized, double locBestFocusDouble, double A, double C, int& increment2, int status = -1);
+  void SaveImagesPnG(cv::Mat &resized, double locBestFocusDouble, double A, double C, double SNR, int& increment2, int status = -1);
 
   /**
    * @brief Gets the lens object.
