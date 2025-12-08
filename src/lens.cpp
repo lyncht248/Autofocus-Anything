@@ -12,9 +12,14 @@
 #include <iomanip>
 #include <stdexcept>
 
-bool bLensLogFlag = 0;
-bool bLensLogFlagSave = 0;
-
+bool bLensLogFlag = 1;
+bool bLensLogFlagSave = 1; // Saves position of lens every time lens moves - ONLY WORKS WHEN bLensLogFlag = 1
+                          // Currently only saves when autofocus is on (mmToMoveTo)
+                          // if you want to save live lens position from hardware, change 
+                          // axis->sendCommand("INFO", 0); 
+                          // to axis->sendCommand("INFO", 3); in lens::initialize()
+                          // and uncomment logLivePositionToCSV() call in lens::lens_thread()
+                          // (bLensLogFlagSave not needed in that case)
 lens::lens()
     : stop_thread(false), controller(nullptr), axis(nullptr), settings("") {
   try {
@@ -385,6 +390,25 @@ void lens::mov_abs(double mmToMoveTo) {
   }
 }
 
+// Log current lens position
+void lens::logLivePositionToCSV() {
+  if (bLensLogFlag) {
+    if (logFile.is_open()) {
+      
+      // Timestamp in human readable form
+      auto now = std::chrono::system_clock::now();
+      auto now_time_t = std::chrono::system_clock::to_time_t(now);
+      auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+      
+      double livePosition = getLensPosition();
+
+      logFile << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S")
+              << "." << std::setfill('0') << std::setw(3) << ms.count() << ","
+              << livePosition << std::endl;
+    }
+  }
+}
+
 void lens::returnToStart() {
   try {
     std::cout << "returning to start position: " << returnPosition << "mm"
@@ -397,6 +421,27 @@ void lens::returnToStart() {
   } catch (const std::exception &e) {
     logger->error("[lens::returnToStart] Error: " + std::string(e.what()));
   }
+
+
+  // Log the return to start position, save lens position to CSV 
+  // if (bLensLogFlag) {
+  //   if (bLensLogFlagSave) {
+  //     if (logFile.is_open()) {
+      
+  //       // Timestamp in human readable form
+  //       auto now = std::chrono::system_clock::now();
+  //       auto now_time_t = std::chrono::system_clock::to_time_t(now);
+  //       auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+        
+  //       Distance epos = axis->getEPOS();
+  //       double actualPos = epos(Distance::MM);
+
+  //       logFile << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S")
+  //               << "." << std::setfill('0') << std::setw(3) << ms.count() << ","
+  //               << returnPosition << "," << actualPos << std::endl;
+  //     }
+  //   }
+  // }
 }
 
 void lens::setReturnPosition(double position) {
@@ -462,6 +507,10 @@ void lens::lens_thread() {
       // position");
       bNewMoveRel = 0;
     }
+
+    // Log
+    // logLivePositionToCSV();
+
 
     // Small sleep to prevent busy-waiting
     usleep(1000); // 1ms

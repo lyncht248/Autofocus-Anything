@@ -143,6 +143,8 @@ public:
    */
   void reloadSettings();
 
+  void logLivePositionToCSV();
+
 private:
   /**
    * @brief Thread function for lens control
