@@ -95,6 +95,7 @@ int increment2 = 0; // For saving images (png files)
 double lastValidB = 0.0;
 
 std::vector<double> lastSharpnessCurve;
+std::vector<double> lastMovAvgCurve;
 std::vector<double> lastXIndices;
 // std::vector<double> lastFittedCurve;
 
@@ -1789,6 +1790,8 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   cv::Mat kernel = cv::Mat::ones(1, movAvgWindow, CV_32F) / static_cast<float>(movAvgWindow);
   cv::Mat movAvgResult;
   cv::filter2D(columnMeansMatrix, movAvgResult, -1, kernel);
+  int cols_ma = movAvgResult.cols;
+  const float* colMovAvg = cols_ma > 0 ? movAvgResult.ptr<float>(0) : nullptr;
 
   double min_signal, max_signal;
   cv::minMaxLoc(columnMeansMatrix, &min_signal, &max_signal);
@@ -1810,6 +1813,12 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   double SNR = (noise > 0.0) ? (signal / noise) : 0.0;
 
   // std::cout << "Signal: " << signal << ", Noise: " << noise << ", SNR: " << SNR << std::endl;
+
+  // if SNR < 30, use previous best focus
+  // if (SNR < 30.0) {
+  //     std::cout << "Low SNR detected (" << SNR << "), using last valid best focus: " << lastValidB << std::endl;
+  //     return lastValidB;
+  // } 
   
   auto movAvgEnd = std::chrono::high_resolution_clock::now();
 
@@ -1820,6 +1829,7 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
 
   // Moving Average
   double offset = min_signal;
+  // std::cout << "Offset (min signal): " << offset << std::endl;
   // const int offsetWindow = 50;
   // double offset_left = 0.0, offset_right = 0.0;
 
@@ -1879,18 +1889,21 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
 
   // Build x_values / y_values converting floats to doubles as needed
   std::vector<double> x_values;
-  std::vector<double> y_values;
-  x_values.reserve(cols);
-  y_values.reserve(cols);
-  for (int i = 0; i < cols; ++i) {
-      double adjusted_value = (colPtr ? static_cast<double>(colPtr[i]) : 0.0) - offset;
+  std::vector<double> y_values, raw_y_values; // y values - used for fit, raw_y_values - unmodified sharpness curve
+  x_values.reserve(cols_ma);
+  y_values.reserve(cols_ma);
+  raw_y_values.reserve(cols_ma);
+  for (int i = 0; i < cols_ma; ++i) {
+      // Moving average for fit
+      double adjusted_value = (colMovAvg ? static_cast<double>(colMovAvg[i]) : 0.0) - offset;
+      
+      // Column Means for fit
+      // double adjusted_value = (colPtr ? static_cast<double>(colPtr[i]) : 0.0) - offset;
+
       y_values.push_back(adjusted_value);
       x_values.push_back(static_cast<double>(i));
+      raw_y_values.push_back(colPtr ? static_cast<double>(colPtr[i]) : 0.0);
 
-      // after moving average
-      // double adjusted_value = (sharpnesscurve[i] - offset);
-      // y_values.push_back(adjusted_value);
-      // x_values.push_back(static_cast<double>(i));
   }
 
   // // Normalise x to [-0.5, 0.5] range
@@ -1923,7 +1936,7 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   // std::cout << "Initial D: " << y_min << std::endl;
 
   int max_iterations = 500;
-  double epsilon = 1e-5;
+  double epsilon = 1e-6;
   double epsilon_g = 1e-8;
 
 
@@ -1945,6 +1958,13 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   int status = lm.minimize(params);
 
 
+  // Compute fit error (sum of squared residuals)
+  // Eigen::VectorXd residuals(x_values.size());
+  // functor(params, residuals); // residuals = y_values - y_fit
+
+  // double fitError = residuals.squaredNorm(); // sum of squared errors
+  // std::cout << "Eigen LM fit error (sum of squared residuals): " << fitError << std::endl;
+
   double A, B, C;
   A = params(0);
   B = params(1);
@@ -1959,32 +1979,33 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   C = C * n; // Scale C back to original range
     
   // If B less than -30 or greater than 700, use previous value and log warning
-  if (B < -30.0 || B > 700.0) {
-    if (bAutofocusLogFlag) {
-      logger->warn("[autofocus::computeBestFocusEigenLM] Fitted B out of range: {}. Using previous value: {}",
-                    B, lastValidB);
-    }
+  // if (B < -30.0 || B > 700.0) {
+  //   if (bAutofocusLogFlag) {
+  //     logger->warn("[autofocus::computeBestFocusEigenLM] Fitted B out of range: {}. Using previous value: {}",
+  //                   B, lastValidB);
+  //   }
 
-    B = lastValidB; // Use previous valid value
+  //   B = lastValidB; // Use previous valid value
 
 
-    // Debugging
-    // std::cout << "Warning: B original: " << B << std::endl;
-    // std::cout << "Status: " << status << ", iterations: " << lm.nfev() << std::endl;
+  //   // Debugging
+  //   // std::cout << "Warning: B original: " << B << std::endl;
+  //   // std::cout << "Status: " << status << ", iterations: " << lm.nfev() << std::endl;
   
-  }
-  else {
-    lastValidB = B; // Update last valid B
-  }
+  // }
+  // else {
+  //   lastValidB = B; // Update last valid B
+  // }
 
 
-  // B = std::clamp(B, -320.0, 960.0); // Clamp B to valid range
+  B = std::clamp(B, -30.0, 700.0); // Clamp B to valid range
+  lastValidB = B; // Update last valid B
 
   auto fittingEnd = std::chrono::high_resolution_clock::now();
 
   // Visualise
   if (bSaveImages) {
-    lastSharpnessCurve = y_values;
+    lastSharpnessCurve = raw_y_values;
     std::vector<double> movAvgCurve;
     movAvgResult.reshape(1,1).copyTo(movAvgCurve);
     lastMovAvgCurve = movAvgCurve;
@@ -2129,7 +2150,7 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
 
     // Set y-axis range
     double yAxisMin = 0.0;
-    double yAxisMax = 255.0;
+    double yAxisMax = 300.0;
 
     // Scale based on sharpness image
     // double maxVal = yAxisMax;

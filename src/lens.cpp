@@ -12,14 +12,16 @@
 #include <iomanip>
 #include <stdexcept>
 
-bool bLensLogFlag = 1;
-bool bLensLogFlagSave = 1; // Saves position of lens every time lens moves - ONLY WORKS WHEN bLensLogFlag = 1
-                          // Currently only saves when autofocus is on (mmToMoveTo)
+bool bLensLogFlag = 0;
+bool bLensLogFlagSave = 0; // Saves position of lens every time lens moves - ONLY WORKS WHEN bLensLogFlag = 1
+                          // Currently only saves when autofocus is on (saves mmToMoveTo)
+
                           // if you want to save live lens position from hardware, change 
                           // axis->sendCommand("INFO", 0); 
                           // to axis->sendCommand("INFO", 3); in lens::initialize()
                           // and uncomment logLivePositionToCSV() call in lens::lens_thread()
-                          // (bLensLogFlagSave not needed in that case)
+
+                          
 lens::lens()
     : stop_thread(false), controller(nullptr), axis(nullptr), settings("") {
   try {
