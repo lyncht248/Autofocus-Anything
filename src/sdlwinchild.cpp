@@ -53,18 +53,13 @@ static void drawScaleBarOverlay(SDL_Renderer *renderer);
 static void handleDoubleClickWithRenderer(int x, int y, SDL_Renderer *renderer);
 
 void convert_g8_to_rgb888(uint32_t *dst, const uint8_t *src, ssize_t n) {
-  // for (; n >= 0; n--) {
-  //   uint32_t val = src[n];
-  //   val |= (val << 8) | (val << 16) | (val << 24);
-  //   dst[n] = val;
-  // }
-
-  // VALGRIND: do not include n (loop from n-1 to 0)
-  for (ssize_t i = n - 1; i >= 0; i--) {
-    uint32_t val = src[i];
+  for (; n >= 0; n--) {
+    uint32_t val = src[n];
     val |= (val << 8) | (val << 16) | (val << 24);
-    dst[i] = val;
+    dst[n] = val;
   }
+
+
 }
 
 bool running = true;
