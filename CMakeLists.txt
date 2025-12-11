@@ -2,6 +2,13 @@ cmake_minimum_required(VERSION 3.0)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_BUILD_TYPE Release)
+
+# for debugging/detecting memory leaks (Valgrind) (comment out for release builds)
+# command to run in terminal (output gives you memory leaks): valgrind --leak-check=full 
+# to save output in .txt file, run in terminal: valgrind --leak-check=full ./hvi-gtk &> valgrind_output.txt
+
+# set(CMAKE_BUILD_TYPE Debug)
+
 #Autofocus_v9 used Release
 
 project(hvi-gtk)
