@@ -162,7 +162,7 @@ bool autofocus::initialize() {
   if (EigenLMBenchmarkFile.is_open()) {
     EigenLMBenchmarkFile
         << "timestamp,total_time_us, gaussian_time_us,"
-           "roberts_time_us,column_time_us,offset_time_us,moving_average_time_us, fit_time_us, no. of iterations"
+           "roberts_time_us,column_time_us,moving_average_time_us, fit_time_us, no. of iterations"
         << std::endl;
     EigenLMBenchmarkFile.close();
   }
@@ -1793,26 +1793,63 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   int cols_ma = movAvgResult.cols;
   const float* colMovAvg = cols_ma > 0 ? movAvgResult.ptr<float>(0) : nullptr;
 
-  double min_signal, max_signal;
-  cv::minMaxLoc(columnMeansMatrix, &min_signal, &max_signal);
+  double y_min, y_max;
+  cv::minMaxLoc(columnMeansMatrix, &y_min, &y_max);
 
   // Calculate Signal to Noise Ratio (SNR)
 
   // signal = max - min
-  double signal = max_signal - min_signal;
+  double signal = y_max - y_min;
 
-  // noise = std(raw signal - moving average)
-  cv::Mat Diff;
-  cv::subtract(columnMeansMatrix, movAvgResult, Diff);
-  double meanNoise = cv::mean(Diff)[0];
-  double sq_sum = cv::sum(Diff.mul(Diff))[0];
-  double varNoise = (sq_sum / Diff.total()) - (meanNoise * meanNoise);
-  double noise = std::sqrt(varNoise);
+
+  // Moving Average
+  double offset = y_min;
+
+  const int offsetWindow = 50;
+
+  // Noise:
+  // Find moving average value at offsetWindow / 2 and at cols - offsetWindow / 2
+  // Use these two points to calculate noise
+  double ma_left = 0.0, ma_right = 0.0;
+  int left_idx = offsetWindow / 2;
+  int right_idx = cols_ma - (offsetWindow / 2) - 1;
+  if (cols_ma > 0 && colMovAvg) {
+      ma_left = static_cast<double>(colMovAvg[left_idx]);
+      ma_right = static_cast<double>(colMovAvg[right_idx]);
+  } else {
+      ma_left = 0.0;
+      ma_right = 0.0;
+  }
+  int ma_noise_index = (ma_left < ma_right) ? left_idx : right_idx;
+
+  // around ma_noise_index (50 pixels overall), calculate std of (columnMeansMatrix - movAvgResult)
+  int noise_center = static_cast<int>(ma_noise_index);
+  int noise_left = std::max(0, noise_center - offsetWindow / 2);
+  int noise_right = std::min(cols_ma, noise_center + offsetWindow / 2);
+
+  double sum = 0.0, sq_sum = 0.0;
+
+  double meanNoise, varNoise, noise;
+  if (cols_ma > 0 && colPtr && colMovAvg) {
+    cv::Mat colMat(1, cols, CV_32F, const_cast<float*>(colPtr));
+    cv::Mat movAvgMat(1, cols_ma, CV_32F, const_cast<float*>(colMovAvg));
+    cv::Mat diff = colMat.colRange(noise_left, noise_right) - movAvgMat.colRange(noise_left, noise_right);
+
+    cv::Scalar meanNoiseScalar = cv::mean(diff);
+    meanNoise = meanNoiseScalar[0];
+
+    cv::Mat diffSq;
+    cv::multiply(diff, diff, diffSq);
+    sq_sum = cv::sum(diffSq)[0];
+
+    varNoise = (sq_sum / offsetWindow) - (meanNoise * meanNoise);
+    noise = std::sqrt(varNoise);
+  }
+
 
   // SNR
   double SNR = (noise > 0.0) ? (signal / noise) : 0.0;
 
-  // std::cout << "Signal: " << signal << ", Noise: " << noise << ", SNR: " << SNR << std::endl;
 
   // if SNR < 30, use previous best focus
   // if (SNR < 30.0) {
@@ -1823,69 +1860,9 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   auto movAvgEnd = std::chrono::high_resolution_clock::now();
 
 
+  // Gaussian Fitting using Eigen LM
+  auto fittingStart = std::chrono::high_resolution_clock::now();
 
-  // Compute offset
-  auto offsetStart = std::chrono::high_resolution_clock::now();
-
-  // Moving Average
-  double offset = min_signal;
-  // std::cout << "Offset (min signal): " << offset << std::endl;
-  // const int offsetWindow = 50;
-  // double offset_left = 0.0, offset_right = 0.0;
-
-  // if (cols > 0 && colPtr) {
-  //     int w = std::min(offsetWindow, cols);
-  //     // Use OpenCV's optimized sum on column subranges (columnMeansMatrix is CV_32F)
-  //     cv::Mat left = columnMeansMatrix.colRange(0, w);
-  //     cv::Mat right = columnMeansMatrix.colRange(cols - w, cols);
-  //     double leftSum = cv::sum(left)[0];
-  //     double rightSum = cv::sum(right)[0];
-  //     offset_left = leftSum / static_cast<double>(w);
-  //     offset_right = rightSum / static_cast<double>(w);
-
-
-  //     // calculate noise as std of min(left, right)
-
-  //     if (offset_left < offset_right) {
-  //         // left is smaller
-  //         cv::Mat left_sq;
-  //         cv::multiply(left, left, left_sq);
-  //         sq_sum = cv::sum(left_sq)[0];
-  //         varNoise = (sq_sum / static_cast<double>(w)) - (offset_left * offset_left);
-  //         noise = std::sqrt(varNoise);
-  //         SNR = (noise > 0.0) ? (signal / noise) : 0.0;
-
-
-        
-  //     } else {
-  //         // right is smaller
-  //         cv::Mat right_sq;
-  //         cv::multiply(right, right, right_sq);
-  //         sq_sum = cv::sum(right_sq)[0];
-  //         varNoise = (sq_sum / static_cast<double>(w)) - (offset_right * offset_right);
-  //         noise = std::sqrt(varNoise);
-  //         SNR = (noise > 0.0) ? (signal / noise) : 0.0;
-
-  //     }
-  // } else {
-  //     offset_left = 0.0;
-  //     offset_right = 0.0;
-  // }
-  // double offset = std::min(offset_left, offset_right);
-
-
-  // Compute offset - after Moving Average
-  // const int offsetWindow = 50;
-  // double offset_left = 0.0, offset_right = 0.0;
-  // int w = std::min(offsetWindow, static_cast<int>(sharpnesscurve.size()));
-  // if (w > 0) {
-  //   offset_left = std::accumulate(sharpnesscurve.begin(), sharpnesscurve.begin() + w, 0.0) / static_cast<double>(w);
-  //   offset_right = std::accumulate(sharpnesscurve.end() - w, sharpnesscurve.end(), 0.0) / static_cast<double>(w);
-  // } else {
-  //   offset_left = 0.0;
-  //   offset_right = 0.0;
-  // }
-  // double offset = std::min(offset_left, offset_right);
 
   // Build x_values / y_values converting floats to doubles as needed
   std::vector<double> x_values;
@@ -1913,20 +1890,13 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
       [n](double x) { return x / static_cast<double>(n) - 0.5; }
   );
 
-  double y_max = *std::max_element(y_values.begin(), y_values.end());
-  // double y_min = *std::min_element(y_values.begin(), y_values.end());
 
   // Get x value at y max
   auto maxIt = std::max_element(y_values.begin(), y_values.end());
   size_t idx = std::distance(y_values.begin(), maxIt);
   double x_at_y_max = x_values[idx];
 
-  auto offsetEnd = std::chrono::high_resolution_clock::now();
 
-
-
-  // Gaussian Fitting using Eigen LM
-  auto fittingStart = std::chrono::high_resolution_clock::now();
 
   int p = 3; // number of parameters: a, b, c
   
@@ -2033,8 +2003,6 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
       columnEnd - columnStart);
   auto movAvgTime = std::chrono::duration_cast<std::chrono::microseconds>(
       movAvgEnd - MovAvgStart);
-  auto offsetTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      offsetEnd - offsetStart);
   auto fittingTime = std::chrono::duration_cast<std::chrono::microseconds>(
       fittingEnd - fittingStart);
 
@@ -2053,7 +2021,6 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
                            << robertsTime.count() << "," 
                            << columnTime.count() << ","
                            << movAvgTime.count() << ","
-                           << offsetTime.count() << "," 
                            << fittingTime.count() << ","
                            << lm.nfev() << ","
                            << std::endl;
@@ -2216,7 +2183,7 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
         if (x1 >= 0 && x2 < graphWidth) {
             cv::line(graphImage, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0), 1); // Green
         }
-        }
+      }
     }
 
     // Draw vertical line for locBestFocusDouble
