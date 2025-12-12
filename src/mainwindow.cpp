@@ -565,7 +565,7 @@ MainWindow::MainWindow()
     // Spin button for higher gain constant in lens
     Gtk::Label PROPLabel("PROP:");
     Gtk::SpinButton PROPSpin;
-    PROPSpin.set_range(0.0, 100);           // Adjust range as needed
+    PROPSpin.set_range(0.0, 150);           // Adjust range as needed
     PROPSpin.set_value(settings.getPROP()); // Read PROP value from settings
     PROPSpin.set_increments(5, 10); // Enable +/- buttons with step increments
     PROPSpin.set_digits(0);         // Allow 4 decimal places for PROP

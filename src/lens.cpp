@@ -246,7 +246,7 @@ bool lens::initialize() {
   // axis->sendCommand("BLCK",0);
 
   // set speed to 200mm/s
-  axis->setSpeed(200_mm);
+  axis->setSpeed(300_mm);
   // wait 0.5s
   usleep(500000);
 
@@ -394,7 +394,7 @@ void lens::mov_abs(double mmToMoveTo) {
 
 // Log current lens position
 void lens::logLivePositionToCSV() {
-  if (bLensLogFlag) {
+  if (bLensLogFlagSave) {
     if (logFile.is_open()) {
       
       // Timestamp in human readable form
