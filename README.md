@@ -11,7 +11,8 @@
 
 </div>
 <p align="center">
-    <img width=80% src="./assets/teaser-resize.gif">
+    <img width=73% src="./assets/teaser-resize.gif">
+    <img width="73%" alt="Experimental Setup" src="https://github.com/user-attachments/assets/c5a73d9f-1d58-4639-b070-ce0a29cdd7e5" />
 </p>
 
 This repository contains the embedded software and desktop application used to operate the _Autofocus-Anything_ modular device. This device can be mounted on the camera port of any standard microscope or slit-lamp, enabling high-precision autofocus at video rate. 
