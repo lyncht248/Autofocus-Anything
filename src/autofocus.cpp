@@ -162,7 +162,7 @@ bool autofocus::initialize() {
   if (EigenLMBenchmarkFile.is_open()) {
     EigenLMBenchmarkFile
         << "timestamp,total_time_us, gaussian_time_us,"
-           "roberts_time_us,column_time_us,moving_average_time_us, fit_time_us, no. of iterations"
+           "roberts_time_us,column_time_us,snr_time_us, fit_time_us, no. of iterations"
         << std::endl;
     EigenLMBenchmarkFile.close();
   }
@@ -1783,34 +1783,27 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   auto columnEnd = std::chrono::high_resolution_clock::now();
 
 
-  // Moving Average
-  auto MovAvgStart = std::chrono::high_resolution_clock::now();
-  // Convolution with 1/movAvgWindow kernel
+  // Calculate Signal to Noise Ratio (SNR)
+  auto snrStart = std::chrono::high_resolution_clock::now();
+  // Signal:
+  // max - min for the entire curve
+  double y_min, y_max;
+  cv::minMaxLoc(columnMeansMatrix, &y_min, &y_max);
+  double signal = y_max - y_min;
+  // Noise:
+  // Find moving average value at offsetWindow / 2 and at cols - offsetWindow / 2
+  // Use these two points to calculate noise
+  // Apply moving average: convolution with 1/movAvgWindow kernel
   const int movAvgWindow = 20;
   cv::Mat kernel = cv::Mat::ones(1, movAvgWindow, CV_32F) / static_cast<float>(movAvgWindow);
   cv::Mat movAvgResult;
   cv::filter2D(columnMeansMatrix, movAvgResult, -1, kernel);
   int cols_ma = movAvgResult.cols;
   const float* colMovAvg = cols_ma > 0 ? movAvgResult.ptr<float>(0) : nullptr;
-
-  double y_min, y_max;
-  cv::minMaxLoc(columnMeansMatrix, &y_min, &y_max);
-
-  // Calculate Signal to Noise Ratio (SNR)
-
-  // signal = max - min
-  double signal = y_max - y_min;
-
-
-  // Moving Average
-  double offset = y_min;
-
-  const int offsetWindow = 50;
-
-  // Noise:
-  // Find moving average value at offsetWindow / 2 and at cols - offsetWindow / 2
-  // Use these two points to calculate noise
   double ma_left = 0.0, ma_right = 0.0;
+  // Find which side has lower moving average value, set as ma_noise_index
+  double offset = y_min;
+  const int offsetWindow = 50;
   int left_idx = offsetWindow / 2;
   int right_idx = cols_ma - (offsetWindow / 2) - 1;
   if (cols_ma > 0 && colMovAvg) {
@@ -1846,18 +1839,17 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
     noise = std::sqrt(varNoise);
   }
 
-
   // SNR
   double SNR = (noise > 0.0) ? (signal / noise) : 0.0;
-
+  // std::cout << "SNR:" << SNR << std::endl;
 
   // if SNR < 30, use previous best focus
-  // if (SNR < 30.0) {
-  //     std::cout << "Low SNR detected (" << SNR << "), using last valid best focus: " << lastValidB << std::endl;
-  //     return lastValidB;
-  // } 
+  if (SNR < 30.0 && lastValidB) {
+      std::cout << "Low SNR detected (" << SNR << "), using last valid best focus: " << lastValidB << std::endl;
+      return lastValidB;
+  } 
   
-  auto movAvgEnd = std::chrono::high_resolution_clock::now();
+  auto snrEnd = std::chrono::high_resolution_clock::now();
 
 
   // Gaussian Fitting using Eigen LM
@@ -2001,8 +1993,8 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
       robertsEnd - robertsStart);
   auto columnTime = std::chrono::duration_cast<std::chrono::microseconds>(
       columnEnd - columnStart);
-  auto movAvgTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      movAvgEnd - MovAvgStart);
+  auto snrTime = std::chrono::duration_cast<std::chrono::microseconds>(
+      snrEnd - snrStart);
   auto fittingTime = std::chrono::duration_cast<std::chrono::microseconds>(
       fittingEnd - fittingStart);
 
@@ -2020,7 +2012,7 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
                             << gaussianTime.count() << ","
                            << robertsTime.count() << "," 
                            << columnTime.count() << ","
-                           << movAvgTime.count() << ","
+                           << snrTime.count() << ","
                            << fittingTime.count() << ","
                            << lm.nfev() << ","
                            << std::endl;
@@ -2080,7 +2072,7 @@ void autofocus::reloadSettings() {
 //        Gaussian fit parameters: A, C, (B is equal to locBestFocusDouble)
 //        increment counter
 
-void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double A, double C, double signal, int& increment2, int status) {
+void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double A, double C, double snr, int& increment2, int status) {
 
 
   cv::Mat colorResized, combined;
@@ -2206,7 +2198,7 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
           "LoBF index: " + std::to_string(locBestFocusDouble).substr(0, 8);
       std::string sharpnessText = "LoBF sharpness: " + std::to_string(sharpnessAtBest).substr(0, 8);
 
-      std::string SignalText = "SNR: " + std::to_string(signal).substr(0, 6);
+      std::string snrText = "SNR: " + std::to_string(snr).substr(0, 6);
 
       // Display status text on graph
       std::string statusText = "Status: " + std::to_string(status);
@@ -2229,7 +2221,7 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
     cv::putText(graphImage, comText, cv::Point(400, 40),
                 cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
 
-    cv::putText(graphImage, SignalText, cv::Point(175, 60),
+    cv::putText(graphImage, snrText, cv::Point(175, 60),
                 cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
 
     cv::putText(graphImage, statusText, cv::Point(400, 60),
