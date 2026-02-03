@@ -365,9 +365,11 @@ private:
    * @brief Derivative gain for the PID controller.
    */
   double Kd;
-
-
-
+  
+   /**
+   * @brief Itegral gain for the PID controller.
+   */
+  double Ki;
 
 
   Settings settings; ///< Settings object to manage configuration

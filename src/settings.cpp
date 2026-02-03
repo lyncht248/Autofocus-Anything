@@ -101,6 +101,14 @@ double Settings::getKd() const {
   return it->second;
 }
 
+double Settings::getKi() const {
+  auto it = settings.find("Ki");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: Ki");
+  }
+  return it->second;
+}
+
 double Settings::getFreq() const {
   auto it = settings.find("FREQ");
   if (it == settings.end()) {
@@ -146,6 +154,7 @@ void Settings::setMaxPosition(double value) { set("MAX_POSITION", value); }
 
 void Settings::setKp(double value) { set("Kp", value); }
 void Settings::setKd(double value) { set("Kd", value); }
+void Settings::setKi(double value) { set("Ki", value); }
 
 void Settings::setFreq(double value) { set("FREQ", value); }
 

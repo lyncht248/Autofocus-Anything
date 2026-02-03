@@ -25,6 +25,7 @@ public:
     double getMaxPosition() const;
     double getKp() const;
     double getKd() const;
+    double getKi() const;
     double getFreq() const;
     double getFRQ2() const;
     double getPROP() const;
@@ -36,10 +37,12 @@ public:
     void setMaxPosition(double value);
     void setKp(double value);
     void setKd(double value);
+    void setKi(double value);
     void setFreq(double value);
     void setFRQ2(double value);
     void setPROP(double value);
     void setPRO2(double value);
+
 
 private:
     std::string filePath;
