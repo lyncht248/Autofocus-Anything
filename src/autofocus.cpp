@@ -5,7 +5,7 @@
 #include "logfile.hpp"
 #include "main.hpp"
 #include "mainwindow.hpp"
-// #include "pid.hpp"
+#include "pid.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -64,6 +64,7 @@ const long img_size = 640 * 480; // Replace with actual image size
 bool bSaveImages = 0; // Saves images from the tilted camera to output folder. WARNING: will
                       // produce enormous number of images and slow down the system!
 bool bSaveSharpnessCurves = 0; // Saves text files with the sharpness curve data, similar to above
+bool bTrackFocusHistory = 1; // Tracks history of fitted focus positions
 bool bRunContinuous = 0;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
 
 
@@ -166,7 +167,15 @@ bool autofocus::initialize() {
         << std::endl;
     EigenLMBenchmarkFile.close();
   }
-
+  if (bTrackFocusHistory) {
+    std:ofstream focusHistoryFile("../output/focus_history.csv");
+    if (focusHistoryFile.is_open()) {
+      focusHistoryFile 
+        << "timestamp_ms,measuredFocus_mm,desiredFocus_mm\n"
+        << std::endl;
+      focusHistoryFile.close();
+    }
+  } 
 
   // Pre-allocate matrices for computeBestFocus to avoid runtime allocation
   int imWidth = tiltedcam1.getImageWidth();
@@ -350,7 +359,7 @@ void autofocus::run() {
   const double derivativeFilterAlpha = 0.1; // Low-pass filter for measurement
   
   // Calculate movement using PID
-  // PID pid(dt, max, min, Kp, Kd, Ki);
+  PID pid(dt, max, min, Kp, Kd, Ki);
 
   if (bAutofocusLogFlag) {
     logger->info("[autofocus::run] while thread loop about to start");
@@ -411,7 +420,6 @@ void autofocus::run() {
         // double locBestFocusDouble = computeBestFocusGSL(
         //     image, imHeight, imWidth); //  returns double
 
-
         // Store the current measured focus position globally
         currentMeasuredFocus.store(locBestFocusDouble);
 
@@ -436,11 +444,15 @@ void autofocus::run() {
         // HoldFocus
         if (imgcount == 1) {
           if (bHoldFocus) {
+            std::cout << "bHoldfocus is set to 1" << std::endl;
+            // Shan testing:
+            // desiredLocBestFocus = 320;
             desiredLocBestFocus =
                 static_cast<int>(std::round(locBestFocusDouble));
             previous = desiredLocBestFocus;
           } else if (bFindFocus) {
-            desiredLocBestFocus = 300;
+            desiredLocBestFocus = 320;
+            std::cout << "Desired focus set to: " << desiredLocBestFocus << std::endl;
             previous = static_cast<int>(std::round(locBestFocusDouble));
             if (bAutofocusLogFlag) {
               logger->info("[autofocus::run] Set desiredLocBestFocus back to "
@@ -448,202 +460,217 @@ void autofocus::run() {
             }
           }
         }
-
-        // (Shan testing) Use PID directly to calculate movement
-        // double moveAmount = pid.calculate(desiredLocBestFocus, locBestFocusDouble) * -1.0;
-        // mmToMove = moveAmount;
-        // bNewMoveRel = 1;
-        // moved = (std::abs(moveAmount) > 1e-12);
-
-        // Filter the measurement for derivative term only
-        if (isFirstFrame) {
-          filteredLocBestFocus = static_cast<int>(
-              std::round(locBestFocusDouble)); // Initialize on first frame
-          isFirstFrame = false;
-        } else {
-          filteredLocBestFocus = static_cast<int>(
-              std::round((1.0 - derivativeFilterAlpha) * filteredLocBestFocus +
-                         derivativeFilterAlpha * locBestFocusDouble));
-        }
-
-        // Calculate PD components - P uses raw measurement with double
-        // precision
-        double currentError =
-            desiredLocBestFocus -
-            locBestFocusDouble; // Use double for higher precision
-
-        // Scale P gain based on error magnitude
-        double errorMagnitude = abs(currentError);
-        double pScaleFactor = 1.0;
-        if (errorMagnitude <= 3.0) {
-          pScaleFactor = 0.13;
-        } else if (errorMagnitude >= 100.0) {
-          pScaleFactor = 1.0;
-        } else {
-          // Linear interpolation between 3 pixels (0.1x) and 100 pixels (1.0x)
-          pScaleFactor =
-              0.13 + (errorMagnitude - 3.0) * (1.0 - 0.13) / (100.0 - 3.0);
-        }
-
-        // Apply directional multiplier for downward moves (positive errors)
-        double effectiveKp = Kp;
-        double effectiveKd = Kd;
-        if (currentError > 0) {
-          // Moving toward more positive values (340→320, 320→300) - these were
-          // slower
-          effectiveKp = 2.24e-3;
-          effectiveKd = 1.06e-4;
-        }
-
-        double pSignal = effectiveKp * currentError * pScaleFactor;
-
-        // Calculate derivative using filtered measurement
-        double filteredCurrentError =
-            desiredLocBestFocus - filteredLocBestFocus;
-
-        // Calculate derivative using filtered error
-        double rawDerivative =
-            (filteredCurrentError - filteredPreviousError) / dt;
-        // double dSignal = Kd * rawDerivative;
-        double dSignal = effectiveKd * rawDerivative;
-
-        // Total PD signal
-        double totalPdSignal = pSignal + dSignal;
-
-        // Apply limits
-        if (totalPdSignal > max)
-          totalPdSignal = max;
-        else if (totalPdSignal < min)
-          totalPdSignal = min;
-
-        // Store for next iteration
-        // previousError = currentError; not actually used
-        filteredPreviousError = filteredCurrentError;
-
-        // Log data to CSV with improved error handling and thread safety
-        {
-          std::lock_guard<std::mutex> lock(csvMutex);
-          if (csvFile.is_open() && csvFile.good()) {
-            auto currentTime =
+        // record history of focus
+        if (bTrackFocusHistory && (bHoldFocus || bFindFocus)) {
+          std::ofstream focusHistoryFile("../output/focus_history.csv", std::ios::out | std::ios::app);
+          if (focusHistoryFile.is_open() && focusHistoryFile.good()) {
+            auto timestamp_ms =
                 std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::system_clock::now().time_since_epoch())
                     .count();
-            // Timestamp in human readable form
-            auto now = std::chrono::system_clock::now();
-            auto now_time_t = std::chrono::system_clock::to_time_t(now);
-            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-
-            csvFile << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S")
-                    << "." << std::setfill('0') << std::setw(3) << ms.count() << ",";
-
-
-            // Use higher precision for double values
-            csvFile << std::fixed << std::setprecision(6);
-            csvFile << currentTime << "," << imgcountfile << ","
-                    << desiredLocBestFocus << "," << locBestFocusDouble << ","
-                    << pSignal << "," << filteredLocBestFocus << "," << dSignal
-                    << "," << totalPdSignal << "," << Kp << "\n";
-
-            // More frequent flushing for data safety - every 5 frames
-            if (imgcountfile % 5 == 0) {
-              csvFile.flush();
-            }
-
-            // Check for write errors
-            if (csvFile.fail()) {
-              if (bAutofocusLogFlag) {
-                logger->error("[autofocus::run] CSV write error detected, "
-                              "attempting to recover");
-              }
-
-              // Clear error flags and try to recover
-              csvFile.clear();
-
-              // If still failing, close and try to reopen
-              if (csvFile.fail()) {
-                csvFile.close();
-                csvFile.open(csvFilename, std::ios::out | std::ios::app);
-                if (!csvFile.is_open()) {
-                  if (bAutofocusLogFlag) {
-                    logger->error(
-                        "[autofocus::run] Failed to recover CSV file: " +
-                        csvFilename);
-                  }
-                }
-              }
-            }
-          } else if (csvFile.is_open()) {
-            // File is open but in bad state, try to recover
-            if (bAutofocusLogFlag) {
-              logger->warn("[autofocus::run] CSV file in bad state, attempting "
-                           "recovery");
-            }
-            csvFile.clear();
+            focusHistoryFile << timestamp_ms << ","
+                             << locBestFocusDouble << ","
+                             << desiredLocBestFocus << "\n";
+            focusHistoryFile.close();
           }
         }
 
-        //// BLINK DETECTION. TODO: try removing 'moved' variable
-        if (moved == 0 && blink == 0 &&
-            abs(static_cast<int>(std::round(locBestFocusDouble)) - previous) >
-                (50) &&
-            bBlinking) { // if the location of best focus changes by more than
-                         // 50 pixels with no move, it is a blink
-          // Blink starts
-          if (bAutofocusLogFlag)
-            logger->info("[autofocus::run] Frame ignored; blink detected");
-          std::cout << "Blink detected" << std::endl;
-          blink = 1;
-        } else if (blink == 1) {
-          if (bAutofocusLogFlag)
-            logger->info("[autofocus::run] Frame ignored; blink detected");
-          blinkframes--;
-          if (blinkframes == 0) {
-            blinkframes = 15; // resets blinkframes
-            blink = 0;
-          }
-        } else {
-          // Use double precision measurement for tolerance checking
-          if (abs(locBestFocusDouble - desiredLocBestFocus) <= tol) {
-            // std::cout << ", in TOL band\n";
-            moved = 0;
-          } else {
-            // Use the double precision PD signal - NO CASTING!
-            mmToMove = totalPdSignal * -1.0;
-            bNewMoveRel = 1;
-            moved = 1;
-            // std::cout << "mmToMove: " << mmToMove << "\n";
+        // (Shan testing) Use PID directly to calculate movement
+        double moveAmount = pid.calculate(desiredLocBestFocus, locBestFocusDouble) * -1.0;
+        mmToMove = moveAmount;
+        bNewMoveRel = 1;
+        moved = (std::abs(moveAmount) > 1e-12);
 
-            // //// OSCILLATION DETECTION
-            // //Adding to locBestFocusHistory when outside TOL band
-            // locBestFocusHistory.push_back(locBestFocus);
-            // // If we have more than 20 values, remove the oldest
-            // if (locBestFocusHistory.size() > 20) {
-            //   locBestFocusHistory.pop_front();
-            // }
-            // // Check if history contains values both above and below
-            // desiredLocBestFocus if(locBestFocusHistory.size() == 20) {
-            //   bool hasAbove = std::any_of(locBestFocusHistory.begin(),
-            //   locBestFocusHistory.end(), [](int x) { return x >
-            //   desiredLocBestFocus; }); bool hasBelow =
-            //   std::any_of(locBestFocusHistory.begin(),
-            //   locBestFocusHistory.end(), [](int x) { return x <
-            //   desiredLocBestFocus; }); if (hasAbove && hasBelow) {
-            //     // Find the value closest to desiredLocBestFocus
-            //     auto closestIt =
-            //     std::min_element(locBestFocusHistory.begin(),
-            //     locBestFocusHistory.end(), [](int a, int b) {
-            //         return std::abs(a - desiredLocBestFocus) < std::abs(b -
-            //         desiredLocBestFocus);
-            //     });
-            //     desiredLocBestFocus = *closestIt;
-            //     std::cout << "DETECTED OSCILLATION!! Adjusting
-            //     desiredLocBestFocus to " << desiredLocBestFocus << "\n";
-            //     locBestFocusHistory.clear(); // Clear history after adjusting
-            //     desiredLocBestFocus
-            //   }
-            // }
-          }
-        }
+        // // Filter the measurement for derivative term only
+        // if (isFirstFrame) {
+        //   filteredLocBestFocus = static_cast<int>(
+        //       std::round(locBestFocusDouble)); // Initialize on first frame
+        //   isFirstFrame = false;
+        // } else {
+        //   filteredLocBestFocus = static_cast<int>(
+        //       std::round((1.0 - derivativeFilterAlpha) * filteredLocBestFocus +
+        //                  derivativeFilterAlpha * locBestFocusDouble));
+        // }
+
+        // // Calculate PD components - P uses raw measurement with double
+        // // precision
+        // double currentError =
+        //     desiredLocBestFocus -
+        //     locBestFocusDouble; // Use double for higher precision
+
+        // // Scale P gain based on error magnitude
+        // double errorMagnitude = abs(currentError);
+        // double pScaleFactor = 1.0;
+        // if (errorMagnitude <= 3.0) {
+        //   pScaleFactor = 0.13;
+        // } else if (errorMagnitude >= 100.0) {
+        //   pScaleFactor = 1.0;
+        // } else {
+        //   // Linear interpolation between 3 pixels (0.1x) and 100 pixels (1.0x)
+        //   pScaleFactor =
+        //       0.13 + (errorMagnitude - 3.0) * (1.0 - 0.13) / (100.0 - 3.0);
+        // }
+
+        // // Apply directional multiplier for downward moves (positive errors)
+        // double effectiveKp = Kp;
+        // double effectiveKd = Kd;
+        
+        // // if (currentError > 0) {
+        // //   // Moving toward more positive values (340→320, 320→300) - these were
+        // //   // slower
+        // //   effectiveKp = 2.24e-3;
+        // //   effectiveKd = 1.06e-4;
+        // // }
+
+        // double pSignal = effectiveKp * currentError * pScaleFactor;
+
+        // // Calculate derivative using filtered measurement
+        // double filteredCurrentError =
+        //     desiredLocBestFocus - filteredLocBestFocus;
+
+        // // Calculate derivative using filtered error
+        // double rawDerivative =
+        //     (filteredCurrentError - filteredPreviousError) / dt;
+        // // double dSignal = Kd * rawDerivative;
+        // double dSignal = effectiveKd * rawDerivative;
+
+        // // Total PD signal
+        // double totalPdSignal = pSignal + dSignal;
+
+        // // Apply limits
+        // if (totalPdSignal > max)
+        //   totalPdSignal = max;
+        // else if (totalPdSignal < min)
+        //   totalPdSignal = min;
+
+        // // Store for next iteration
+        // // previousError = currentError; not actually used
+        // filteredPreviousError = filteredCurrentError;
+
+        // // Log data to CSV with improved error handling and thread safety
+        // {
+        //   std::lock_guard<std::mutex> lock(csvMutex);
+        //   if (csvFile.is_open() && csvFile.good()) {
+        //     auto currentTime =
+        //         std::chrono::duration_cast<std::chrono::milliseconds>(
+        //             std::chrono::system_clock::now().time_since_epoch())
+        //             .count();
+        //     // Timestamp in human readable form
+        //     auto now = std::chrono::system_clock::now();
+        //     auto now_time_t = std::chrono::system_clock::to_time_t(now);
+        //     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+
+        //     csvFile << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S")
+        //             << "." << std::setfill('0') << std::setw(3) << ms.count() << ",";
+
+
+        //     // Use higher precision for double values
+        //     csvFile << std::fixed << std::setprecision(6);
+        //     csvFile << currentTime << "," << imgcountfile << ","
+        //             << desiredLocBestFocus << "," << locBestFocusDouble << ","
+        //             << pSignal << "," << filteredLocBestFocus << "," << dSignal
+        //             << "," << totalPdSignal << "," << Kp << "\n";
+
+        //     // More frequent flushing for data safety - every 5 frames
+        //     if (imgcountfile % 5 == 0) {
+        //       csvFile.flush();
+        //     }
+
+        //     // Check for write errors
+        //     if (csvFile.fail()) {
+        //       if (bAutofocusLogFlag) {
+        //         logger->error("[autofocus::run] CSV write error detected, "
+        //                       "attempting to recover");
+        //       }
+
+        //       // Clear error flags and try to recover
+        //       csvFile.clear();
+
+        //       // If still failing, close and try to reopen
+        //       if (csvFile.fail()) {
+        //         csvFile.close();
+        //         csvFile.open(csvFilename, std::ios::out | std::ios::app);
+        //         if (!csvFile.is_open()) {
+        //           if (bAutofocusLogFlag) {
+        //             logger->error(
+        //                 "[autofocus::run] Failed to recover CSV file: " +
+        //                 csvFilename);
+        //           }
+        //         }
+        //       }
+        //     }
+        //   } else if (csvFile.is_open()) {
+        //     // File is open but in bad state, try to recover
+        //     if (bAutofocusLogFlag) {
+        //       logger->warn("[autofocus::run] CSV file in bad state, attempting "
+        //                    "recovery");
+        //     }
+        //     csvFile.clear();
+        //   }
+        // }
+
+        // //// BLINK DETECTION. TODO: try removing 'moved' variable
+        // if (moved == 0 && blink == 0 &&
+        //     abs(static_cast<int>(std::round(locBestFocusDouble)) - previous) >
+        //         (50) &&
+        //     bBlinking) { // if the location of best focus changes by more than
+        //                  // 50 pixels with no move, it is a blink
+        //   // Blink starts
+        //   if (bAutofocusLogFlag)
+        //     logger->info("[autofocus::run] Frame ignored; blink detected");
+        //   std::cout << "Blink detected" << std::endl;
+        //   blink = 1;
+        // } else if (blink == 1) {
+        //   if (bAutofocusLogFlag)
+        //     logger->info("[autofocus::run] Frame ignored; blink detected");
+        //   blinkframes--;
+        //   if (blinkframes == 0) {
+        //     blinkframes = 15; // resets blinkframes
+        //     blink = 0;
+        //   }
+        // } else {
+        //   // Use double precision measurement for tolerance checking
+        //   if (abs(locBestFocusDouble - desiredLocBestFocus) <= tol) {
+        //     // std::cout << ", in TOL band\n";
+        //     moved = 0;
+        //   } else {
+        //     // Use the double precision PD signal - NO CASTING!
+        //     mmToMove = totalPdSignal * -1.0;
+        //     bNewMoveRel = 1;
+        //     moved = 1;
+        //     // std::cout << "mmToMove: " << mmToMove << "\n";
+
+        //     // //// OSCILLATION DETECTION
+        //     // //Adding to locBestFocusHistory when outside TOL band
+        //     // locBestFocusHistory.push_back(locBestFocus);
+        //     // // If we have more than 20 values, remove the oldest
+        //     // if (locBestFocusHistory.size() > 20) {
+        //     //   locBestFocusHistory.pop_front();
+        //     // }
+        //     // // Check if history contains values both above and below
+        //     // desiredLocBestFocus if(locBestFocusHistory.size() == 20) {
+        //     //   bool hasAbove = std::any_of(locBestFocusHistory.begin(),
+        //     //   locBestFocusHistory.end(), [](int x) { return x >
+        //     //   desiredLocBestFocus; }); bool hasBelow =
+        //     //   std::any_of(locBestFocusHistory.begin(),
+        //     //   locBestFocusHistory.end(), [](int x) { return x <
+        //     //   desiredLocBestFocus; }); if (hasAbove && hasBelow) {
+        //     //     // Find the value closest to desiredLocBestFocus
+        //     //     auto closestIt =
+        //     //     std::min_element(locBestFocusHistory.begin(),
+        //     //     locBestFocusHistory.end(), [](int a, int b) {
+        //     //         return std::abs(a - desiredLocBestFocus) < std::abs(b -
+        //     //         desiredLocBestFocus);
+        //     //     });
+        //     //     desiredLocBestFocus = *closestIt;
+        //     //     std::cout << "DETECTED OSCILLATION!! Adjusting
+        //     //     desiredLocBestFocus to " << desiredLocBestFocus << "\n";
+        //     //     locBestFocusHistory.clear(); // Clear history after adjusting
+        //     //     desiredLocBestFocus
+        //     //   }
+        //     // }
+        //   }
+        // }
         previous = static_cast<int>(std::round(locBestFocusDouble));
 
         // Periodically report frame drop rate
@@ -653,7 +680,7 @@ void autofocus::run() {
                  //<< ", Estimated drops: " << (framesProcessed * 17/16.67 -
                  // framesProcessed) << std::endl;
         }
-      }
+      } // end of getLatestFrame
     } else {
       // Reset counter when autofocus is not active
       imgcount = 0;
@@ -1914,11 +1941,13 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   lm.setGtol(epsilon_g);
   lm.setFtol(epsilon);
 
-
-
-
   int status = lm.minimize(params);
-
+  // status codes:
+  // Eigen::LevenbergMarquardtSpace::RelativeReductionTooSmall = 1
+  // Eigen::LevenbergMarquardtSpace::RelativeErrorTooSmall = 2
+  // Eigen::LevenbergMarquardtSpace::CosinusTooSmall = 3
+  // Eigen::LevenbergMarquardtSpace::TooManyFunctionEvaluation = 4
+  // Eigen::LevenbergMarquardtSpace::FtolTooSmall = 5
 
   // Compute fit error (sum of squared residuals)
   // Eigen::VectorXd residuals(x_values.size());
@@ -1941,27 +1970,24 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   C = C * n; // Scale C back to original range
     
   // If B less than -30 or greater than 700, use previous value and log warning
-  // if (B < -30.0 || B > 700.0) {
-  //   if (bAutofocusLogFlag) {
-  //     logger->warn("[autofocus::computeBestFocusEigenLM] Fitted B out of range: {}. Using previous value: {}",
-  //                   B, lastValidB);
-  //   }
+  if (B < -30.0 || B > 700.0) {
+    if (bAutofocusLogFlag) {
+      logger->warn("[autofocus::computeBestFocusEigenLM] Fitted B out of range: {}. Using previous value: {}",
+                    B, lastValidB);
+    }
 
-  //   B = lastValidB; // Use previous valid value
+    B = lastValidB; // Use previous valid value
+    // Debugging
+    // std::cout << "Warning: B original: " << B << std::endl;
+    // std::cout << "Status: " << status << ", iterations: " << lm.nfev() << std::endl;
+  }
+  else {
+    lastValidB = B; // Update last valid B
+  }
 
-
-  //   // Debugging
-  //   // std::cout << "Warning: B original: " << B << std::endl;
-  //   // std::cout << "Status: " << status << ", iterations: " << lm.nfev() << std::endl;
-  
-  // }
-  // else {
-  //   lastValidB = B; // Update last valid B
-  // }
-
-
-  B = std::clamp(B, -30.0, 700.0); // Clamp B to valid range
-  lastValidB = B; // Update last valid B
+  // // Alternative: Clamp B to valid range
+  // B = std::clamp(B, -30.0, 700.0); 
+  // lastValidB = B; // Update last valid B
 
   auto fittingEnd = std::chrono::high_resolution_clock::now();
 
