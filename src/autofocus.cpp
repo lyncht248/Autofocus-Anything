@@ -475,22 +475,21 @@ void autofocus::run() {
             focusHistoryFile.close();
           }
         }
-
+        
         // (Shan testing) Use PID module directly to calculate movement, no interpolation
         double errorMagnitude = abs(desiredLocBestFocus - locBestFocusDouble);
+        double totalPdSignal;
         if (errorMagnitude <= 3.0) { // no movement if within tolerance
-          mmToMove = 0.0;
+          totalPdSignal = 0.0;
         }
         else if (errorMagnitude >= 150) { // Increased Kd for large errors
           double effectiveKd = Kd;
           effectiveKd = Kd + Kd * (errorMagnitude - 150) * (2.5 - 1) / (330 - 150); // Scale Kd from 1x to 2.5x between 150 and 330 error
           PID pid(dt, max, min, Kp, effectiveKd, Ki);
-          double moveAmount = pid.calculate(desiredLocBestFocus, locBestFocusDouble) * -1.0;
-          mmToMove = moveAmount;
+          totalPdSignal = pid.calculate(desiredLocBestFocus, locBestFocusDouble) * -1.0;
         }
         else{
-          double moveAmount = pid.calculate(desiredLocBestFocus, locBestFocusDouble) * -1.0;
-          mmToMove = moveAmount;
+          totalPdSignal = pid.calculate(desiredLocBestFocus, locBestFocusDouble) * -1.0;
         }
         // Apply limits
         if ( mmToMove > max)
@@ -499,7 +498,37 @@ void autofocus::run() {
           mmToMove = min;
         bNewMoveRel = 1;
         moved = (std::abs(mmToMove) > 1e-12);
+        // BLINK DETECTION. TODO: try removing 'moved' variable
+        double blickThreshold = 50.0; // Threshold for detecting a blink based on focus change
+        if (moved == 0 && blink == 0 &&
+            abs(static_cast<int>(std::round(locBestFocusDouble)) - previous) >
+                (blickThreshold) &&
+            bBlinking) { 
+          // if the location of best focus changes by more than
+          // 50 pixels with no move, it is a blink, set blick to 1
+          if (bAutofocusLogFlag)
+            logger->info("[autofocus::run] Frame ignored; blink detected");
+          std::cout << "Blink detected" << std::endl;
+          blink = 1;
+        } else if (blink == 1) {
+          // When blink is 1, ignore a certain number of frames (blinkframes)
+          if (bAutofocusLogFlag)
+            logger->info("[autofocus::run] Frame ignored; blink detected");
+          blinkframes--;
+          if (blinkframes == 0) {
+            blinkframes = 15; // resets blinkframes
+            blink = 0;
+          }
+        } else {
+            // No blink detected, proceed as normal
+            // Use the double precision PD signal - NO CASTING!
+            mmToMove = totalPdSignal;
+            bNewMoveRel = 1;
+            moved = 1;
+            // std::cout << "mmToMove: " << mmToMove << "\n";
+        }
 
+        // End of blink detection
         previous = static_cast<int>(std::round(locBestFocusDouble));
 
         // Periodically report frame drop rate
