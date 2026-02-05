@@ -68,7 +68,7 @@ bool bTrackFocusHistory = 1; // Tracks history of fitted focus positions
 bool bRunContinuous = 0;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
 
 
-bool bBlinking = 0;
+bool bBlinking = 1;
 
 unsigned char *img_buf =
     (unsigned char *)malloc(img_size); // Accessed by thread1 and thread2
