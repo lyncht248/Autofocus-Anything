@@ -64,7 +64,7 @@ public:
      * @param n Index of the frame to retrieve.
      * @return Pointer to the requested frame, or nullptr if the index is out of bounds.
      */
-    VidFrame* getFrame(int n);
+    std::shared_ptr<VidFrame> getFrame(int n);
 
     /**
      * @brief Adds a frame to the buffer.
@@ -73,7 +73,7 @@ public:
      * @param frame Pointer to the frame to add.
      * @return Current size of the frame buffer.
      */
-    int putFrame(VidFrame *frame);
+    int putFrame(std::shared_ptr<VidFrame> frame);
 
     /**
      * @brief Saves all frames to the specified location.
@@ -115,7 +115,7 @@ public:
      * 
      * @return Pointer to the current frame.
      */
-    VidFrame* getFrame();
+    std::shared_ptr<VidFrame> getFrame();
 
     /**
      * @brief Clears all frames from the buffer.
@@ -177,7 +177,7 @@ private:
 
     System &system; ///< Reference to the System object.
     bool buffering; ///< Indicates whether the Recorder is buffering frames.
-    std::vector<VidFrame*> frames; ///< Buffer for storing frames.
+    std::vector<std::shared_ptr<VidFrame>> frames; ///< Buffer for storing frames.
     VDispatcher<std::tuple<Operation, bool> > *sigOperationComplete; ///< Signal dispatcher for operation completion.
     VDispatcher<std::string> sigOperationSave, sigOperationLoad;; ///< Signal dispatcher for saving and loading operations.
     VDispatcher<std::pair<int, int> > sigBuffer; ///< Signal dispatcher for buffering operations.
@@ -185,7 +185,7 @@ private:
     Glib::Threads::Mutex mutex; ///< Mutex for thread-safe access to frames.
     Glib::Threads::Cond frameReleased; ///< Condition variable for frame release.
 
-    VidFrame *current; ///< Pointer to the current frame being processed.
+    std::shared_ptr<VidFrame> current; ///< Pointer to the current frame being processed.
     int bufSleep; ///< Sleep duration between frames during buffering.
 };
 

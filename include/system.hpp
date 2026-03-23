@@ -103,7 +103,7 @@ protected:
 
   ::Cairo::RefPtr<::Cairo::ImageSurface>
       processed;      ///< Processed frame surface.
-  VidFrame *vidFrame; ///< Pointer to the current video frame.
+  std::shared_ptr<VidFrame> vidFrame; ///< Pointer to the current video frame.
   std::unordered_map<std::string, FrameFilter *>
       filters;         ///< Filters applied to frames.
   bool running;        ///< Indicates whether the processor is running.
@@ -120,7 +120,7 @@ protected:
 
   TooN::Vector<2> offset, currentOff,
       rasterPos; ///< Vectors for raster positions and offsets.
-  TSQueue<VidFrame *> stabQueue,
+  TSQueue<std::shared_ptr<VidFrame>> stabQueue,
       released; ///< Queues for stabilization and released frames.
 
   Glib::Threads::Thread *processorThread,
@@ -235,7 +235,7 @@ public:
    *
    * @return Reference to the frame queue.
    */
-  TSQueue<VidFrame *> &getFrameQueue();
+  TSQueue<std::shared_ptr<VidFrame>> &getFrameQueue();
 
   /**
    * @brief Gets the dispatcher for new frame signals.
@@ -249,7 +249,7 @@ public:
    *
    * @return Pointer to the current video frame.
    */
-  VidFrame *getFrame();
+  std::shared_ptr<VidFrame> getFrame();
 
   /**
    * @brief Gets the current frames per second (FPS).
@@ -439,7 +439,7 @@ private:
 
   Glib::Dispatcher sigNewFrame; ///< Dispatcher for new frame signals.
 
-  TSQueue<VidFrame *> frameQueue; ///< Queue for video frames.
+  TSQueue<std::shared_ptr<VidFrame>> frameQueue; ///< Queue for video frames.
 
   FrameProcessor frameProcessor; ///< Frame processor object.
 
