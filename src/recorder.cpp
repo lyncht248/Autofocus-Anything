@@ -9,7 +9,7 @@
 
 #define FNUM_SIZE 26
 
-bool bRecorderLogFlag = 0; // 1 = log, 0 = don't log
+bool bRecorderLogFlag = 1; // 1 = log, 0 = don't log
 
 Recorder::Recorder(System &sys) :
 	system(sys),
@@ -55,7 +55,9 @@ VidFrame* Recorder::getFrame(int n)
 
 //Fills up the frames buffer (or the RAM) with frames, either from live camera or from loaded file
 int Recorder::putFrame(VidFrame *frame)
-{
+{	
+	Glib::Threads::Mutex::Lock lock(mutex); // Lock mutex to ensure frame data is not accessed by other threads while recording
+
 	// Record time
 	auto now = std::chrono::system_clock::now();
 	frames.push_back(frame);
@@ -73,7 +75,7 @@ int Recorder::putFrame(VidFrame *frame)
 }
 
 void Recorder::saveFrames(const std::string &location)
-{
+{	
 	// Prepare saving timestamps
 	auto tp_save = std::chrono::system_clock::now();
 	std::time_t t_save = std::chrono::system_clock::to_time_t(tp_save);
@@ -94,9 +96,8 @@ void Recorder::saveFrames(const std::string &location)
 		recording_start = oss.str();
 	}
 
-
-
-
+	Glib::Threads::Mutex::Lock lock(mutex); // Lock mutex to ensure frame data is not accessed by other threads while saving
+	
 	char fnum[FNUM_SIZE];
 	mkdir(location.c_str(), 0777);
 	for (unsigned long i = 0; i < frames.size(); i++)

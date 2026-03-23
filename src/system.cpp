@@ -604,6 +604,20 @@ void FrameProcessor::releaseFrame() {
   mutex.unlock();
 }
 
+void FrameProcessor::clearQueues() {
+  while (!stabQueue.empty()){ // Clear stabQueue
+    VidFrame *vframe = stabQueue.pop();
+    delete vframe;
+  }
+  while (!released.empty()){  // Clear released queue
+    VidFrame *vframe = released.pop();
+    delete vframe;
+  }
+   if (bSystemFramesFlag) {
+    logger->info("[FrameProcessor::clearQueues] stabQueue and released queue cleared");
+  }
+}
+
 void FrameProcessor::resetRaster() {
   rasterPos = offset = currentOff = TooN::Zeros;
   SDLWindow::setRaster(childwin);
@@ -1493,10 +1507,24 @@ void System::whenSeekingToggled(bool seeking) {
 }
 
 void System::whenRecordingToggled(bool recording) {
+  static bool internalChange = false; // Flag to prevent recursive calls
+  if (internalChange) {
+    return; // Exit to prevent recursion
+  }
   if (recording) {
-    recorder->clearFrames(); // When a new recording is started, clear the
-                             // previous frames frameQueue.clear(); //When a new
-                             // recording is started, clear the previous frames
+    internalChange = true;
+
+    window.setRecording(false); // Temporarily set recording to false to prevent issues with frame counting
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50)); // Slight delay for in-flight frames to finish
+
+    recorder->clearFrames(); // Safely clear the previous frames
+    
+    frameProcessor.clearQueues();
+
+    window.setRecording(true); // Now set recording to true to start fresh
+
+    internalChange = false;
   }
 }
 

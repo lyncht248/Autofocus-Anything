@@ -1,10 +1,10 @@
 PRO2=40
+Ki=0
 Kp=0.0015
-Kd=0.00001
-Ki=0.00
+Kd=1e-05
 PROP=120
 MIN_POSITION=-15
 MAX_POSITION=-0
-returnPosition=-10.74
+returnPosition=-14.01
 FREQ=87000
 FRQ2=85000

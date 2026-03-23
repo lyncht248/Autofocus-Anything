@@ -74,6 +74,11 @@ public:
   void resetRaster();
 
   /**
+   * @brief Clears the frame queues.
+   */
+  void clearQueues();
+
+  /**
    * @brief Gets the processed frame.
    *
    * @return A Cairo surface containing the processed frame.
