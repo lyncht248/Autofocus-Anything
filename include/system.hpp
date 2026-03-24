@@ -77,7 +77,7 @@ public:
    * @brief Clears the frame queues.
    */
   void clearQueues();
-
+  
   /**
    * @brief Gets the processed frame.
    *

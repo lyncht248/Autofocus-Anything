@@ -9,7 +9,7 @@
 
 #define FNUM_SIZE 26
 
-bool bRecorderLogFlag = 1; // 1 = log, 0 = don't log
+bool bRecorderLogFlag = 0; // 1 = log, 0 = don't log
 
 Recorder::Recorder(System &sys) :
 	system(sys),
@@ -250,9 +250,18 @@ void Recorder::clearFrames() //Called ONLY when a new recording is started... ca
 	// 	delete frame;
 	// }
 	frames.clear();
+	frame_times.clear(); 
 	mutex.unlock();
-	if(bRecorderLogFlag) logger->info("[Recorder::clearFrames()] frames cleared");
+	if(bRecorderLogFlag) {
+		logger->info("[Recorder::clearFrames()] frames cleared");
+    }
+	
 	emitOperationComplete(Operation::RECOP_EMPTIED, true);
+}
+
+void Recorder::resetCurrent()
+{
+    current.reset();
 }
 
 void Recorder::emitOperationComplete(Operation op, bool success)

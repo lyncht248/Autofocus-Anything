@@ -26,10 +26,10 @@
 #include <string>
 #include <thread>
 
-bool bSystemLogFlag = 0;         // 1 = log, 0 = no log
-bool bSystemQueueLengthFlag = 0; // 1 = log, 0 = no log
+bool bSystemLogFlag = 1;         // 1 = log, 0 = no log
+bool bSystemQueueLengthFlag = 1; // 1 = log, 0 = no log
 bool bSystemFramesFlag =
-    0; // Used to track how each frame passes through the system
+    1; // Used to track how each frame passes through the system
 
 // I don't believe these three code blocks are used anywhere
 /*
@@ -605,15 +605,16 @@ void FrameProcessor::releaseFrame() {
 }
 
 void FrameProcessor::clearQueues() {
-  while (!stabQueue.empty()){ // Clear stabQueue
-    auto vframe = stabQueue.pop();
-    // delete vframe;
-  }
-  while (!released.empty()){  // Clear released queue
-    auto vframe = released.pop();
-    // delete vframe;
-  }
-   if (bSystemFramesFlag) {
+  system.getFrameQueue().clear();
+  stabQueue.clear();
+  released.clear();
+  // Clear the current frame reference
+  mutex.lock();
+  vidFrame.reset();  // Release reference to current frame
+  mutex.unlock();
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  if (bSystemFramesFlag) {
     logger->info("[FrameProcessor::clearQueues] stabQueue and released queue cleared");
   }
 }
@@ -1106,11 +1107,16 @@ void System::whenLiveViewToggled(bool viewingLive) {
     }
     startStreaming();
 
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    frameProcessor.clearQueues();
     // If there are frames in the recorder, delete them now
     if (recorder->countFrames() > 0) {
-
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      recorder->resetCurrent();
+      recorder->stopBuffering();
       recorder->clearFrames();
     }
+    
     window.setHasBuffer(false);
   } else {
     if (bSystemLogFlag) {
@@ -1514,17 +1520,24 @@ void System::whenRecordingToggled(bool recording) {
   }
   if (recording) {
     internalChange = true;
-
     window.setRecording(false); // Temporarily set recording to false to prevent issues with frame counting
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(50)); // Slight delay for in-flight frames to finish
-
-    recorder->clearFrames(); // Safely clear the previous frames
-    
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     frameProcessor.clearQueues();
+    frameProcessor.vidFrame.reset();
 
+    std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Slight delay for in-flight frames to finish
+    recorder->clearFrames(); // Safely clear the previous frames
+    // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    recorder->resetCurrent();
+    // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    recorder->stopBuffering();
+    // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+    // getFrameQueue().clear();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
     window.setRecording(true); // Now set recording to true to start fresh
-
     internalChange = false;
   }
 }

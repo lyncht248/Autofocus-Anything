@@ -124,6 +124,12 @@ public:
      */
     void clearFrames();
 
+    /**
+     * @brief Resets the current frame pointer.
+     * 
+     * Clears the reference to the current frame being processed.
+     */
+    void resetCurrent();
 
 	void setBufferFrameRate();
     
