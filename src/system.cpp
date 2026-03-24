@@ -29,7 +29,7 @@
 bool bSystemLogFlag = 1;         // 1 = log, 0 = no log
 bool bSystemQueueLengthFlag = 1; // 1 = log, 0 = no log
 bool bSystemFramesFlag =
-    1; // Used to track how each frame passes through the system
+    0; // Used to track how each frame passes through the system
 
 // I don't believe these three code blocks are used anywhere
 /*
@@ -634,6 +634,27 @@ void FrameProcessor::resetZoom() {
   }
 }
 
+void FrameProcessor::stop() {
+  running = false;
+  ThreadStopper::stop({processorThread, stabThread});
+  if (bSystemFramesFlag) {
+    logger->info("[FrameProcessor::stop] Processor and stabiliser threads stopped");
+  }
+}
+
+void FrameProcessor::start(){
+  if (!running) {
+    running = true;
+    processorThread = Glib::Threads::Thread::create(
+        sigc::mem_fun(*this, &FrameProcessor::processFrame));
+    stabThread = Glib::Threads::Thread::create(
+        sigc::mem_fun(*this, &FrameProcessor::stabilise));
+    if (bSystemFramesFlag) {
+      logger->info("[FrameProcessor::start] Processor and stabiliser threads started");
+    }
+  }
+}
+
 ::Cairo::RefPtr<::Cairo::Surface> FrameProcessor::getFrame() {
   return processed;
 }
@@ -1105,18 +1126,31 @@ void System::whenLiveViewToggled(bool viewingLive) {
     if (bSystemLogFlag) {
       logger->info("[System::whenLiveViewToggled] Live view toggled on");
     }
-    startStreaming();
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    frameProcessor.clearQueues();
-    // If there are frames in the recorder, delete them now
-    if (recorder->countFrames() > 0) {
+    if (first_time_live_view) {
+      first_time_live_view = false;
+      startStreaming();
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      recorder->resetCurrent();
-      recorder->stopBuffering();
-      recorder->clearFrames();
+      frameProcessor.clearQueues();
+      frameProcessor.vidFrame.reset();
+    } else {
+      frameProcessor.stop();
+      startStreaming();
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      frameProcessor.start();
     }
-    
+
+    recorder->resetCurrent();
+    recorder->stopBuffering();
+    recorder->clearFrames();
+
+    // If there are frames in the recorder, delete them now
+    // if (recorder->countFrames() > 0) {
+    //   std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    //   recorder->resetCurrent();
+    //   recorder->stopBuffering();
+    //   recorder->clearFrames();
+    // }
+
     window.setHasBuffer(false);
   } else {
     if (bSystemLogFlag) {
@@ -1552,14 +1586,22 @@ void System::onRecorderOperationComplete(RecOpRes res) {
       logger->info(
           "[System::onRecorderOperationComplete] Recorder stopped recording");
     }
-    if (success)
+    if (success){
       window.displayMessageFPS("Recording complete. Remember to save!");
-    else
+      }
+    else {
       window.displayMessageFPS("Recording failed");
+    }
+    
+    window.setRecording(false);
+    logger->info("[System::onRecorderOperationComplete] Recording set to false");
     window.setLiveView(!success);
     window.setHasBuffer(success);
-    window.setRecording(false);
     window.setTrackingFPS(false);
+
+    frameProcessor.clearQueues();
+    frameProcessor.vidFrame.reset();
+
     if (window.get3DStabActive().getValue()) {
       window.set3DStab(false);
     }

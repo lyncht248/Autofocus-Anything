@@ -78,6 +78,10 @@ public:
    */
   void clearQueues();
   
+
+  void stop();
+  void start();
+
   /**
    * @brief Gets the processed frame.
    *
@@ -383,6 +387,7 @@ private:
 
   void renderFrame();  ///< Renders the current frame.
   void releaseFrame(); ///< Releases the current frame.
+  bool first_time_live_view = true; ///< Flag to track if live view is being toggled for the first time.
 
   void
   whenLiveViewToggled(bool viewingLive); ///< Handles toggling of the live view.
