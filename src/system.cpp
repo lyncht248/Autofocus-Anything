@@ -634,6 +634,10 @@ void FrameProcessor::resetZoom() {
   }
 }
 
+bool FrameProcessor::isIdle() {
+  return !running && stabQueue.empty() && released.empty();
+}
+
 void FrameProcessor::stop() {
   running = false;
   ThreadStopper::stop({processorThread, stabThread});
@@ -1129,23 +1133,24 @@ void System::whenLiveViewToggled(bool viewingLive) {
     if (first_time_live_view) {
       first_time_live_view = false;
       startStreaming();
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
       frameProcessor.clearQueues();
       frameProcessor.vidFrame.reset();
     } else {
       logger->info("[System::whenLiveViewToggled] Resetting frame processor");
       frameProcessor.stop();
+      std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Ensure threads have stopped
       frameProcessor.clearQueues();
       frameProcessor.vidFrame.reset();
       startStreaming();
-      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       frameProcessor.start();
     }
 
-    recorder->resetCurrent();
-    recorder->stopBuffering();
-    recorder->clearFrames();
 
+    recorder->clearFrames();
+    recorder->stopBuffering();
+    recorder->resetCurrent();
+    
+    
     // If there are frames in the recorder, delete them now
     // if (recorder->countFrames() > 0) {
     //   std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -1559,26 +1564,17 @@ void System::whenRecordingToggled(bool recording) {
     internalChange = true;
     window.setRecording(false); // Temporarily set recording to false to prevent issues with frame counting
     frameProcessor.stop();
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Slight delay to ensure processing has stopped
     frameProcessor.clearQueues();
     frameProcessor.vidFrame.reset();
     frameProcessor.start();
 
-    // std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    // frameProcessor.clearQueues();
-    // frameProcessor.vidFrame.reset();
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Slight delay for in-flight frames to finish
+    // std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Slight delay for in-flight frames to finish
     recorder->clearFrames(); // Safely clear the previous frames
-    // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    recorder->resetCurrent();
-    // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     recorder->stopBuffering();
-    // std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    recorder->resetCurrent();
+    
 
-    // getFrameQueue().clear();
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
     window.setRecording(true); // Now set recording to true to start fresh
     internalChange = false;
   }
@@ -1602,7 +1598,6 @@ void System::onRecorderOperationComplete(RecOpRes res) {
     }
     
     window.setRecording(false);
-    logger->info("[System::onRecorderOperationComplete] Recording set to false");
     window.setLiveView(!success);
     window.setHasBuffer(success);
     window.setTrackingFPS(false);
@@ -1617,7 +1612,9 @@ void System::onRecorderOperationComplete(RecOpRes res) {
       window.setHoldFocus(false);
     }
     window.setFindFocus(false);
+
     break;
+
   case Recorder::Operation::RECOP_LOAD:
     if (window.getLoading().getValue()) {
       if (success) {

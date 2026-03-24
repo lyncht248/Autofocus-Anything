@@ -77,8 +77,8 @@ public:
    * @brief Clears the frame queues.
    */
   void clearQueues();
-  
 
+  bool isIdle();
   void stop();
   void start();
 
