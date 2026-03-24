@@ -1019,7 +1019,7 @@ bool System::startStreaming() {
       }
 
       if (cam->StartCapture() == VmbErrorSuccess) {
-        std::cout << "Started capture" << std::endl;
+        std::cout << "[System::startStreaming] Started capture" << std::endl;
         for (Vimba::FramePtrVector::iterator iter = priv->frames.begin();
              iter != priv->frames.end(); ++iter) {
           cam->QueueFrame(*iter);
@@ -1133,9 +1133,12 @@ void System::whenLiveViewToggled(bool viewingLive) {
       frameProcessor.clearQueues();
       frameProcessor.vidFrame.reset();
     } else {
+      logger->info("[System::whenLiveViewToggled] Resetting frame processor");
       frameProcessor.stop();
+      frameProcessor.clearQueues();
+      frameProcessor.vidFrame.reset();
       startStreaming();
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       frameProcessor.start();
     }
 
@@ -1555,10 +1558,15 @@ void System::whenRecordingToggled(bool recording) {
   if (recording) {
     internalChange = true;
     window.setRecording(false); // Temporarily set recording to false to prevent issues with frame counting
-
+    frameProcessor.stop();
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     frameProcessor.clearQueues();
     frameProcessor.vidFrame.reset();
+    frameProcessor.start();
+
+    // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // frameProcessor.clearQueues();
+    // frameProcessor.vidFrame.reset();
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Slight delay for in-flight frames to finish
     recorder->clearFrames(); // Safely clear the previous frames
@@ -1598,7 +1606,7 @@ void System::onRecorderOperationComplete(RecOpRes res) {
     window.setLiveView(!success);
     window.setHasBuffer(success);
     window.setTrackingFPS(false);
-
+    
     frameProcessor.clearQueues();
     frameProcessor.vidFrame.reset();
 
