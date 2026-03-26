@@ -605,11 +605,12 @@ void FrameProcessor::releaseFrame() {
 }
 
 void FrameProcessor::clearQueues() {
+  mutex.lock();
   system.getFrameQueue().clear();
   stabQueue.clear();
   released.clear();
   // Clear the current frame reference
-  mutex.lock();
+  // mutex.lock();
   vidFrame.reset();  // Release reference to current frame
   mutex.unlock();
 
