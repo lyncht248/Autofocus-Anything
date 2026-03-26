@@ -9,7 +9,7 @@
 
 #define FNUM_SIZE 26
 
-bool bRecorderLogFlag = 0; // 1 = log, 0 = don't log
+bool bRecorderLogFlag = 1; // 1 = log, 0 = don't log
 
 Recorder::Recorder(System &sys) :
 	system(sys),
@@ -44,7 +44,7 @@ Recorder::~Recorder()
 	if(bRecorderLogFlag) logger->info("[Recorder::~Recorder()] destructor called");
 }
 
-std::shared_ptr<VidFrame> Recorder::getFrame(int n)
+std::shared_ptr<IVidFrame> Recorder::getFrame(int n)
 {
 	if (n < frames.size() )
 	{
@@ -55,10 +55,9 @@ std::shared_ptr<VidFrame> Recorder::getFrame(int n)
 }
 
 //Fills up the frames buffer (or the RAM) with frames, either from live camera or from loaded file
-int Recorder::putFrame(std::shared_ptr<VidFrame> frame)
+int Recorder::putFrame(std::shared_ptr<IVidFrame> frame)
 {	
-	Glib::Threads::Mutex::Lock lock(mutex); // Lock mutex to ensure frame data is not accessed by other threads while recording
-
+	mutex.lock();
 	// Record time
 	auto now = std::chrono::system_clock::now();
 	frames.push_back(frame);
@@ -71,6 +70,7 @@ int Recorder::putFrame(std::shared_ptr<VidFrame> frame)
 
 	//Should always be the length of the recorded frames
 	if(bRecorderLogFlag) logger->info("[Recorder::putFrame()] frames queue is size: {}", frames.size());
+	mutex.unlock();
 	return frames.size();
 
 }
@@ -97,7 +97,7 @@ void Recorder::saveFrames(const std::string &location)
 		recording_start = oss.str();
 	}
 
-	Glib::Threads::Mutex::Lock lock(mutex); // Lock mutex to ensure frame data is not accessed by other threads while saving
+	mutex.lock();
 	
 	char fnum[FNUM_SIZE];
 	mkdir(location.c_str(), 0777);
@@ -112,9 +112,11 @@ void Recorder::saveFrames(const std::string &location)
 		else
 		{
 			emitOperationComplete(Operation::RECOP_SAVE, false);
+			mutex.unlock();
 			return;
 		}
 	}
+	mutex.unlock();
 
 	// Metadata CSV file
 	std::ofstream csv(location + std::string("/metadata.csv"));
@@ -229,7 +231,7 @@ int Recorder::countFrames()
 	return frames.size();
 }
 
-std::shared_ptr<VidFrame> Recorder::getFrame()
+std::shared_ptr<IVidFrame> Recorder::getFrame()
 {
 	return current;
 }
@@ -244,16 +246,28 @@ std::shared_ptr<VidFrame> Recorder::getFrame()
 void Recorder::clearFrames() //Called ONLY when a new recording is started... call more often?
 {
 	buffering = false;
+
+	if(bRecorderLogFlag) {
+		logger->info("[Recorder::clearFrames()] clearing frames, size before clearing: {}", frames.size());
+    }
+
 	mutex.lock();
 	// for (VidFrame *frame : frames)
 	// {
 	// 	delete frame;
 	// }
+
+	// if(bRecorderLogFlag) {
+	// 	for (const auto& frame : frames) {
+    // logger->info("Before clearing  Reference count: {}", frame.use_count());
+	// }
+	
 	frames.clear();
-	frame_times.clear(); 
 	mutex.unlock();
+
+
 	if(bRecorderLogFlag) {
-		logger->info("[Recorder::clearFrames()] frames cleared");
+		logger->info("[Recorder::clearFrames()] frames cleared, size after clearing: {}", frames.size());
     }
 	
 	emitOperationComplete(Operation::RECOP_EMPTIED, true);
