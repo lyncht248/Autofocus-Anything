@@ -56,7 +56,8 @@ VidFrame* Recorder::getFrame(int n)
 //Fills up the frames buffer (or the RAM) with frames, either from live camera or from loaded file
 int Recorder::putFrame(VidFrame *frame)
 {	
-	Glib::Threads::Mutex::Lock lock(mutex); // Lock mutex to ensure frame data is not accessed by other threads while recording
+	mutex.lock();
+	// Glib::Threads::Mutex::Lock lock(mutex); // Lock mutex to ensure frame data is not accessed by other threads while recording
 
 	// Record time
 	auto now = std::chrono::system_clock::now();
@@ -70,6 +71,7 @@ int Recorder::putFrame(VidFrame *frame)
 
 	//Should always be the length of the recorded frames
 	if(bRecorderLogFlag) logger->info("[Recorder::putFrame()] frames queue is size: {}", frames.size());
+	mutex.unlock();
 	return frames.size();
 
 }
@@ -96,8 +98,8 @@ void Recorder::saveFrames(const std::string &location)
 		recording_start = oss.str();
 	}
 
-	Glib::Threads::Mutex::Lock lock(mutex); // Lock mutex to ensure frame data is not accessed by other threads while saving
-	
+	// Glib::Threads::Mutex::Lock lock(mutex); // Lock mutex to ensure frame data is not accessed by other threads while saving
+	mutex.lock();
 	char fnum[FNUM_SIZE];
 	mkdir(location.c_str(), 0777);
 	for (unsigned long i = 0; i < frames.size(); i++)
@@ -111,9 +113,11 @@ void Recorder::saveFrames(const std::string &location)
 		else
 		{
 			emitOperationComplete(Operation::RECOP_SAVE, false);
+			mutex.unlock();
 			return;
 		}
 	}
+	mutex.unlock();
 
 	// Metadata CSV file
 	std::ofstream csv(location + std::string("/metadata.csv"));

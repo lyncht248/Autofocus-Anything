@@ -1526,6 +1526,12 @@ void System::whenRecordingToggled(bool recording) {
 
     internalChange = false;
   }
+  //// Old code:
+  // if (recording) {
+  //   recorder->clearFrames(); // When a new recording is started, clear the
+  //                            // previous frames frameQueue.clear(); //When a new
+  //                            // recording is started, clear the previous frames
+  // }
 }
 
 // This runs when the recorder fills up
