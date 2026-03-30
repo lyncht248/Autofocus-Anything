@@ -104,33 +104,34 @@ Use `malloc_trim()` to force libc to return memory to OS:
 malloc_trim(0);  // Force heap compaction and return to OS
 ```
 
-### Solution 2: Use Memory Pool/Pre-allocation
-Instead of allocating new frames each time, reuse a pre-allocated pool:
-- Allocate frame buffer pool at startup
-- Reuse same memory for each recording
-- Avoids fragmentation
+### Solution 1 Works!
 
-### Solution 3: Alternative Memory Allocator
-Switch to tcmalloc or jemalloc which handle fragmentation better:
-```bash
-# Use tcmalloc
-apt-get install libtcmalloc-minimal4
-LD_PRELOAD=/usr/lib/libtcmalloc_minimal.so.4 ./hvi-gtk
+The memory leak is **NOT a reference counting issue** - it's a **heap fragmentation problem**.
+
+### What Was Happening
+1. Recording allocates 3+ GB of frame memory (1200 frames × ~2.7 MB each)
+2. `Recorder::clearFrames()` clears the vector and releases all pointers
+3. Shared_ptr destructors call `delete`
+4. BUT: Linux libc doesn't return fragmented memory to OS
+5. RSS stays high across multiple recordings
+6. After 5 recordings: 7.9 GB used (was meant to be ~3 GB per recording)
+
+## The Solution: malloc_trim()
+
+Added `malloc_trim(0)` call after clearing frames in `Recorder::clearFrames()`:
+
+```cpp
+void Recorder::clearFrames() {
+  frames.clear();
+  frame_times.clear();
+  current.reset();
+  
+  malloc_trim(0);  // ← NEW: Force heap compaction and return memory to OS
+}
 ```
 
-### Solution 4: Limit Frame Memory Usage
-Instead of storing all frames in memory, stream to disk during recording.
-
-## Recommendation
-
-**Try Solution 1 first** - it's the simplest and most likely to work:
-
-1. Add `#include <malloc.h>` to recorder.cpp
-2. Call `malloc_trim(0)` after `frames.clear()`
-3. Test if memory is released
-
-This is a **common issue** with large allocations and Linux memory management, NOT a code bug.
-
-## Next Step
-
-I'll add `malloc_trim()` call to `Recorder::clearFrames()` to force heap compaction and see if that releases the memory back to the OS.
+### How malloc_trim() Works
+- Compacts the heap by consolidating free chunks
+- Returns unused memory pages to the OS
+- Reduces fragmentation
+- Essential after allocating/deallocating large blocks
