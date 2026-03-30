@@ -237,7 +237,7 @@ public:
    *
    * @param frame Pointer to the frame to render.
    */
-  void renderFrame(VidFrame *frame);
+  void renderFrame(std::shared_ptr<VidFrame> frame);
 
   /**
    * @brief Updates the sharpness graph with new values.

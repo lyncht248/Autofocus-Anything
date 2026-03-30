@@ -78,6 +78,10 @@ public:
    */
   void clearQueues();
 
+  bool isIdle();
+  void stop();
+  void start();
+
   /**
    * @brief Gets the processed frame.
    *
@@ -103,7 +107,7 @@ protected:
 
   ::Cairo::RefPtr<::Cairo::ImageSurface>
       processed;      ///< Processed frame surface.
-  VidFrame *vidFrame; ///< Pointer to the current video frame.
+  std::shared_ptr<IVidFrame> vidFrame; ///< Pointer to the current video frame.
   std::unordered_map<std::string, FrameFilter *>
       filters;         ///< Filters applied to frames.
   bool running;        ///< Indicates whether the processor is running.
@@ -120,7 +124,7 @@ protected:
 
   TooN::Vector<2> offset, currentOff,
       rasterPos; ///< Vectors for raster positions and offsets.
-  TSQueue<VidFrame *> stabQueue,
+  TSQueue<std::shared_ptr<IVidFrame>> stabQueue,
       released; ///< Queues for stabilization and released frames.
 
   Glib::Threads::Thread *processorThread,
@@ -235,7 +239,7 @@ public:
    *
    * @return Reference to the frame queue.
    */
-  TSQueue<VidFrame *> &getFrameQueue();
+  TSQueue<std::shared_ptr<IVidFrame>> &getFrameQueue();
 
   /**
    * @brief Gets the dispatcher for new frame signals.
@@ -249,7 +253,7 @@ public:
    *
    * @return Pointer to the current video frame.
    */
-  VidFrame *getFrame();
+  std::shared_ptr<IVidFrame> getFrame();
 
   /**
    * @brief Gets the current frames per second (FPS).
@@ -367,7 +371,7 @@ private:
    *
    * @param frame Reference to the video frame.
    */
-  void createStabiliserMapWithDefaults(const VidFrame &frame);
+  void createStabiliserMapWithDefaults(const IVidFrame &frame);
 
   /**
    * @brief Calculates the threshold for a target percentage of pixels.
@@ -383,6 +387,7 @@ private:
 
   void renderFrame();  ///< Renders the current frame.
   void releaseFrame(); ///< Releases the current frame.
+  bool first_time_live_view = true; ///< Flag to track if live view is being toggled for the first time.
 
   void
   whenLiveViewToggled(bool viewingLive); ///< Handles toggling of the live view.
@@ -439,7 +444,7 @@ private:
 
   Glib::Dispatcher sigNewFrame; ///< Dispatcher for new frame signals.
 
-  TSQueue<VidFrame *> frameQueue; ///< Queue for video frames.
+  TSQueue<std::shared_ptr<IVidFrame>> frameQueue; ///< Queue for video frames.
 
   FrameProcessor frameProcessor; ///< Frame processor object.
 

@@ -106,7 +106,7 @@ void SensorFusion::startROIFocusSearch() {
   }
 
   // Ensure we have a valid frame before starting search
-  VidFrame *testFrame = m_system.getFrame();
+  std::shared_ptr<VidFrame> testFrame = m_system.getFrame();
   if (!testFrame || !testFrame->data() || testFrame->size().x <= 0 ||
       testFrame->size().y <= 0) {
     std::cout
@@ -127,7 +127,7 @@ void SensorFusion::startDepthMapping() {
   }
 
   // Ensure we have a valid frame before starting depth mapping
-  VidFrame *testFrame = m_system.getFrame();
+  std::shared_ptr<VidFrame> testFrame = m_system.getFrame();
   if (!testFrame || !testFrame->data() || testFrame->size().x <= 0 ||
       testFrame->size().y <= 0) {
     std::cout << "[Sensor Fusion] No valid frame available, cannot start depth "
@@ -193,7 +193,7 @@ void SensorFusion::monitorThreadFunction() {
       // Only process frames if a custom ROI center has been set
       if (m_useCustomCenter.load()) {
         // Get current frame from the system
-        VidFrame *currentFrame = m_system.getFrame();
+        std::shared_ptr<VidFrame> currentFrame = m_system.getFrame();
 
         // Add safety checks for null frame and data
         if (currentFrame && currentFrame->data() &&
@@ -589,7 +589,7 @@ void SensorFusion::setFocusPositionAndWaitLong(int position, int settleTimeMs) {
 }
 
 double SensorFusion::getCurrentROISharpness() {
-  VidFrame *currentFrame = m_system.getFrame();
+  std::shared_ptr<VidFrame> currentFrame = m_system.getFrame();
 
   if (!currentFrame || !currentFrame->data() || currentFrame->size().x <= 0 ||
       currentFrame->size().y <= 0) {
@@ -872,7 +872,7 @@ void SensorFusion::performDepthMapping() {
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   // Get frame dimensions from first frame
-  VidFrame *firstFrame = m_system.getFrame();
+  std::shared_ptr<VidFrame> firstFrame = m_system.getFrame();
   if (!firstFrame || !firstFrame->data()) {
     std::cout << "[Depth Mapping] Failed to get initial frame, aborting"
               << std::endl;
@@ -928,7 +928,7 @@ void SensorFusion::performDepthMapping() {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     // Get current frame and stabilization offset
-    VidFrame *currentFrame = m_system.getFrame();
+    std::shared_ptr<VidFrame> currentFrame = m_system.getFrame();
     if (!currentFrame || !currentFrame->data()) {
       std::cout << "[Depth Mapping] Failed to get frame at position "
                 << focusPos << ", skipping" << std::endl;
