@@ -30,7 +30,7 @@
 #include <unistd.h>
 
 bool bSystemLogFlag = 0;         // 1 = log, 0 = no log
-bool bSystemMemoryLeakFlag = 1; // 1 = log, 0 = no log
+bool bSystemMemoryLeakFlag = 0; // 1 = log, 0 = no log
 bool bSystemFramesFlag =
     0; // Used to track how each frame passes through the system
 
@@ -1591,8 +1591,8 @@ void System::whenRecordingToggled(bool recording) {
     internalChange = true;
     
     // Log memory BEFORE recording starts
+    double memBefore = getProcessMemoryMB();
     if (bSystemMemoryLeakFlag) {
-      double memBefore = getProcessMemoryMB();
       logger->info("[System::whenRecordingToggled] START: Memory before recording: {:.2f} MB", memBefore);
     }
     
@@ -1604,17 +1604,16 @@ void System::whenRecordingToggled(bool recording) {
     frameProcessor.start();
 
     // Log memory BEFORE clearFrames
+    double memBeforeClear = getProcessMemoryMB();
     if (bSystemMemoryLeakFlag) {
-      double memBeforeClear = getProcessMemoryMB();
       logger->info("[System::whenRecordingToggled] BEFORE_CLEAR: Memory: {:.2f} MB", memBeforeClear);
     }
 
     recorder->clearFrames(); // Safely clear the previous frames
     
     // Log memory AFTER clearFrames
-    
+    double memAfterClear = getProcessMemoryMB();
     if (bSystemMemoryLeakFlag) {
-      double memAfterClear = getProcessMemoryMB();
       logger->info("[System::whenRecordingToggled] AFTER_CLEAR: Memory: {:.2f} MB, Released: {:.2f} MB", 
                    memAfterClear, (memBeforeClear - memAfterClear));
     }
@@ -1639,8 +1638,8 @@ void System::onRecorderOperationComplete(RecOpRes res) {
     }
     
     // Log memory when recording completes
+    double memAtComplete = getProcessMemoryMB();
     if (bSystemMemoryLeakFlag) {
-      double memAtComplete = getProcessMemoryMB();
       logger->info("[System::onRecorderOperationComplete] RECORD_COMPLETE: Memory: {:.2f} MB, Frames: {}", 
                    memAtComplete, recorder->countFrames());
       logger->info("[System::onRecorderOperationComplete] RECORD_COMPLETE: frame_times size: {}", 
