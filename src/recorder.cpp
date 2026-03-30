@@ -2,6 +2,10 @@
 #include <thread>
 #include <cvd/image_io.h>
 #include <sys/stat.h>
+#include <fstream>
+#include <sstream>
+#include <unistd.h>
+#include <malloc.h>
 #include "recorder.hpp"
 #include "logfile.hpp"
 #include "system.hpp"
@@ -10,6 +14,19 @@
 #define FNUM_SIZE 26
 
 bool bRecorderLogFlag = 1; // 1 = log, 0 = don't log
+
+// Helper function to get process memory usage (RSS in MB)
+static double getRecorderProcessMemoryMB() {
+  std::ifstream file("/proc/self/statm");
+  if (!file.is_open()) return -1.0;
+  
+  long pages, rss;
+  if (file >> pages >> rss) {
+    const long pageSize = sysconf(_SC_PAGE_SIZE);
+    return (rss * pageSize) / (1024.0 * 1024.0);
+  }
+  return -1.0;
+}
 
 Recorder::Recorder(System &sys) :
 	system(sys),
@@ -69,7 +86,13 @@ int Recorder::putFrame(std::shared_ptr<IVidFrame> frame)
 		emitOperationComplete(Operation::RECOP_FILLED, true);
 
 	//Should always be the length of the recorded frames
-	if(bRecorderLogFlag) logger->info("[Recorder::putFrame()] frames queue is size: {}", frames.size());
+	if(bRecorderLogFlag) {
+		// Log every 50 frames to track memory growth during recording
+		if (frames.size() % 50 == 0) {
+			double currentMem = getRecorderProcessMemoryMB();
+			logger->info("[Recorder::putFrame()] Frame count: {}, Memory: {:.2f} MB", frames.size(), currentMem);
+		}
+	}
 	mutex.unlock();
 	return frames.size();
 
@@ -249,6 +272,7 @@ void Recorder::clearFrames() //Called ONLY when a new recording is started... ca
 
 	if(bRecorderLogFlag) {
 		logger->info("[Recorder::clearFrames()] clearing frames, size before clearing: {}", frames.size());
+		logger->info("[Recorder::clearFrames()] frame_times size: {}", frame_times.size());
     }
 
 	mutex.lock();
@@ -263,11 +287,19 @@ void Recorder::clearFrames() //Called ONLY when a new recording is started... ca
 	// }
 	
 	frames.clear();
+	frame_times.clear();  // IMPORTANT: Clear timestamps too!
+	current.reset();      // Clear current frame reference
+	
 	mutex.unlock();
 
+	// Force heap compaction to return memory to OS
+	// This prevents fragmentation from accumulating across multiple recordings
+	malloc_trim(0);
 
 	if(bRecorderLogFlag) {
 		logger->info("[Recorder::clearFrames()] frames cleared, size after clearing: {}", frames.size());
+		logger->info("[Recorder::clearFrames()] frame_times cleared, size after clearing: {}", frame_times.size());
+		logger->info("[Recorder::clearFrames()] malloc_trim() called to return memory to OS");
     }
 	
 	emitOperationComplete(Operation::RECOP_EMPTIED, true);

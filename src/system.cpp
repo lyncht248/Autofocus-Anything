@@ -25,11 +25,27 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <fstream>
+#include <sstream>
+#include <unistd.h>
 
 bool bSystemLogFlag = 0;         // 1 = log, 0 = no log
 bool bSystemMemoryLeakFlag = 1; // 1 = log, 0 = no log
 bool bSystemFramesFlag =
     0; // Used to track how each frame passes through the system
+
+// Helper function to get process memory usage (RSS in MB)
+static double getProcessMemoryMB() {
+  std::ifstream file("/proc/self/statm");
+  if (!file.is_open()) return -1.0;
+  
+  long pages, rss;
+  if (file >> pages >> rss) {
+    const long pageSize = sysconf(_SC_PAGE_SIZE);
+    return (rss * pageSize) / (1024.0 * 1024.0);
+  }
+  return -1.0;
+}
 
 // I don't believe these three code blocks are used anywhere
 /*
@@ -1573,6 +1589,13 @@ void System::whenRecordingToggled(bool recording) {
   }
   if (recording) {
     internalChange = true;
+    
+    // Log memory BEFORE recording starts
+    if (bSystemMemoryLeakFlag) {
+      double memBefore = getProcessMemoryMB();
+      logger->info("[System::whenRecordingToggled] START: Memory before recording: {:.2f} MB", memBefore);
+    }
+    
     window.setRecording(false); // Temporarily set recording to false to prevent issues with frame counting
     frameProcessor.stop();
     std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Slight delay to ensure processing has stopped
@@ -1580,12 +1603,25 @@ void System::whenRecordingToggled(bool recording) {
     frameProcessor.vidFrame.reset();
     frameProcessor.start();
 
-    // std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Slight delay for in-flight frames to finish
+    // Log memory BEFORE clearFrames
+    if (bSystemMemoryLeakFlag) {
+      double memBeforeClear = getProcessMemoryMB();
+      logger->info("[System::whenRecordingToggled] BEFORE_CLEAR: Memory: {:.2f} MB", memBeforeClear);
+    }
+
     recorder->clearFrames(); // Safely clear the previous frames
+    
+    // Log memory AFTER clearFrames
+    
+    if (bSystemMemoryLeakFlag) {
+      double memAfterClear = getProcessMemoryMB();
+      logger->info("[System::whenRecordingToggled] AFTER_CLEAR: Memory: {:.2f} MB, Released: {:.2f} MB", 
+                   memAfterClear, (memBeforeClear - memAfterClear));
+    }
+    
     recorder->stopBuffering();
     recorder->resetCurrent();
     
-
     window.setRecording(true); // Now set recording to true to start fresh
     internalChange = false;
   }
@@ -1596,11 +1632,21 @@ void System::onRecorderOperationComplete(RecOpRes res) {
   OPRESEXPAND(res, op, success);
 
   switch (op) {
-  case Recorder::Operation::RECOP_FILLED:
+  case Recorder::Operation::RECOP_FILLED: {
     if (bSystemLogFlag) {
       logger->info(
           "[System::onRecorderOperationComplete] Recorder stopped recording");
     }
+    
+    // Log memory when recording completes
+    if (bSystemMemoryLeakFlag) {
+      double memAtComplete = getProcessMemoryMB();
+      logger->info("[System::onRecorderOperationComplete] RECORD_COMPLETE: Memory: {:.2f} MB, Frames: {}", 
+                   memAtComplete, recorder->countFrames());
+      logger->info("[System::onRecorderOperationComplete] RECORD_COMPLETE: frame_times size: {}", 
+                   recorder->frame_times.size());
+    }
+    
     if (success){
       window.displayMessageFPS("Recording complete. Remember to save!");
       }
@@ -1625,8 +1671,9 @@ void System::onRecorderOperationComplete(RecOpRes res) {
     window.setFindFocus(false);
 
     break;
+  }
 
-  case Recorder::Operation::RECOP_LOAD:
+  case Recorder::Operation::RECOP_LOAD: {
     if (window.getLoading().getValue()) {
       if (success) {
         window.displayMessageLoadSave("Loading complete");
@@ -1638,24 +1685,27 @@ void System::onRecorderOperationComplete(RecOpRes res) {
     window.setHasBuffer(success);
     window.setLiveView(!success);
     break;
+  }
 
-  case Recorder::Operation::RECOP_SAVE:
+  case Recorder::Operation::RECOP_SAVE: {
     window.setSaving(false);
     if (success)
       window.displayMessageLoadSave("Saving complete");
     else
       window.displayMessageLoadSave("Saving failed");
     break;
+  }
 
-  case Recorder::Operation::RECOP_BUFFER:
+  case Recorder::Operation::RECOP_BUFFER: {
     if (bSystemLogFlag) {
       logger->info(
           "[System::onRecorderOperationComplete] Recorder stopped buffering");
     }
     window.setPlayingBuffer(false);
     break;
+  }
 
-  case Recorder::Operation::RECOP_ADDFRAME:
+  case Recorder::Operation::RECOP_ADDFRAME: {
     if (window.getLoading().getValue())
       window.displayMessageLoadSave(std::string("Loaded frame: ") +
                                     std::to_string(recorder->countFrames()));
@@ -1666,9 +1716,11 @@ void System::onRecorderOperationComplete(RecOpRes res) {
                                std::to_string(static_cast<int>(
                                    window.getRecordingSizeScaleValue())));
     break;
-  case Recorder::Operation::RECOP_EMPTIED:
+  }
+  case Recorder::Operation::RECOP_EMPTIED: {
     window.setHasBuffer(false);
     break;
+  }
   }
 }
 

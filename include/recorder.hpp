@@ -178,9 +178,10 @@ private:
      */
     void bufferFrames(std::pair<int, int> data);
 
-
+public:
     std::vector<std::chrono::system_clock::time_point> frame_times; // Stores timestamps for each frame
 
+private:
     System &system; ///< Reference to the System object.
     bool buffering; ///< Indicates whether the Recorder is buffering frames.
     std::vector<std::shared_ptr<IVidFrame>> frames; ///< Buffer for storing frames.
