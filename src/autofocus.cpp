@@ -65,6 +65,7 @@ bool bSaveImages = 0; // Saves images from the tilted camera to output folder. W
                       // produce enormous number of images and slow down the system!
 bool bSaveSharpnessCurves = 0; // Saves text files with the sharpness curve data, similar to above
 bool bTrackFocusHistory = 1; // Tracks history of fitted focus positions
+bool bSaveGaussianFitLog = 1; // Tracks the performance of the Gaussian fitting
 bool bRunContinuous = 0;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
 
 
@@ -446,11 +447,13 @@ void autofocus::run() {
         if (imgcount == 1) {
           if (bHoldFocus) {
             std::cout << "bHoldfocus is set to 1" << std::endl;
-            // // Shan testing:
+            // Shan testing:
             // desiredLocBestFocus = 320; // Fix to center focus for HoldFocus
+
             desiredLocBestFocus =
                 static_cast<int>(std::round(locBestFocusDouble));
             previous = desiredLocBestFocus;
+
           } else if (bFindFocus) {
             desiredLocBestFocus = 320;
             std::cout << "Desired focus set to: " << desiredLocBestFocus << std::endl;
@@ -476,6 +479,11 @@ void autofocus::run() {
           }
         }
         
+        // Different effective Kp for different direction
+        // when need to move focus to the right, use a smaller Kp
+        // double Kp_eff = (desiredLocBestFocus > locBestFocusDouble) ? Kp : 0.9*Kp;
+        double Kp_eff = Kp; // for testing
+
         // (Shan testing) Use PID module directly to calculate movement, no interpolation
         double errorMagnitude = abs(desiredLocBestFocus - locBestFocusDouble);
         double totalPdSignal;
@@ -485,7 +493,7 @@ void autofocus::run() {
         else if (errorMagnitude >= 150) { // Increased Kd for large errors
           double effectiveKd = Kd;
           effectiveKd = Kd + Kd * (errorMagnitude - 150) * (2.5 - 1) / (330 - 150); // Scale Kd from 1x to 2.5x between 150 and 330 error
-          PID pid(dt, max, min, Kp, effectiveKd, Ki);
+          PID pid(dt, max, min, Kp_eff, effectiveKd, Ki);
           totalPdSignal = pid.calculate(desiredLocBestFocus, locBestFocusDouble) * -1.0;
         }
         else{
@@ -1882,27 +1890,29 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   auto fittingTime = std::chrono::duration_cast<std::chrono::microseconds>(
       fittingEnd - fittingStart);
 
-  try {
-    std::ofstream EigenLMBenchmarkFile("../output/focus_benchmark_EigenLM.csv",
-                                       std::ios::app);
-    if (EigenLMBenchmarkFile.is_open() && EigenLMBenchmarkFile.good()) {
-      auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           std::chrono::system_clock::now().time_since_epoch())
-                           .count();
-      // keep CSV header compatibility: write estimator time in the
-      // "com_time_us" column
-      EigenLMBenchmarkFile << timestamp << "," << totalTime.count() << ","
-                          //  << resizeTime.count() << ","
-                            << gaussianTime.count() << ","
-                           << robertsTime.count() << "," 
-                           << columnTime.count() << ","
-                           << snrTime.count() << ","
-                           << fittingTime.count() << ","
-                           << lm.nfev() << ","
-                           << std::endl;
-      EigenLMBenchmarkFile.close();
+  if (bSaveGaussianFitLog) {
+    try {
+      std::ofstream EigenLMBenchmarkFile("../output/focus_benchmark_EigenLM.csv",
+                                        std::ios::app);
+      if (EigenLMBenchmarkFile.is_open() && EigenLMBenchmarkFile.good()) {
+        auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::system_clock::now().time_since_epoch())
+                            .count();
+        // keep CSV header compatibility: write estimator time in the
+        // "com_time_us" column
+        EigenLMBenchmarkFile << timestamp << "," << totalTime.count() << ","
+                            //  << resizeTime.count() << ","
+                              << gaussianTime.count() << ","
+                            << robertsTime.count() << "," 
+                            << columnTime.count() << ","
+                            << snrTime.count() << ","
+                            << fittingTime.count() << ","
+                            << lm.nfev() << ","
+                            << std::endl;
+        EigenLMBenchmarkFile.close();
+      }
+    } catch (...) { /* ignore */
     }
-  } catch (...) { /* ignore */
   }
 
 

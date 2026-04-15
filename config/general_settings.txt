@@ -1,6 +1,6 @@
 FRQ2=85000
 FREQ=87000
-returnPosition=-10.47
+returnPosition=-10.42
 MAX_POSITION=-0
 MIN_POSITION=-15
 PROP=120

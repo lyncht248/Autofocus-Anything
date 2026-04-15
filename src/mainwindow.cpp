@@ -307,7 +307,7 @@ MainWindow::MainWindow()
       waitScale(0, HVIGTK_STAB_LIM, 100, 0, 6, 100),
       recordingSizeScale(100, 1800, 10, 1200, 6, 100),
       // bestFocusScale(8, 632, 5, 200, 4, 100),
-      bestFocusScale(170, 470, 20, 240, 4, 100),
+      bestFocusScale(60, 580, 20, 240, 4, 100),
       homePositionScale(-14.0, 0.0, 0.1, -9.1, 4, 100),
       pGainScale(0, 100, 1, 12, 4, 100), outOfBoundsWarningLabel(""),
       recordButton(), backToStartButton(), pauseButton(), playButton(),
