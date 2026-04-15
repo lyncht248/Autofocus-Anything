@@ -117,6 +117,7 @@ namespace SDLWindow
 		// Add ROI display parameters
         System *system; /**< Pointer to the System object. */
         bool showROI; /**< Flag indicating whether to show the ROI. */
+        bool roiOverlayVisible; /**< Flag indicating whether to display the ROI overlay. */
         int roiCenterX, roiCenterY; /**< X- and Y-coordinate of the ROI center. */
         int roiWidth, roiHeight; /**< Width and height of the ROI. */
         bool searchComplete; /**< Flag indicating whether the search is complete. */

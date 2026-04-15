@@ -62,6 +62,7 @@ SDLWin *SDLWindow::sdlwin_open() {
   // Initialize ROI parameters
   out->system = nullptr;
   out->showROI = false;
+  out->roiOverlayVisible = true; // Initialize overlay visibility to true
   out->roiCenterX = -1;
   out->roiCenterY = -1;
   out->roiWidth = 150;
@@ -292,7 +293,10 @@ void handleSDLEvents(SDLWin *win) {
 
 // Add ROI overlay rendering to your frame drawing function:
 void drawROIOverlay(SDLWin *win, SDL_Renderer *renderer) {
-  if (!win->showROI) {
+  if (!win->showROI || !win->roiOverlayVisible) {
+    std::cout << "[SDL Window] ROI overlay not shown (showROI: " << win->showROI
+              << ", roiOverlayVisible: " << win->roiOverlayVisible << ")"
+              << std::endl;
     return;
   }
 

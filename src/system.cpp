@@ -2153,6 +2153,7 @@ void System::clearROIDisplay() {
   if (childwin) {
     pthread_mutex_lock(&childwin->mutex);
     childwin->showROI = false;
+    childwin->roiOverlayVisible = true; // Reset visibility
     childwin->roiCenterX = -1;
     childwin->roiCenterY = -1;
     childwin->searchComplete = false; // Reset search complete state
@@ -2193,6 +2194,7 @@ void System::setSDLWindow(SDLWindow::SDLWin *win) {
     win->roiWidth = 150; // Default ROI size
     win->roiHeight = 150;
     win->showROI = false;
+    win->roiOverlayVisible = true; // Reset visibility
     win->roiCenterX = -1;
     win->roiCenterY = -1;
     win->showDepthMap = false;

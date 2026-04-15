@@ -271,7 +271,7 @@ static void drawScaleBarOverlay(SDL_Renderer *renderer) {
 
 // Add this function to draw the ROI overlay
 static void drawROIOverlay(SDL_Renderer *renderer) {
-  if (!sdlwin || !sdlwin->showROI) {
+  if (!sdlwin || !sdlwin->showROI || !sdlwin->roiOverlayVisible) {
     return;
   }
 
@@ -999,6 +999,14 @@ int SDLWindow::child_main() {
           lastClickTime = currentTime;
           lastClickX = currentX;
           lastClickY = currentY;
+        } else if (e.button.button == SDL_BUTTON_RIGHT) // Right mouse button
+        {
+          // Toggle ROI overlay visibility
+          if (sdlwin->showROI) {
+            sdlwin->roiOverlayVisible = !sdlwin->roiOverlayVisible;
+            printf("[SDL Child] ROI overlay visibility toggled to: %s\n",
+                   sdlwin->roiOverlayVisible ? "visible" : "hidden");
+          }
         }
       } else if (e.type == SDL_MOUSEBUTTONUP) {
         if (e.button.button == SDL_BUTTON_LEFT) {
