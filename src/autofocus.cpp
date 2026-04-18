@@ -64,8 +64,8 @@ const long img_size = 640 * 480; // Replace with actual image size
 bool bSaveImages = 0; // Saves images from the tilted camera to output folder. WARNING: will
                       // produce enormous number of images and slow down the system!
 bool bSaveSharpnessCurves = 0; // Saves text files with the sharpness curve data, similar to above
-bool bTrackFocusHistory = 1; // Tracks history of fitted focus positions
-bool bSaveGaussianFitLog = 1; // Tracks the performance of the Gaussian fitting
+bool bTrackFocusHistory = 0; // Tracks history of fitted focus positions
+bool bSaveGaussianFitLog = 0; // Tracks the performance of the Gaussian fitting
 bool bRunContinuous = 0;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
 
 
@@ -212,7 +212,8 @@ bool autofocus::initialize() {
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     CPU_SET(2, &cpuset); // Pin to CPU core 2 (adjust based on your system)
-    CPU_SET(3, &cpuset); // And core 3
+    // CPU_SET(3, &cpuset); // core 3 is used by the tiilted camera
+    CPU_SET(4, &cpuset); // And core 4
     pthread_setaffinity_np(tAutofocus.native_handle(), sizeof(cpu_set_t),
                            &cpuset);
 
@@ -381,7 +382,6 @@ void autofocus::run() {
         // Convert to OpenCV Mat - use reduced resolution for all processing
         cv::Mat image(imHeight, imWidth, CV_8UC1, img_calc_buf);
 
-
         // double locBestFocusDouble = computeBestFocusGSL(
         //     image, imHeight, imWidth); //  returns double
 
@@ -394,8 +394,7 @@ void autofocus::run() {
         // Store the current measured focus position globally
         currentMeasuredFocus.store(locBestFocusDouble);
         
-      };
-
+      }
     }
 
 
@@ -452,6 +451,7 @@ void autofocus::run() {
 
             desiredLocBestFocus =
                 static_cast<int>(std::round(locBestFocusDouble));
+
             previous = desiredLocBestFocus;
 
           } else if (bFindFocus) {
@@ -475,7 +475,6 @@ void autofocus::run() {
             focusHistoryFile << timestamp_ms << ","
                              << locBestFocusDouble << ","
                              << desiredLocBestFocus << "\n";
-            focusHistoryFile.close();
           }
         }
         
@@ -547,6 +546,13 @@ void autofocus::run() {
                  // framesProcessed) << std::endl;
         }
       } // end of getLatestFrame
+      else {
+        // No frame available, but do not sleep to ensure we process frames as soon as they arrive.
+        // Although using sleep can reduce CPU usage, it can also introduce latency.
+        // The CPU usage is kept at 100% for optimal performance.
+
+        // usleep(10); // No frame available - sleep briefly to reduce busy-waiting CPU usage
+      }
     } else {
       // Reset counter when autofocus is not active
       imgcount = 0;

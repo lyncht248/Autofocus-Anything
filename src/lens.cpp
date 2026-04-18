@@ -360,14 +360,20 @@ void lens::mov_abs(double mmToMoveTo) {
         if (bLensLogFlagSave) {        
           if (logFile.is_open()) {
           
-            // Timestamp in human readable form
-            auto now = std::chrono::system_clock::now();
-            auto now_time_t = std::chrono::system_clock::to_time_t(now);
-            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+            // // Timestamp in human readable form
+            // auto now = std::chrono::system_clock::now();
+            // auto now_time_t = std::chrono::system_clock::to_time_t(now);
+            // auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
-            logFile << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S")
-                    << "." << std::setfill('0') << std::setw(3) << ms.count() << ","
-                    << mmToMoveTo << std::endl;
+            // logFile << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S")
+            //         << "." << std::setfill('0') << std::setw(3) << ms.count() << ","
+            //         << mmToMoveTo << std::endl;
+
+            auto timestamp_ms =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch())
+                    .count();
+            logFile << timestamp_ms << "," << mmToMoveTo << std::endl;
           }
         }
       }
