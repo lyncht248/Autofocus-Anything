@@ -511,9 +511,28 @@ MainWindow::MainWindow()
 
   settingsButton.signal_clicked().connect([this]() {
     Gtk::Dialog dialog("Settings", *this);
+    dialog.set_default_size(250, 800);
 
     // Add input fields for returnPosition, MIN_POSITION, and MAX_POSITION
     Gtk::Box *contentArea = dialog.get_content_area();
+    
+    // Create a scrolled window for the settings
+    Gtk::ScrolledWindow *scrolledWindow = Gtk::manage(new Gtk::ScrolledWindow());
+    scrolledWindow->set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
+    scrolledWindow->set_vexpand(true);
+    scrolledWindow->set_valign(Gtk::Align::ALIGN_FILL);
+    
+    // Create a vertical box to hold all settings
+    Gtk::Box *settingsBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_VERTICAL, 5));
+    settingsBox->set_margin_start(10);
+    settingsBox->set_margin_end(10);
+    settingsBox->set_margin_top(10);
+    settingsBox->set_margin_bottom(10);
+
+    // Lens Position Section
+    Gtk::Label *lensPositionTitle = Gtk::manage(new Gtk::Label("<b>Lens Position</b>"));
+    lensPositionTitle->set_use_markup(true);
+    settingsBox->pack_start(*lensPositionTitle, Gtk::PACK_SHRINK);
 
     Gtk::Label returnPositionLabel("Return Position:");
     Gtk::Scale returnPositionSlider(Gtk::ORIENTATION_HORIZONTAL);
@@ -528,7 +547,7 @@ MainWindow::MainWindow()
     kpSpin.set_range(0.0, 0.1);         // Adjust range as needed
     kpSpin.set_value(settings.getKp()); // Read Kp value from settings
 
-    kpSpin.set_increments(0.000001,
+    kpSpin.set_increments(0.00001,
                           0.1); // Enable +/- buttons with step increments
     kpSpin.set_digits(5);       // Allow 4 decimal places for Kp
     kpLabel.set_tooltip_text("Proportional gain constant (autofocus)");
@@ -538,7 +557,7 @@ MainWindow::MainWindow()
     Gtk::SpinButton kdSpin;
     kdSpin.set_range(0.0, 0.1);         //
     kdSpin.set_value(settings.getKd()); // Read Kd value from settings
-    kdSpin.set_increments(0.0000001,
+    kdSpin.set_increments(0.000001,
                           0.1); // Enable +/- buttons with step increments
     kdSpin.set_digits(6);       // Allow 5 decimal places for Kd
     kdLabel.set_tooltip_text("Derivative gain constant (autofocus)");
@@ -569,7 +588,7 @@ MainWindow::MainWindow()
     PROPSpin.set_value(settings.getPROP()); // Read PROP value from settings
     PROPSpin.set_increments(5, 10); // Enable +/- buttons with step increments
     PROPSpin.set_digits(0);         // Allow 4 decimal places for PROP
-    PROPLabel.set_tooltip_text("Lower gain constant (when lens is far)");
+    PROPLabel.set_tooltip_text("Lower gain constant (when lens is far), range [0, 150]");
 
     // Spin button for lower gain constant in lens
     Gtk::Label PRO2Label("PRO2:");
@@ -578,25 +597,162 @@ MainWindow::MainWindow()
     PRO2Spin.set_value(settings.getPRO2()); // Read PRO2 value from settings
     PRO2Spin.set_increments(5, 10); // Enable +/- buttons with step increments
     PRO2Spin.set_digits(0);         // No decimal places for PRO2
-    PRO2Label.set_tooltip_text("Higher gain constant (when lens is close)");
+    PRO2Label.set_tooltip_text("Higher gain constant (when lens is close), range [0, 100]");
 
-    // Add widgets to the dialog
-    contentArea->pack_start(returnPositionLabel);
-    contentArea->pack_start(returnPositionSlider);
-    contentArea->pack_start(kpLabel);
-    contentArea->pack_start(kpSpin);
+    // Spin button for controller speed (SSPD)
+    Gtk::Label SSPDLabel("SSPD:");
+    Gtk::SpinButton SSPDSpin;
+    SSPDSpin.set_range(0.0, 250000);           // Adjust range as needed
+    SSPDSpin.set_value(settings.getSSPD()); // Read SSPD value from settings
+    SSPDSpin.set_increments(5000, 10000); // Enable +/- buttons with step increments
+    SSPDSpin.set_digits(0);         // No decimal places for SSPD
+    SSPDLabel.set_tooltip_text("Speed of controller (um/s), range [0, 250000]");
 
-    contentArea->pack_start(kdLabel);
-    contentArea->pack_start(kdSpin);
+    // Spin button for acceleration (ACCE)
+    Gtk::Label ACCELabel("ACCE:");
+    Gtk::SpinButton ACCESpin;
+    ACCESpin.set_range(0.0, 65500);           // Adjust range as needed
+    ACCESpin.set_value(settings.getACCE()); // Read ACCE value from settings
+    ACCESpin.set_increments(100, 200); // Enable +/- buttons with step increments
+    ACCESpin.set_digits(0);         // No decimal places for ACCE
+    ACCELabel.set_tooltip_text("Acceleration of controller, range [0, 65500]");
 
-    contentArea->pack_start(FREQLabel);
-    contentArea->pack_start(FREQSpin);
-    contentArea->pack_start(FRQ2Label);
-    contentArea->pack_start(FRQ2Spin);
-    contentArea->pack_start(PROPLabel);
-    contentArea->pack_start(PROPSpin);
-    contentArea->pack_start(PRO2Label);
-    contentArea->pack_start(PRO2Spin);
+    // Spin button for deceleration (DECE)
+    Gtk::Label DECELabel("DECE:");
+    Gtk::SpinButton DECESpin;
+    DECESpin.set_range(0.0, 65500);           // Adjust range
+    DECESpin.set_value(settings.getDECE()); // Read DECE value from settings
+    DECESpin.set_increments(100, 200); // Enable +/- buttons with step
+    DECESpin.set_digits(0);         // No decimal places for DECE
+    DECELabel.set_tooltip_text("Deceleration of controller, range [0, 65500]");
+
+    // Spin button for mass (MASS)
+    Gtk::Label MASSLabel("MASS:");
+    Gtk::SpinButton MASSSpin;
+    MASSSpin.set_range(0.0, 1000);           // Adjust range as needed
+    MASSSpin.set_value(settings.getMASS()); // Read MASS value from settings
+    MASSSpin.set_increments(50, 100); // Enable +/- buttons with step increments
+    MASSSpin.set_digits(0);         // No decimal places for MASS
+    MASSLabel.set_tooltip_text("Payload mass, range [0, 1000]");
+
+    // Spin button for position tolerance (PTOL)
+    Gtk::Label PTOLLabel("PTOL:");
+    Gtk::SpinButton PTOLSpin;
+    PTOLSpin.set_range(0.0, 255);           // Adjust range as needed
+    PTOLSpin.set_value(settings.getPTOL()); // Read PTOL value from settings
+    PTOLSpin.set_increments(1, 2); // Enable +/- buttons with step increments
+    PTOLSpin.set_digits(1);         // Allow 1 decimal place for PTOL
+    PTOLLabel.set_tooltip_text("Position tolerance for considering target reached, range [0, 255]");
+
+    // Spin button for backup tolerance (PTO2)
+    Gtk::Label PTO2Label("PTO2:");
+    Gtk::SpinButton PTO2Spin;
+    PTO2Spin.set_range(0.0, 255);           // Adjust range as needed
+    PTO2Spin.set_value(settings.getPTO2()); // Read PTO2 value from settings
+    PTO2Spin.set_increments(1, 2); // Enable +/- buttons with step increments
+    PTO2Spin.set_digits(1);         // Allow 1 decimal place for PTO2
+    PTO2Label.set_tooltip_text(
+        "Backup position tolerance for when stage cannot settle with PTOL before timeout, range [0, 255]");
+
+    // Create horizontal boxes for layout
+    Gtk::Box *returnPosBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    returnPosBox->pack_start(returnPositionLabel, Gtk::PACK_SHRINK);
+    returnPosBox->pack_start(returnPositionSlider, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*returnPosBox, Gtk::PACK_SHRINK);
+
+    // Autofocus Section
+    Gtk::Label *autofocusTitle = Gtk::manage(new Gtk::Label("<b>Autofocus Control (PD)</b>"));
+    autofocusTitle->set_use_markup(true);
+    autofocusTitle->set_margin_top(15);
+    settingsBox->pack_start(*autofocusTitle, Gtk::PACK_SHRINK);
+
+    Gtk::Box *kpBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    kpBox->pack_start(kpLabel, Gtk::PACK_SHRINK);
+    kpBox->pack_start(kpSpin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*kpBox, Gtk::PACK_SHRINK);
+
+    Gtk::Box *kdBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    kdBox->pack_start(kdLabel, Gtk::PACK_SHRINK);
+    kdBox->pack_start(kdSpin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*kdBox, Gtk::PACK_SHRINK);
+
+    // Lens Frequency Section
+    Gtk::Label *frequencyTitle = Gtk::manage(new Gtk::Label("<b>Lens Frequency</b>"));
+    frequencyTitle->set_use_markup(true);
+    frequencyTitle->set_margin_top(15);
+    settingsBox->pack_start(*frequencyTitle, Gtk::PACK_SHRINK);
+
+    Gtk::Box *freqBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    freqBox->pack_start(FREQLabel, Gtk::PACK_SHRINK);
+    freqBox->pack_start(FREQSpin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*freqBox, Gtk::PACK_SHRINK);
+
+    Gtk::Box *frq2Box = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    frq2Box->pack_start(FRQ2Label, Gtk::PACK_SHRINK);
+    frq2Box->pack_start(FRQ2Spin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*frq2Box, Gtk::PACK_SHRINK);
+
+    // Lens Proportional Gains Section
+    Gtk::Label *gainsTitle = Gtk::manage(new Gtk::Label("<b>Lens Proportional Gains</b>"));
+    gainsTitle->set_use_markup(true);
+    gainsTitle->set_margin_top(15);
+    settingsBox->pack_start(*gainsTitle, Gtk::PACK_SHRINK);
+
+    Gtk::Box *propBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    propBox->pack_start(PROPLabel, Gtk::PACK_SHRINK);
+    propBox->pack_start(PROPSpin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*propBox, Gtk::PACK_SHRINK);
+
+    Gtk::Box *pro2Box = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    pro2Box->pack_start(PRO2Label, Gtk::PACK_SHRINK);
+    pro2Box->pack_start(PRO2Spin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*pro2Box, Gtk::PACK_SHRINK);
+
+    // Motion Profile Section
+    Gtk::Label *motionTitle = Gtk::manage(new Gtk::Label("<b>Motion Profile</b>"));
+    motionTitle->set_use_markup(true);
+    motionTitle->set_margin_top(15);
+    settingsBox->pack_start(*motionTitle, Gtk::PACK_SHRINK);
+
+    Gtk::Box *sspdBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    sspdBox->pack_start(SSPDLabel, Gtk::PACK_SHRINK);
+    sspdBox->pack_start(SSPDSpin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*sspdBox, Gtk::PACK_SHRINK);
+
+    Gtk::Box *acceBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    acceBox->pack_start(ACCELabel, Gtk::PACK_SHRINK);
+    acceBox->pack_start(ACCESpin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*acceBox, Gtk::PACK_SHRINK);
+
+    Gtk::Box *deceBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    deceBox->pack_start(DECELabel, Gtk::PACK_SHRINK);
+    deceBox->pack_start(DECESpin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*deceBox, Gtk::PACK_SHRINK);
+
+    Gtk::Box *massBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    massBox->pack_start(MASSLabel, Gtk::PACK_SHRINK);
+    massBox->pack_start(MASSSpin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*massBox, Gtk::PACK_SHRINK);
+
+    // Position Tolerance Section
+    Gtk::Label *toleranceTitle = Gtk::manage(new Gtk::Label("<b>Position Tolerance</b>"));
+    toleranceTitle->set_use_markup(true);
+    toleranceTitle->set_margin_top(15);
+    settingsBox->pack_start(*toleranceTitle, Gtk::PACK_SHRINK);
+
+    Gtk::Box *ptolBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    ptolBox->pack_start(PTOLLabel, Gtk::PACK_SHRINK);
+    ptolBox->pack_start(PTOLSpin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*ptolBox, Gtk::PACK_SHRINK);
+
+    Gtk::Box *pto2Box = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    pto2Box->pack_start(PTO2Label, Gtk::PACK_SHRINK);
+    pto2Box->pack_start(PTO2Spin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*pto2Box, Gtk::PACK_SHRINK);
+
+    // Add scrolled window to dialog
+    scrolledWindow->add(*settingsBox);
+    contentArea->pack_start(*scrolledWindow, Gtk::PACK_EXPAND_WIDGET);
 
     dialog.add_button("Cancel", Gtk::RESPONSE_CANCEL);
     dialog.add_button("Save", Gtk::RESPONSE_OK);
@@ -607,20 +763,30 @@ MainWindow::MainWindow()
       // Save updated values to settings
       settings.setReturnPosition(returnPositionSlider.get_value());
 
-      settings.setKp(kpSpin.get_value());
-      settings.setKd(kdSpin.get_value());
+      double newKp = kpSpin.get_value();
+      double newKd = kdSpin.get_value();
+      settings.setKp(newKp);
+      settings.setKd(newKd);
 
       settings.setFreq(FREQSpin.get_value());
       settings.setFRQ2(FRQ2Spin.get_value());
       settings.setPROP(PROPSpin.get_value());
       settings.setPRO2(PRO2Spin.get_value());
+      settings.setSSPD(SSPDSpin.get_value());
+      settings.setACCE(ACCESpin.get_value());
+      settings.setDECE(DECESpin.get_value());
+      settings.setMASS(MASSSpin.get_value());
+      settings.setPTOL(PTOLSpin.get_value());
+      settings.setPTO2(PTO2Spin.get_value());
 
       // Save settings to file
       settings.save();
 
+      std::cout << "[MainWindow Settings] SAVING - Kp: " << newKp << ", Kd: " << newKd << std::endl;
+
       // Emit signal to notify that settings have changed
       sigSettingsChanged.emit();
-      sigPGainChanged.emit(kpSpin.get_value());
+      sigPGainChanged.emit(newKp);
     }
   });
   stabiliseToggle.set_sensitive(true);

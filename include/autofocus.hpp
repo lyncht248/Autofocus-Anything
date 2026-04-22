@@ -371,6 +371,10 @@ private:
    */
   double Ki;
 
+  // Track PID gains to detect when they change
+  double lastPidKp = 0.0;
+  double lastPidKd = 0.0;
+  double lastPidKi = 0.0;
 
   Settings settings; ///< Settings object to manage configuration
 

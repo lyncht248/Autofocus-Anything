@@ -270,6 +270,7 @@ void Axis::calibrate() {
 
 void Axis::setSpeed(Distance speed) {
   int s = speed(Distance::MU);
+  std::cout << "[Axis::setSpeed] SSPD set to: " << s << std::endl;
 
 #if 0 // TODO
     if (!stage_->isLinear())

@@ -188,6 +188,14 @@ private:
   double PROP;  ///< Lower gain constant for the lens controller,
   double PRO2;  ///< Higher gain constant for the lens controller,
                 ///< configurable via settings
+  double SSPD;  ///< Start speed for the lens controller, configurable via
+                ///< settings
+  double ACCE;  ///< Acceleration for the lens controller, configurable via
+                ///< settings
+  double DECE;  ///< Deceleration for the lens controller, configurable via settings
+  double MASS;  ///< Mass setting for the lens controller, configurable via settings
+  double PTOL;     ///< Position tolerance for the lens controller, configurable via settings
+  double PTO2;     ///< Secondary position tolerance for the lens controller, configurable via settings
 
   std::ofstream logFile; ///< File stream for position logging
   const std::string outputDir = "../output"; ///< Directory for log files

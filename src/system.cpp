@@ -2379,6 +2379,7 @@ System::calculateThresholdForPercentage(const CVD::Image<unsigned char> &image,
 }
 
 void System::onWindowSettingsChanged() {
+  
   if (bSystemLogFlag) {
     logger->info("[System::onWindowSettingsChanged] Settings changed, "
                  "reloading lens settings");

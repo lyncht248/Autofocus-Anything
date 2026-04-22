@@ -30,6 +30,12 @@ public:
     double getFRQ2() const;
     double getPROP() const;
     double getPRO2() const;
+    double getSSPD() const;
+    double getACCE() const;
+    double getDECE() const;
+    double getMASS() const;
+    double getPTOL() const;
+    double getPTO2() const;
 
     // Setters for specific settings
     void setReturnPosition(double value);
@@ -42,6 +48,12 @@ public:
     void setFRQ2(double value);
     void setPROP(double value);
     void setPRO2(double value);
+    void setSSPD(double value);
+    void setACCE(double value);
+    void setDECE(double value);
+    void setMASS(double value);
+    void setPTOL(double value);
+    void setPTO2(double value);
 
 
 private:

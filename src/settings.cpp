@@ -141,6 +141,53 @@ double Settings::getPRO2() const {
   return it->second;
 }
 
+double Settings::getSSPD() const {
+  auto it = settings.find("SSPD");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: SSPD");
+  }
+  return it->second;
+}
+
+double Settings::getACCE() const {
+  auto it = settings.find("ACCE");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: ACCE");
+  }
+  return it->second;
+}
+
+double Settings::getDECE() const {
+  auto it = settings.find("DECE");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: DECE");
+  }
+  return it->second;
+}
+
+double Settings::getMASS() const {
+  auto it = settings.find("MASS");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: MASS");
+  }
+  return it->second;
+}
+
+double Settings::getPTOL() const {
+  auto it = settings.find("PTOL");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: PTOL");
+  }
+  return it->second;
+}
+
+double Settings::getPTO2() const {
+  auto it = settings.find("PTO2");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: PTO2");
+  }
+  return it->second;
+}
 
 void Settings::set(const std::string &key, double value) {
   settings[key] = value;
@@ -162,3 +209,9 @@ void Settings::setFRQ2(double value) { set("FRQ2", value); }
 
 void Settings::setPROP(double value) { set("PROP", value); }
 void Settings::setPRO2(double value) { set("PRO2", value); }
+void Settings::setSSPD(double value) { set("SSPD", value); }
+void Settings::setACCE(double value) { set("ACCE", value); }
+void Settings::setDECE(double value) { set("DECE", value); }
+void Settings::setMASS(double value) { set("MASS", value); }
+void Settings::setPTOL(double value) { set("PTOL", value); }
+void Settings::setPTO2(double value) { set("PTO2", value); }

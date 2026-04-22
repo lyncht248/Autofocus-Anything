@@ -34,6 +34,12 @@ lens::lens()
     FRQ2 = settings.getFRQ2();
     PROP = settings.getPROP();
     PRO2 = settings.getPRO2();
+    SSPD = settings.getSSPD();
+    ACCE = settings.getACCE();
+    DECE = settings.getDECE();
+    MASS = settings.getMASS();
+    PTOL = settings.getPTOL();
+    PTO2 = settings.getPTO2();
   } catch (const std::exception &e) {
     std::cerr << "[lens::lens] Error loading settings: " << e.what()
               << std::endl;
@@ -164,8 +170,8 @@ bool lens::initialize() {
 
 
 
-  axis->sendCommand("HFRQ", 92000);
-  axis->sendCommand("LFRQ", 87000);
+  axis->sendCommand("HFRQ", 89000);
+  axis->sendCommand("LFRQ", 83000);
   // axis->sendCommand("HLIM", 0);
   //  axis->sendCommand("HLIM", 0); // Set a soft limit of 0mm
 
@@ -191,8 +197,8 @@ bool lens::initialize() {
   // axis->sendCommand("ISPD",10);
   // axis->sendCommand("ACCE",65500);
   // axis->sendCommand("DECE",65500);
-  axis->sendCommand("ACCE", 65500);
-  axis->sendCommand("DECE", 65500);
+  // axis->sendCommand("ACCE", 6000);
+  // axis->sendCommand("DECE", 6000);
 
   // axis->sendCommand("ILIM",3000);
   // axis->sendCommand("ELIM",0);
@@ -203,6 +209,7 @@ bool lens::initialize() {
 
   // axis->sendCommand("PTOL",2);
   // axis->sendCommand("PTO2",4);
+
   // axis->sendCommand("TOUT",1000);
   // axis->sendCommand("TOU2",60);
   // axis->sendCommand("TOU3",0);
@@ -222,8 +229,7 @@ bool lens::initialize() {
   // axis->sendCommand("FILA",1);
   // axis->sendCommand("FILP",1);
   // axis->sendCommand("COMP",0);
-  // axis->sendCommand("DLAY",10);
-
+  axis->sendCommand("DLAY",1);
   // axis->sendCommand("DTIM",0);
   // axis->sendCommand("ECHO",0);
   // axis->sendCommand("INDA",1);
@@ -231,7 +237,9 @@ bool lens::initialize() {
   // axis->sendCommand("ENBL",0);
   // axis->sendCommand("GPIO",0);
   // axis->sendCommand("PLIM",0);
+
   // axis->sendCommand("UART",0);
+
   // axis->sendCommand("PWMF",1000);
   // axis->sendCommand("TRGS",0);
   // axis->sendCommand("TRGW",0);
@@ -245,8 +253,9 @@ bool lens::initialize() {
   // axis->sendCommand("ECAT",0);
   // axis->sendCommand("BLCK",0);
 
-  // set speed to 200mm/s
-  axis->setSpeed(300_mm);
+  // set speed to 250mm/s
+  axis->setSpeed(250_mm);
+
   // wait 0.5s
   usleep(500000);
 
@@ -567,10 +576,28 @@ void lens::reloadSettings() {
     FRQ2 = settings.getFRQ2();
     PROP = settings.getPROP();
     PRO2 = settings.getPRO2();
+    SSPD = settings.getSSPD();
+    ACCE = settings.getACCE();
+    DECE = settings.getDECE();
+    MASS = settings.getMASS();
+    PTOL = settings.getPTOL();
+    PTO2 = settings.getPTO2();
+
+    axis->sendCommand("FREQ", FREQ);
+    axis->sendCommand("FRQ2", FRQ2);
+    axis->sendCommand("PROP", PROP);
+    axis->sendCommand("PRO2", PRO2);
+    axis->sendCommand("SSPD", SSPD);
+    axis->sendCommand("ACCE", ACCE);
+    axis->sendCommand("DECE", DECE);
+    axis->sendCommand("MASS", MASS);
+    axis->sendCommand("PTOL", PTOL);
+    axis->sendCommand("PTO2", PTO2);
+
 
     if (bLensLogFlag) {
-      logger->info("[lens::reloadSettings] Settings reloaded - returnPosition: {}mm, FREQ: {}Hz, FRQ2: {}Hz, PROP: {}, PRO2: {}",
-                   returnPosition, FREQ, FRQ2, PROP, PRO2);
+      logger->info("[lens::reloadSettings] Settings reloaded - returnPosition: {}mm, FREQ: {}Hz, FRQ2: {}Hz, PROP: {}, PRO2: {}, SSPD: {}, ACCE: {}, DECE: {}, MASS: {}, PTOL: {}, PTO2: {}",
+                   returnPosition, FREQ, FRQ2, PROP, PRO2, SSPD, ACCE, DECE, MASS, PTOL, PTO2);
     }
   } catch (const std::exception &e) {
     if (bLensLogFlag) {
