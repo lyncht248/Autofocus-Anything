@@ -65,6 +65,7 @@ bool bSaveImages = 0; // Saves images from the tilted camera to output folder. W
                       // produce enormous number of images and slow down the system!
 bool bSaveSharpnessCurves = 0; // Saves text files with the sharpness curve data, similar to above
 bool bTrackFocusHistory = 0; // Tracks history of fitted focus positions
+bool bTrackFocusHistoryContinous = 0; // Always tracks focus history
 bool bSaveGaussianFitLog = 0; // Tracks the performance of the Gaussian fitting
 bool bRunContinuous = 0;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
 
@@ -169,15 +170,26 @@ bool autofocus::initialize() {
         << std::endl;
     EigenLMBenchmarkFile.close();
   }
+  
   if (bTrackFocusHistory) {
-    std:ofstream focusHistoryFile("../output/focus_history.csv");
+    std::ofstream focusHistoryFile("../output/focus_history.csv");
     if (focusHistoryFile.is_open()) {
       focusHistoryFile 
         << "timestamp_ms,measuredFocus_mm,desiredFocus_mm\n"
         << std::endl;
       focusHistoryFile.close();
     }
-  } 
+  }
+
+  if (bTrackFocusHistoryContinous) {
+    std::ofstream focusHistoryContinuousFile("../output/focus_history_continuous.csv");
+    if (focusHistoryContinuousFile.is_open()) {
+      focusHistoryContinuousFile 
+        << "timestamp_ms,measuredFocus_mm\n"
+        << std::endl;
+      focusHistoryContinuousFile.close();
+    }
+  }
 
   // Pre-allocate matrices for computeBestFocus to avoid runtime allocation
   int imWidth = tiltedcam1.getImageWidth();
@@ -398,7 +410,30 @@ void autofocus::run() {
       }
     }
 
+    // Shan testing: continuously record history of focus
+    if (bTrackFocusHistoryContinous) {
+      if (tiltedcam1.getLatestFrame(img_calc_buf, img_size)) {
+        framesProcessed++;
+        bNewImage = true;
+        imgcount++;
+        imgcountfile++;
+        // Convert to OpenCV Mat - use reduced resolution for all processing
+        cv::Mat image(imHeight, imWidth, CV_8UC1, img_calc_buf);
 
+        double locBestFocusDouble = computeBestFocusEigenLM(
+              image, imHeight, imWidth); //  returns double
+
+        std::ofstream focusHistoryFile("../output/focus_history_continuous.csv", std::ios::out | std::ios::app);
+        if (focusHistoryFile.is_open() && focusHistoryFile.good()) {
+          auto timestamp_ms =
+              std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count();
+          focusHistoryFile << timestamp_ms << ","
+                            << locBestFocusDouble << "\n";
+        }
+      }
+    }
 
 
 
