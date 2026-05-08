@@ -97,6 +97,7 @@ set(SOURCES
     ${CMAKE_SOURCE_DIR}/src/vesseledgel.cpp 
     ${CMAKE_SOURCE_DIR}/src/autofocus.cpp 
     ${CMAKE_SOURCE_DIR}/src/lens.cpp 
+    ${CMAKE_SOURCE_DIR}/src/lens_old.cpp 
     ${CMAKE_SOURCE_DIR}/src/tiltedcam.cpp 
     ${CMAKE_SOURCE_DIR}/src/pid.cpp
     ${CMAKE_SOURCE_DIR}/src/Distance.cpp
@@ -207,6 +208,7 @@ add_test(NAME LensTest COMMAND lens_test)
 add_library(autofocus_lib STATIC
     ${CMAKE_SOURCE_DIR}/src/autofocus.cpp
     ${CMAKE_SOURCE_DIR}/src/lens.cpp
+    ${CMAKE_SOURCE_DIR}/src/lens_old.cpp
     ${CMAKE_SOURCE_DIR}/src/tiltedcam.cpp
     ${CMAKE_SOURCE_DIR}/src/pid.cpp
     ${CMAKE_SOURCE_DIR}/test/mock_logfile.cpp

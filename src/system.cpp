@@ -806,6 +806,11 @@ System::System(int argc, char **argv) : window(),
 		lensDisconnected = true;
 		handleDisconnection(); });
 
+	// Configure which lens type to use
+	// Set to true to use the old Thorlabs lens, false for new Xeryon lens
+	bool useOldLens = true; // Change this to true to use the old lens
+	AF.setUseOldLens(useOldLens);
+	
 	AF.initialize();
 
 	recorder->connectTo(&sRecorderOperationComplete);

@@ -1,6 +1,8 @@
 #include "autofocus.hpp"
 // #include "tiltedcam.hpp"
 // #include "lens.hpp"
+#include "lens_old.hpp"
+#include "pid.hpp"
 #include "main.hpp"
 #include "logfile.hpp"
 #include "ASICamera2.h" //TODO: Remove this when you move capturevideo() to tiltedcam.cc
@@ -80,7 +82,14 @@ autofocus::autofocus() : lens1(),
 
 bool autofocus::initialize()
 {
-  bool bLensInit = lens1.initialize();
+  bool bLensInit;
+  if (bUseOldLens) {
+    bLensInit = lensOld1.initialize();
+    std::cout << "Using old lens actuator\n";
+  } else {
+    bLensInit = lens1.initialize();
+    std::cout << "Using new Xeryon lens actuator\n";
+  }
   bool bTiltedCamInit = tiltedcam1.initialize();
   std::cout << "bLensInit: " << bLensInit << " bTiltedCamInit: " << bTiltedCamInit << "\n";
 
@@ -269,7 +278,16 @@ void autofocus::run()
 
   int moved = 1;
   int previous = desiredLocBestFocus; // TODO: should be in a mutex
-  int tol = 6;                        // Tolerance zone where no movement is made
+  
+  // Use different tolerance based on lens type
+  int tol;
+  if (bUseOldLens) {
+    double scale = 0.5;  // Old code used scale = 0.5
+    tol = 8 * scale;    // Old code: tol = 16 * scale = 8
+  } else {
+    tol = 6;             // New code tolerance
+  }
+  
   int blink = 0;                      // Becomes 1 when a blink is detected
   int blinkframes = 15;               // number of frames to ignore when blink is detected
   imgcount = 0;                       // Keeps track of the number of images recieved and analyzed from the camera, but resets when switching between FindFocus and HoldFocus
@@ -284,12 +302,26 @@ void autofocus::run()
   double dt = 1.0 / 60.0; // time per frame on the TILTED CAMERA! Assumes 60Hz.
   double max = 3;         // maximum relative move the lens can be ordered to make. Set to +-3mm
   double min = -3;
-  // double Kp = 0.0012;   this has to be set as a member variable now
+  
+  // Use different PID parameters based on lens type
   double Ki = 0.0;
-  // double Kd = 0.00005;
-  double Kd = 0.00005; // Changed from 0.0 to add a small derivative term
+  double Kd;
+  
+  // Create PID object for old lens approach
+  PID* pid = nullptr;
+  if (bUseOldLens) {
+    // Old lens constants from working code
+    Kp = 0.0035;
+    Kd = 0.0;
+    pid = new PID(dt, max, min, Kp, Kd, Ki);
+    std::cout << "Using old lens PID: Kp=" << Kp << ", Ki=" << Ki << ", Kd=" << Kd << std::endl;
+  } else {
+    // New lens constants 
+    Kd = 0.00005; // Changed from 0.0 to add a small derivative term
+    std::cout << "Using new lens PID: Kp=" << Kp << ", Ki=" << Ki << ", Kd=" << Kd << std::endl;
+  }
 
-  // PD variables for manual calculation and logging
+  // PD variables for manual calculation (new lens only)
   double filteredPreviousError = 0.0;
   double filteredLocBestFocus = 0.0; // Will be initialized on first frame
   bool isFirstFrame = true;
@@ -315,7 +347,16 @@ void autofocus::run()
         // Convert to OpenCV Mat - use reduced resolution for all processing
         cv::Mat image(imHeight, imWidth, CV_8UC1, img_calc_buf);
 
-        double locBestFocusDouble = computeBestFocusReduced(image, imHeight, imWidth); //  returns double
+        double locBestFocusDouble;
+        if (bUseOldLens) {
+          // Use the old algorithm with scale = 0.5
+          cv::Mat resized;
+          double scale = 0.5;
+          cv::resize(image, resized, cv::Size(), scale, scale);
+          locBestFocusDouble = computebestfocusReversed(resized, resized.rows, resized.cols);
+        } else {
+          locBestFocusDouble = computeBestFocusReduced(image, imHeight, imWidth); //  returns double
+        }
 
         // Store the current measured focus position globally
         currentMeasuredFocus.store(locBestFocusDouble);
@@ -475,11 +516,16 @@ void autofocus::run()
           }
           else if (bFindFocus)
           {
-            desiredLocBestFocus = 330;
+            if (bUseOldLens) {
+              double scale = 0.5;
+              desiredLocBestFocus = 175 * (scale/0.25); // Old code: 175 * (0.5/0.25) = 350
+            } else {
+              desiredLocBestFocus = 330; // New code value
+            }
             previous = static_cast<int>(std::round(locBestFocusDouble));
             if (bAutofocusLogFlag)
             {
-              logger->info("[autofocus::run] Set desiredLocBestFocus back to 320 in autofocus.cc");
+              logger->info("[autofocus::run] Set desiredLocBestFocus to {} for FindFocus", desiredLocBestFocus);
             }
           }
         }
@@ -633,15 +679,30 @@ void autofocus::run()
           // Use double precision measurement for tolerance checking
           if (abs(locBestFocusDouble - desiredLocBestFocus) <= tol)
           {
-            // std::cout << ", in TOL band\n";
+            std::cout << ", in TOL band\n";
             moved = 0;
           }
           else
           {
-            // Use the double precision PD signal - NO CASTING!
-            mmToMove = totalPdSignal * -1.0;
-            bNewMoveRel = 1;
-            moved = 1;
+            // Use different PID approach based on lens type
+            if (bUseOldLens && pid != nullptr) {
+              // Old lens: Simple PID approach with tolerance band offset
+              if(locBestFocusDouble - desiredLocBestFocus > 0) {
+                mmToMove = pid->calculate(desiredLocBestFocus + tol, locBestFocusDouble);
+                std::cout << mmToMove << "\n";
+              }
+              else if(locBestFocusDouble - desiredLocBestFocus < 0) {
+                mmToMove = pid->calculate(desiredLocBestFocus - tol, locBestFocusDouble);
+                std::cout << mmToMove << "\n";
+              }              
+              bNewMoveRel = 1;
+              moved = 1;
+            } else {
+              // New lens: Complex PD calculation (existing code)
+              mmToMove = totalPdSignal * -1.0;
+              bNewMoveRel = 1;
+              moved = 1;
+            }
 
             // //// OSCILLATION DETECTION
             // //Adding to locBestFocusHistory when outside TOL band
@@ -685,6 +746,13 @@ void autofocus::run()
       usleep(50000); // 50ms
     }
   }
+  
+  // Cleanup PID object if created
+  if (pid != nullptr) {
+    delete pid;
+    pid = nullptr;
+  }
+  
   tiltedcam1.stopCaptureThread();
 }
 
@@ -852,6 +920,45 @@ int autofocus::computeBestFocus(cv::Mat image, int imgHeight, int imgWidth)
   }
 
   return locBestFocus + kernel / 2; // Note: kernel/2 offset needed for sliding window
+}
+
+double autofocus::computebestfocusReversed(cv::Mat image, int imgHeight, int imgWidth) {
+  cv::Mat blurred;
+  cv::GaussianBlur(image, blurred, cv::Size(3,3),1,1,cv::BORDER_DEFAULT);
+
+  ///// ROBERTS CROSS OVER THE WHOLE IMAGE ////
+  cv::Mat temp_matrixx = (cv::Mat_<double>(2, 2) << 1, 0, 0, -1);
+  cv::Mat temp_matrixy = (cv::Mat_<double>(2, 2) << 0, 1, -1, 0);
+  
+  //convolving imagedata with the matrices
+  cv::Mat img_x, img_y;  
+  cv::filter2D(blurred, img_x, -1, temp_matrixx);
+  cv::filter2D(blurred, img_y, -1, temp_matrixy);
+
+  //squaring and summing the resultant matrices, which gives us the sharpness (or, gradient) for each pixel in imagedata, and taking the average score over the portion of image
+  cv::Mat img_x_squared, img_y_squared;
+  cv::multiply(img_x, img_x, img_x_squared);
+  cv::multiply(img_y, img_y, img_y_squared);
+  cv::Mat sharpness_image;
+  cv::add(img_x_squared, img_y_squared, sharpness_image);  
+
+  // ///// ROI'ING ////
+  std::vector<double> sharpnesscurve;
+  int kernel = 16; //must be an even number
+
+  for (int i = 0; i < imgWidth - kernel; i++) {
+    cv::Rect roi(i, 0, kernel, imgHeight);
+    cv::Mat regionSharpnessImage = sharpness_image(roi);
+    cv::Scalar regionSharpness = cv::mean(regionSharpnessImage);
+    double regionSharpnessScore = regionSharpness[0];
+    sharpnesscurve.push_back(regionSharpnessScore);
+  }
+  
+  //Fitting a normal curve to the sharpness curve, to avoid local peaks in the data around vessel edges
+  std::vector<double> sharpnesscurvenormalized = fitnormalcurve(sharpnesscurve, (*std::max_element(sharpnesscurve.begin(), sharpnesscurve.end()) - *std::min_element(sharpnesscurve.begin(), sharpnesscurve.end())), *std::min_element(sharpnesscurve.begin(), sharpnesscurve.end()), 0.2);
+
+  double locBestFocus = distance( begin(sharpnesscurvenormalized), max_element(begin(sharpnesscurvenormalized), end(sharpnesscurvenormalized)));
+  return locBestFocus + kernel/2; 
 }
 
 double autofocus::computeBestFocusReduced(cv::Mat image, int imgHeight, int imgWidth)

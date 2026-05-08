@@ -9,6 +9,7 @@
 #include <sstream>
 #include "mainwindow.hpp"
 #include "lens.hpp"
+#include "lens_old.hpp"
 #include "tiltedcam.hpp"
 #include <atomic>
 #include <thread>
@@ -44,15 +45,21 @@ public:
   // computes the location of best-focus
   int computeBestFocus(cv::Mat image, int imgHeight, int imgWidth);
   double computeBestFocusReduced(cv::Mat image, int imgHeight, int imgWidth);
+  double computebestfocusReversed(cv::Mat image, int imgHeight, int imgWidth);
   int computeBestFocusVeryReduced(cv::Mat image, int imgHeight, int imgWidth);
   void adjust_bestFocus(int val);
 
   void setPGain(double gain);
   double getPGain() const;
 
-  // Add a method to get the lens object
+  // Add methods to get the lens objects
   lens &getLens() { return lens1; }
+  lens_old &getLensOld() { return lensOld1; }
   tiltedcam &getTiltedCam() { return tiltedcam1; }
+  
+  // Method to set which lens type to use (call before initialize())
+  void setUseOldLens(bool useOld) { bUseOldLens = useOld; }
+  bool isUsingOldLens() const { return bUseOldLens; }
 
   friend class AutofocusTest;
   friend class DeviceCalibrationTest;
@@ -80,7 +87,10 @@ private:
   std::thread tAutofocus;
 
   lens lens1;
+  lens_old lensOld1;
   tiltedcam tiltedcam1;
+  
+  bool bUseOldLens = false; // Flag to choose between new and old lens
 
   // Pre-allocated matrices for performance optimization
   cv::Mat blurred_preallocated;
