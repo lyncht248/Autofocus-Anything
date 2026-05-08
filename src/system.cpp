@@ -10,6 +10,9 @@
 #include <cstring>
 #include <string>
 #include <thread>
+#include <fstream>
+#include <sstream>
+#include <unistd.h>
 #include <cmath>
 #include <algorithm>
 #include "VimbaC/Include/VmbCommonTypes.h"
@@ -113,15 +116,15 @@ FrameProcessor::~FrameProcessor()
 
 	if (stabQueue.size() > 0)
 	{
-		for (VidFrame *vframe = stabQueue.pop(); !stabQueue.empty(); vframe = stabQueue.pop())
-			delete vframe;
+		// for (VidFrame *vframe = stabQueue.pop(); !stabQueue.empty(); vframe = stabQueue.pop())
+		// 	delete vframe;
 		stabQueue.clear();
 	}
 
 	if (released.size() > 0)
 	{
-		for (VidFrame *vframe = released.pop(); !released.empty(); vframe = released.pop())
-			delete vframe;
+		// for (VidFrame *vframe = released.pop(); !released.empty(); vframe = released.pop())
+		// 	delete vframe;
 		released.clear();
 	}
 	if (bSystemFramesFlag)
@@ -150,11 +153,10 @@ void FrameProcessor::stabilise()
 		static const size_t MAX_ALLOWED_IN_QUEUE = 2;
 		while (stabQueue.size() > MAX_ALLOWED_IN_QUEUE)
 		{
-			VidFrame *oldFrame = stabQueue.pop();
-			delete oldFrame;
+			std::shared_ptr<IVidFrame> oldFrame = stabQueue.pop();
 		}
 
-		VidFrame *vframe = stabQueue.pop();
+		std::shared_ptr<IVidFrame> vframe = stabQueue.pop();
 
 		// If the frame is null, skip it
 		if (vframe == nullptr)
@@ -348,7 +350,7 @@ void FrameProcessor::processFrame() // What to do with each frame received from 
 		// If recording, sends the frame to the recorder for saving
 		if (recording)
 		{
-			system.getRecorder().putFrame(vidFrame); // putFrame is just frames.push_back(frame); until frames=recording size
+			system.getRecorder().putFrame(std::shared_ptr<IVidFrame>(vidFrame)); // putFrame is just frames.push_back(frame); until frames=recording size
 		}
 
 		// Draw the frame at the size neccessary to fit the window
@@ -515,8 +517,7 @@ void FrameProcessor::processFrame() // What to do with each frame received from 
 				//  using >=5 because often the frame data is still being used to draw the frame when this code is called
 				if (released.size() >= 5)
 				{
-					VidFrame *frame_to_delete = released.pop(); // remove the frame from the queue
-					delete frame_to_delete;						// delete the frame
+					std::shared_ptr<IVidFrame> frame_to_delete = released.pop(); // remove the frame from the queue
 					if (bSystemFramesFlag)
 					{
 						logger->info("[FrameProcessor::ProcessFrame] Deleted a frame from the released queue.");
@@ -623,6 +624,20 @@ void FrameProcessor::releaseFrame()
 	mutex.unlock();
 }
 
+void FrameProcessor::clearQueues()
+{
+	mutex.lock();
+
+	system.getFrameQueue().clear();
+	stabQueue.clear();
+	released.clear();
+	vidFrame.reset();
+
+	mutex.unlock();
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(10));
+}
+
 void FrameProcessor::resetRaster()
 {
 	rasterPos = offset = currentOff = TooN::Zeros;
@@ -642,6 +657,29 @@ void FrameProcessor::resetZoom()
 	}
 }
 
+bool FrameProcessor::isIdle()
+{
+	return !running && stabQueue.empty() && released.empty();
+}
+
+void FrameProcessor::stop() 
+{
+	running = false;
+	ThreadStopper::stop({processorThread, stabThread});
+}
+
+void FrameProcessor::start()
+{
+	if (!running){
+		running = true;
+		processorThread = Glib::Threads::Thread::create(
+			sigc::mem_fun(*this, &FrameProcessor::processFrame));
+		stabThread = Glib::Threads::Thread::create(
+			sigc::mem_fun(*this, &FrameProcessor::stabilise));
+	}
+}
+
+
 ::Cairo::RefPtr<::Cairo::Surface> FrameProcessor::getFrame()
 {
 	return processed;
@@ -651,7 +689,7 @@ void FrameProcessor::resetZoom()
 class FrameObserver : public Glib::Object, virtual public Vimba::IFrameObserver
 {
 public:
-	FrameObserver(Vimba::CameraPtr pCamera, TSQueue<VidFrame *> &frameQueue) : IFrameObserver(pCamera), Object(),
+	FrameObserver(Vimba::CameraPtr pCamera, TSQueue<std::shared_ptr<IVidFrame>> &frameQueue) : IFrameObserver(pCamera), Object(),
 																			   sigReceived(),
 																			   sysFrames(frameQueue)
 	{
@@ -664,8 +702,7 @@ public:
 	{
 		if (sysFrames.size() > 0)
 		{
-			for (VidFrame *vframe = sysFrames.pop(); !sysFrames.empty(); vframe = sysFrames.pop())
-				delete vframe;
+			for (std::shared_ptr<IVidFrame> vframe = sysFrames.pop(); !sysFrames.empty(); vframe = sysFrames.pop())
 			sysFrames.clear();
 		}
 	}
@@ -687,8 +724,7 @@ public:
 				{
 					logger->info("[FrameObserver::FrameReceived] Frame size: {}x{}", width, height);
 				}
-				IVidFrame *sysFrame = new IVidFrame(CVD::ImageRef(width, height)); // Each of these must get deleted when processed by FrameProcessor
-
+				auto sysFrame = std::make_shared<IVidFrame>(CVD::ImageRef(width, height));
 				if (bSystemFramesFlag)
 				{
 					logger->info("[FrameObserver::FrameReceived] sysFrame created");
@@ -710,8 +746,7 @@ public:
 				// Here is where we check the queue size and drop a frame if needed. TODO: just change in frameQueue in System::System
 				if (sysFrames.size() >= 15)
 				{
-					VidFrame *frame_to_delete = sysFrames.pop(); // remove the frame from the queue
-					delete frame_to_delete;						 // delete the frame
+					std::shared_ptr<IVidFrame> frame_to_delete = sysFrames.pop(); // remove the frame from the queue
 					if (bSystemFramesFlag)
 					{
 						logger->info("[FrameObserver::FrameReceived] Popped a frame (should auto-delete) from the sysFrames queue as it was too long.");
@@ -742,7 +777,7 @@ public:
 
 private:
 	SignalReceived sigReceived;
-	TSQueue<VidFrame *> &sysFrames;
+	TSQueue<std::shared_ptr<IVidFrame>> &sysFrames;
 };
 
 struct System::Private
@@ -1101,7 +1136,7 @@ void System::stopStreaming()
 	}
 }
 
-TSQueue<VidFrame *> &System::getFrameQueue()
+TSQueue<std::shared_ptr<IVidFrame>> &System::getFrameQueue()
 {
 	return frameQueue;
 }
@@ -1111,7 +1146,7 @@ Glib::Dispatcher &System::signalNewFrame()
 	return sigNewFrame;
 }
 
-VidFrame *System::getFrame()
+std::shared_ptr<IVidFrame> System::getFrame()
 {
 	return frameProcessor.vidFrame;
 }
@@ -1143,14 +1178,23 @@ void System::whenLiveViewToggled(bool viewingLive)
 		{
 			logger->info("[System::whenLiveViewToggled] Live view toggled on");
 		}
-		startStreaming();
-
-		// If there are frames in the recorder, delete them now
-		if (recorder->countFrames() > 0)
-		{
-
-			recorder->clearFrames();
+		if (first_time_live_view){
+			first_time_live_view = false;
+			startStreaming();
+			frameProcessor.clearQueues();
+			frameProcessor.vidFrame.reset();
+		} else {
+			frameProcessor.stop();
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			frameProcessor.clearQueues();
+			frameProcessor.vidFrame.reset();
+			startStreaming();
+			frameProcessor.start();
 		}
+
+		recorder->clearFrames();
+		recorder->stopBuffering();
+		recorder->resetCurrent();
 		window.setHasBuffer(false);
 	}
 	else
@@ -1233,7 +1277,7 @@ void System::whenStabiliseToggled(bool stabilising)
 			else if (!window.getLiveView().getValue() && recorder->countFrames() > 0)
 			{
 				// Use current frame from recording
-				VidFrame *vframe = recorder->getFrame(window.getFrameSliderValue());
+				std::shared_ptr<IVidFrame> vframe = recorder->getFrame(window.getFrameSliderValue());
 				if (vframe)
 				{
 					createStabiliserMapWithDefaults(*vframe);
@@ -1504,7 +1548,7 @@ void System::whenSeekingToggled(bool seeking)
 		}
 		else if (!window.getLiveView().getValue())
 		{
-			VidFrame *out = recorder->getFrame(window.getFrameSliderValue());
+			std::shared_ptr<IVidFrame> out = recorder->getFrame(window.getFrameSliderValue());
 			if (out)
 				frameQueue.push(out); // frameQueue is the same as sysQueue in FrameObserver
 			window.setSeeking(false);
@@ -1525,10 +1569,19 @@ void System::whenSeekingToggled(bool seeking)
 
 void System::whenRecordingToggled(bool recording)
 {
-	if (recording)
-	{
-		recorder->clearFrames(); // When a new recording is started, clear the previous frames
-								 // frameQueue.clear(); //When a new recording is started, clear the previous frames
+	static bool internalChange = false; // Flag to prevent recursive calls
+	if (internalChange) {
+		return;
+	}
+	if (recording) {
+		internalChange = true;
+
+		recorder->clearFrames();
+		recorder->stopBuffering();
+		recorder->resetCurrent();
+
+		window.setRecording(true);
+		internalChange = false;
 	}
 }
 
@@ -1548,10 +1601,12 @@ void System::onRecorderOperationComplete(RecOpRes res)
 			window.displayMessageFPS("Recording complete. Remember to save!");
 		else
 			window.displayMessageFPS("Recording failed");
+		window.setRecording(false);
 		window.setLiveView(!success);
 		window.setHasBuffer(success);
-		window.setRecording(false);
 		window.setTrackingFPS(false);
+		frameProcessor.clearQueues();
+		frameProcessor.vidFrame.reset();
 		if (window.get3DStabActive().getValue())
 		{
 			window.set3DStab(false);
@@ -1562,6 +1617,7 @@ void System::onRecorderOperationComplete(RecOpRes res)
 		}
 		window.setFindFocus(false);
 		break;
+
 	case Recorder::Operation::RECOP_LOAD:
 		if (window.getLoading().getValue())
 		{
@@ -1776,8 +1832,6 @@ System::~System()
 
 	if (frameQueue.size() > 0)
 	{
-		for (VidFrame *vframe = frameQueue.pop(); !frameQueue.empty(); vframe = frameQueue.pop())
-			delete vframe;
 		frameQueue.clear();
 	}
 
@@ -2175,7 +2229,7 @@ bool System::getStabilizationOffset(double &offsetX, double &offsetY)
 	}
 }
 
-void System::createStabiliserMapWithDefaults(const VidFrame &frame)
+void System::createStabiliserMapWithDefaults(const IVidFrame &frame)
 {
 	if (bSystemLogFlag)
 	{

@@ -36,6 +36,11 @@ public:
 
 	void releaseFrame();
 	void resetRaster();
+
+	void clearQueues();
+	bool isIdle();
+	void stop();
+	void start();
 	::Cairo::RefPtr<::Cairo::Surface> getFrame();
 	void resetZoom();
 
@@ -44,7 +49,7 @@ protected: // Only available to derived and friend classes
 	void processFrame();
 
 	::Cairo::RefPtr<::Cairo::ImageSurface> processed;
-	VidFrame *vidFrame;
+	std::shared_ptr<IVidFrame> vidFrame;
 	std::unordered_map<std::string, FrameFilter *> filters;
 	bool running;
 	bool _stabNewFrame;
@@ -57,7 +62,7 @@ protected: // Only available to derived and friend classes
 	System &system;
 
 	TooN::Vector<2> offset, currentOff, rasterPos;
-	TSQueue<VidFrame *> stabQueue, released;
+	TSQueue<std::shared_ptr<IVidFrame> > stabQueue, released;
 
 	Glib::Threads::Thread *processorThread, *stabThread;
 };
@@ -122,10 +127,10 @@ public:
 		return T();
 	}
 
-	TSQueue<VidFrame *> &getFrameQueue();
+	TSQueue<std::shared_ptr<IVidFrame> > &getFrameQueue();
 	Glib::Dispatcher &signalNewFrame();
 
-	VidFrame *getFrame();
+	std::shared_ptr<IVidFrame> getFrame();
 	double getFPS(); // see TODO below
 
 	void onWindowHomePositionChanged(double val);
@@ -168,13 +173,14 @@ public:
 
 private:
 	// Helper method to create stabilizer map with default parameters
-	void createStabiliserMapWithDefaults(const VidFrame &frame);
+	void createStabiliserMapWithDefaults(const IVidFrame &frame);
 
 	// Helper method to calculate threshold for target percentage of pixels
 	double calculateThresholdForPercentage(const CVD::Image<unsigned char> &image, double vesselSize, double targetPercentage);
 
 	void renderFrame();
 	void releaseFrame();
+	bool first_time_live_view = true;
 
 	void whenLiveViewToggled(bool viewingLive);
 
@@ -222,7 +228,7 @@ private:
 
 	Glib::Dispatcher sigNewFrame;
 
-	TSQueue<VidFrame *> frameQueue;
+	TSQueue<std::shared_ptr<IVidFrame> > frameQueue;
 
 	FrameProcessor frameProcessor;
 

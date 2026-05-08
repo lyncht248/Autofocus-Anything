@@ -2,6 +2,8 @@
 #include <thread>
 #include <cvd/image_io.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <malloc.h>
 #include "recorder.hpp"
 #include "logfile.hpp"
 #include "system.hpp"
@@ -32,18 +34,11 @@ Recorder::Recorder(System &sys) :
 
 Recorder::~Recorder()
 {
-	// If there is frame data still accessed by frames, delete it
-	if(frames.size() > 0) {
-		for (VidFrame *vf : frames)
-		{
-			delete vf;
-		}
-		frames.clear(); 
-	}
+	frames.clear(); // release all shared_ptr references
 	if(bRecorderLogFlag) logger->info("[Recorder::~Recorder()] destructor called");
 }
 
-VidFrame* Recorder::getFrame(int n)
+std::shared_ptr<IVidFrame> Recorder::getFrame(int n)
 {
 	if (n < frames.size() )
 	{
@@ -54,10 +49,12 @@ VidFrame* Recorder::getFrame(int n)
 }
 
 //Fills up the frames buffer (or the RAM) with frames, either from live camera or from loaded file
-int Recorder::putFrame(VidFrame *frame)
+int Recorder::putFrame(std::shared_ptr<IVidFrame> frame)
 {
+	mutex.lock();
 	frames.push_back(frame);
 	emitOperationComplete(Operation::RECOP_ADDFRAME, true);
+	mutex.unlock();
 
 	//If the frames queue size is equal to the recording size scale value, emit the RECOP_FILLED signal
 	if (frames.size() == (int) system.getWindow().getRecordingSizeScaleValue() )
@@ -70,7 +67,8 @@ int Recorder::putFrame(VidFrame *frame)
 }
 
 void Recorder::saveFrames(const std::string &location)
-{
+{	
+	mutex.lock();
 	char fnum[FNUM_SIZE];
 	mkdir(location.c_str(), 0777);
 	for (unsigned long i = 0; i < frames.size(); i++)
@@ -87,6 +85,7 @@ void Recorder::saveFrames(const std::string &location)
 			return;
 		}
 	}
+	mutex.unlock();
 	if(bRecorderLogFlag) logger->info("[Recorder::saveFrames()] frames saved to: {}", location);
 	emitOperationComplete(Operation::RECOP_SAVE, true);
 }
@@ -112,11 +111,13 @@ void Recorder::loadFrames(const std::string &location)
 		std::ifstream ifs(location + fnum);
 		if (ifs.is_open() )
 		{
-			IVidFrame *frame = new IVidFrame();
+			// Create a shared_ptr for the frame
+			auto frame = std::make_shared<IVidFrame>();
 
 			CVD::img_load(*frame, ifs);
 			//auto sz = frame->size();
-
+			
+			// Add the shared_ptr to the frames vector
 			frames.push_back(frame);
 			i++;
 
@@ -146,7 +147,7 @@ int Recorder::countFrames()
 	return frames.size();
 }
 
-VidFrame* Recorder::getFrame()
+std::shared_ptr<IVidFrame> Recorder::getFrame()
 {
 	return current;
 }
@@ -162,14 +163,19 @@ void Recorder::clearFrames() //Called ONLY when a new recording is started... ca
 {
 	buffering = false;
 	mutex.lock();
-	for (VidFrame *frame : frames)
-	{
-		delete frame;
-	}
 	frames.clear();
+	current.reset();
 	mutex.unlock();
+
+	malloc_trim(0);
+
 	if(bRecorderLogFlag) logger->info("[Recorder::clearFrames()] frames cleared");
 	emitOperationComplete(Operation::RECOP_EMPTIED, true);
+}
+
+void Recorder::resetCurrent()
+{
+	current.reset();
 }
 
 void Recorder::emitOperationComplete(Operation op, bool success)

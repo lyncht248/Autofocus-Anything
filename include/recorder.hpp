@@ -25,8 +25,8 @@ public:
 	Recorder(System &sys);
 	~Recorder();
 	
-	VidFrame* getFrame(int n);
-	int putFrame(VidFrame *frame);
+	std::shared_ptr<IVidFrame> getFrame(int n);
+	int putFrame(std::shared_ptr<IVidFrame> frame);
 
 	void saveFrames(const std::string &location);
 	void loadFrames(const std::string &location);
@@ -37,10 +37,12 @@ public:
 
 	int countFrames();
 
-	VidFrame* getFrame();
+	std::shared_ptr<IVidFrame> getFrame();
 	// void releaseFrame();
 
 	void clearFrames();
+
+	void resetCurrent();
 
 	void setBufferFrameRate();
 
@@ -49,12 +51,13 @@ public:
 	VDispatcher<std::string>& signalOperationLoad();
 	VDispatcher<std::string>& signalOperationSave();
 	VDispatcher<std::pair<int, int> >& signalBuffer();
+
 private:
 	void emitOperationComplete(Operation op, bool success);
 	void bufferFrames(std::pair<int, int> data); // 
 	System &system;
 	bool buffering;
-	std::vector<VidFrame*> frames;
+	std::vector<std::shared_ptr<IVidFrame> > frames;
 	VDispatcher<std::tuple<Operation, bool> > *sigOperationComplete;
 	VDispatcher<std::string> sigOperationSave, sigOperationLoad;
 	VDispatcher<std::pair<int, int> > sigBuffer;
@@ -62,7 +65,7 @@ private:
 	Glib::Threads::Mutex mutex;
 	Glib::Threads::Cond frameReleased;
 
-	VidFrame *current;
+	std::shared_ptr<IVidFrame> current;
 	int bufSleep;
 };
 

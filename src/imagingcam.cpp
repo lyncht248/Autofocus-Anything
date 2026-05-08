@@ -112,7 +112,7 @@ void ImagingCam::startROIFocusSearch()
     }
 
     // Ensure we have a valid frame before starting search
-    VidFrame *testFrame = m_system.getFrame();
+    std::shared_ptr<VidFrame> testFrame = m_system.getFrame();
     if (!testFrame || !testFrame->data() || testFrame->size().x <= 0 || testFrame->size().y <= 0)
     {
         std::cout << "[Imaging Cam] No valid frame available, cannot start focus search" << std::endl;
@@ -132,7 +132,7 @@ void ImagingCam::startDepthMapping()
     }
 
     // Ensure we have a valid frame before starting depth mapping
-    VidFrame *testFrame = m_system.getFrame();
+    std::shared_ptr<VidFrame> testFrame = m_system.getFrame();
     if (!testFrame || !testFrame->data() || testFrame->size().x <= 0 || testFrame->size().y <= 0)
     {
         std::cout << "[Imaging Cam] No valid frame available, cannot start depth mapping" << std::endl;
@@ -203,7 +203,7 @@ void ImagingCam::monitorThreadFunction()
             if (m_useCustomCenter.load())
             {
                 // Get current frame from the system
-                VidFrame *currentFrame = m_system.getFrame();
+                std::shared_ptr<VidFrame> currentFrame = m_system.getFrame();
 
                 // Add safety checks for null frame and data
                 if (currentFrame && currentFrame->data() && currentFrame->size().x > 0 && currentFrame->size().y > 0)
@@ -599,7 +599,7 @@ void ImagingCam::setFocusPositionAndWaitLong(int position, int settleTimeMs)
 
 double ImagingCam::getCurrentROISharpness()
 {
-    VidFrame *currentFrame = m_system.getFrame();
+    std::shared_ptr<VidFrame> currentFrame = m_system.getFrame();
 
     if (!currentFrame || !currentFrame->data() || currentFrame->size().x <= 0 || currentFrame->size().y <= 0)
     {
@@ -898,7 +898,7 @@ void ImagingCam::performDepthMapping()
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     // Get frame dimensions from first frame
-    VidFrame *firstFrame = m_system.getFrame();
+    std::shared_ptr<VidFrame> firstFrame = m_system.getFrame();
     if (!firstFrame || !firstFrame->data())
     {
         std::cout << "[Depth Mapping] Failed to get initial frame, aborting" << std::endl;
@@ -952,7 +952,7 @@ void ImagingCam::performDepthMapping()
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
         // Get current frame and stabilization offset
-        VidFrame *currentFrame = m_system.getFrame();
+        std::shared_ptr<VidFrame> currentFrame = m_system.getFrame();
         if (!currentFrame || !currentFrame->data())
         {
             std::cout << "[Depth Mapping] Failed to get frame at position " << focusPos << ", skipping" << std::endl;

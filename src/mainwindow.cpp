@@ -868,14 +868,10 @@ void MainWindow::displayMessageError(const std::string &msg)
 	errorLabel.set_text(msg);
 }
 
-void MainWindow::renderFrame(VidFrame *frame)
+void MainWindow::renderFrame(std::shared_ptr<IVidFrame> frame)
 {
-	newDrawFrame = frame != drawFrame;
-	if (newDrawFrame)
-	{
-		drawFrame = frame;
-		// display.queue_draw();
-
+	if (frame) {
+		// Access the frame data as needed
 		CVD::ImageRef dim = frame->size();
 		SDLWindow::renderFrameG8(childwin, frame->data(), dim.x * dim.y);
 	}

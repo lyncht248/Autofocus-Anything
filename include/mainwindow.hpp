@@ -75,7 +75,7 @@ public:
 
 	void displayWarningMessage(const std::string &msg);
 
-	void renderFrame(VidFrame *frame);
+	void renderFrame(std::shared_ptr<IVidFrame> Frame);
 
 	using SignalFrameDrawn = sigc::signal<void()>;
 	SignalFrameDrawn signalFrameDrawn();
@@ -247,7 +247,7 @@ private:
 	Gtk::Label fpsLabel, loadSaveLabel, errorLabel, outOfBoundsWarningLabel;
 	Gtk::Entry frameRateEntry;
 
-	VidFrame *drawFrame;
+	std::shared_ptr<IVidFrame> drawFrame;
 	bool newDrawFrame;
 	int countFrames;
 
