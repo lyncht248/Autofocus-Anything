@@ -77,7 +77,9 @@ unsigned char *img_get_buf =
     (unsigned char *)malloc(img_size); // Used by by image pulling thread
 unsigned char *img_calc_buf =
     (unsigned char *)malloc(img_size); // Used by image analysis thread
+
 std::mutex mtx;
+std::mutex img_calc_buf_mutex;  // Protect img_calc_buf access
 
 using namespace std;
 using namespace cv;
@@ -94,7 +96,7 @@ int increment = 0; // For saving sharpness curves (text files)
 int increment2 = 0; // For saving images (png files)
 
 // Initialise variable to store previous valid B value (see computeBestFocusEigenLM)
-double lastValidB = 0.0;
+double lastValidB = -50.0; // Start with an invalid value to indicate no valid focus found yet
 
 std::vector<double> lastSharpnessCurve;
 std::vector<double> lastMovAvgCurve;
@@ -115,6 +117,13 @@ std::atomic<double> currentMeasuredFocus{
 
 autofocus::autofocus()
     : lens1(), tiltedcam1(), stop_thread(false), settings("") {
+
+  // Initialize global image buffers to zero to prevent heap corruption
+  if (img_buf != nullptr && img_get_buf != nullptr && img_calc_buf != nullptr) {
+    memset(img_buf, 0, img_size);
+    memset(img_get_buf, 0, img_size);
+    memset(img_calc_buf, 0, img_size);
+  }
 
   debugLogFile.open("debug_log.csv", std::ios::out | std::ios::app);
   if (debugLogFile.is_open()) {
@@ -406,53 +415,57 @@ void autofocus::run() {
         bNewImage = true;
         imgcount++;
         imgcountfile++;
-        // Convert to OpenCV Mat - use reduced resolution for all processing
-        cv::Mat image(imHeight, imWidth, CV_8UC1, img_calc_buf);
+        
+        // Protect buffer access with mutex
+        {
+          std::lock_guard<std::mutex> lock(img_calc_buf_mutex);
+          
+          // Convert to OpenCV Mat - use reduced resolution for all processing
+          // Create a copy of the buffer data to avoid race conditions
+          cv::Mat image(imHeight, imWidth, CV_8UC1, img_calc_buf);
+          cv::Mat imageCopy = image.clone();  // Clone to prevent buffer being freed while processing
+          
+          double locBestFocusDouble = computeBestFocusEigenLM(
+              imageCopy, imHeight, imWidth); //  returns double
 
-        // double locBestFocusDouble = computeBestFocusReduced(
-        //     image, imHeight, imWidth); //  returns double
+          // double locBestFocusDouble = computeBestFocusGSL(
+          //     image, imHeight, imWidth); //  returns double
 
-        double locBestFocusDouble = computeBestFocusEigenLM(
-            image, imHeight, imWidth); //  returns double
+          // Store the current measured focus position globally
+          currentMeasuredFocus.store(locBestFocusDouble);
 
-        // double locBestFocusDouble = computeBestFocusGSL(
-        //     image, imHeight, imWidth); //  returns double
+          static auto lastTime = std::chrono::high_resolution_clock::now();
+          auto currentTime = std::chrono::high_resolution_clock::now();
+          auto timeDiff = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              currentTime - lastTime)
+                              .count();
 
-        // Store the current measured focus position globally
-        currentMeasuredFocus.store(locBestFocusDouble);
+          // Calculate FPS
+          double fps = timeDiff > 0 ? 1000.0 / timeDiff : 0.0;
 
-        static auto lastTime = std::chrono::high_resolution_clock::now();
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        auto timeDiff = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            currentTime - lastTime)
-                            .count();
+          // // Output to console for every frame
+          // std::cout << "locBestFocus: " << locBestFocusDouble
+          //           << ", desiredLocBestFocus: " << desiredLocBestFocus
+          //           << ", FPS: " << std::fixed << std::setprecision(1) << fps
+          //           << std::endl;
 
-        // Calculate FPS
-        double fps = timeDiff > 0 ? 1000.0 / timeDiff : 0.0;
+          lastTime = currentTime;
 
-        // // Output to console for every frame
-        // std::cout << "locBestFocus: " << locBestFocusDouble
-        //           << ", desiredLocBestFocus: " << desiredLocBestFocus
-        //           << ", FPS: " << std::fixed << std::setprecision(1) << fps
-        //           << std::endl;
+          // If imgcount==1, then the user has just turned on FindFocus or
+          // HoldFocus
+          if (imgcount == 1) {
+            if (bHoldFocus) {
+              std::cout << "bHoldfocus is set to 1" << std::endl;
+              // Shan testing:
+              // desiredLocBestFocus = 320; // Fix to center focus for HoldFocus
 
-        lastTime = currentTime;
+              desiredLocBestFocus =
+                  static_cast<int>(std::round(locBestFocusDouble));
 
-        // If imgcount==1, then the user has just turned on FindFocus or
-        // HoldFocus
-        if (imgcount == 1) {
-          if (bHoldFocus) {
-            std::cout << "bHoldfocus is set to 1" << std::endl;
-            // Shan testing:
-            // desiredLocBestFocus = 320; // Fix to center focus for HoldFocus
+              previous = desiredLocBestFocus;
 
-            desiredLocBestFocus =
-                static_cast<int>(std::round(locBestFocusDouble));
-
-            previous = desiredLocBestFocus;
-
-          } else if (bFindFocus) {
-            desiredLocBestFocus = 320;
+            } else if (bFindFocus) {
+              desiredLocBestFocus = 320;
             std::cout << "Desired focus set to: " << desiredLocBestFocus << std::endl;
             previous = static_cast<int>(std::round(locBestFocusDouble));
             if (bAutofocusLogFlag) {
@@ -488,6 +501,12 @@ void autofocus::run() {
         }
         
         // (Shan) Use PID module directly to calculate movement, no interpolation
+        if (locBestFocusDouble < -30.0 || locBestFocusDouble > 700.0) {
+          // Skip this frame if measurement is invalid
+          std::cout << "Invalid focus measurement: " << locBestFocusDouble
+                    << ". No movement." << std::endl;
+          continue; 
+        }
         double errorMagnitude = abs(desiredLocBestFocus - locBestFocusDouble);
         double totalPdSignal;
         if (errorMagnitude <= 3.0) { // no movement if within tolerance
@@ -555,6 +574,7 @@ void autofocus::run() {
                  //<< ", Estimated drops: " << (framesProcessed * 17/16.67 -
                  // framesProcessed) << std::endl;
         }
+        } // END OF MUTEX LOCK SCOPE
       } // end of getLatestFrame
       else {
         // No frame available, but do not sleep to ensure we process frames as soon as they arrive.
@@ -1754,12 +1774,15 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
 
   // if SNR < 30, use previous best focus
   if (SNR < 30.0 && lastValidB) {
+    if (lastValidB < -30.0 || lastValidB > 700.0) {
+      std::cout << "Low SNR detected (" << SNR << "), but no valid last focus position. No lens motion." << std::endl;
+      return -50.0; // -50 indicates no movement
+    } else {
       std::cout << "Low SNR detected (" << SNR << "), using last valid best focus: " << lastValidB << std::endl;
       return lastValidB;
-  } 
-  
+    }
+  }
   auto snrEnd = std::chrono::high_resolution_clock::now();
-
 
   // Gaussian Fitting using Eigen LM
   auto fittingStart = std::chrono::high_resolution_clock::now();
