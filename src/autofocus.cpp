@@ -64,8 +64,7 @@ const long img_size = 640 * 480; // Replace with actual image size
 bool bSaveImages = 0; // Saves images from the tilted camera to output folder. WARNING: will
                       // produce enormous number of images and slow down the system!
 bool bSaveSharpnessCurves = 0; // Saves text files with the sharpness curve data, similar to above
-bool bTrackFocusHistory = 0; // Tracks history of fitted focus positions
-bool bTrackFocusHistoryContinous = 0; // Always tracks focus history
+bool bTrackFocusHistory = 1; // Tracks history of fitted focus positions
 bool bSaveGaussianFitLog = 0; // Tracks the performance of the Gaussian fitting
 bool bRunContinuous = 0;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
 
@@ -151,7 +150,6 @@ bool autofocus::initialize() {
     cpuBenchmarkFile.close();
   }
 
-
   std::ofstream GSLBenchmarkFile("../output/focus_benchmark_GSL.csv");
   if (GSLBenchmarkFile.is_open()) {
     GSLBenchmarkFile
@@ -178,16 +176,6 @@ bool autofocus::initialize() {
         << "timestamp_ms,measuredFocus_mm,desiredFocus_mm\n"
         << std::endl;
       focusHistoryFile.close();
-    }
-  }
-
-  if (bTrackFocusHistoryContinous) {
-    std::ofstream focusHistoryContinuousFile("../output/focus_history_continuous.csv");
-    if (focusHistoryContinuousFile.is_open()) {
-      focusHistoryContinuousFile 
-        << "timestamp_ms,measuredFocus_mm\n"
-        << std::endl;
-      focusHistoryContinuousFile.close();
     }
   }
 
@@ -410,33 +398,6 @@ void autofocus::run() {
       }
     }
 
-    // Shan testing: continuously record history of focus
-    if (bTrackFocusHistoryContinous) {
-      if (tiltedcam1.getLatestFrame(img_calc_buf, img_size)) {
-        framesProcessed++;
-        bNewImage = true;
-        imgcount++;
-        imgcountfile++;
-        // Convert to OpenCV Mat - use reduced resolution for all processing
-        cv::Mat image(imHeight, imWidth, CV_8UC1, img_calc_buf);
-
-        double locBestFocusDouble = computeBestFocusEigenLM(
-              image, imHeight, imWidth); //  returns double
-
-        std::ofstream focusHistoryFile("../output/focus_history_continuous.csv", std::ios::out | std::ios::app);
-        if (focusHistoryFile.is_open() && focusHistoryFile.good()) {
-          auto timestamp_ms =
-              std::chrono::duration_cast<std::chrono::milliseconds>(
-                  std::chrono::system_clock::now().time_since_epoch())
-                  .count();
-          focusHistoryFile << timestamp_ms << ","
-                            << locBestFocusDouble << "\n";
-        }
-      }
-    }
-
-
-
     // Only perform autofocus when either HoldFocus or FindFocus is active
     if (bHoldFocus || bFindFocus) {
       // Check if we have a new frame
@@ -526,7 +487,7 @@ void autofocus::run() {
           lastPidKi = Ki;
         }
         
-        // (Shan testing) Use PID module directly to calculate movement, no interpolation
+        // (Shan) Use PID module directly to calculate movement, no interpolation
         double errorMagnitude = abs(desiredLocBestFocus - locBestFocusDouble);
         double totalPdSignal;
         if (errorMagnitude <= 3.0) { // no movement if within tolerance

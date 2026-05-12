@@ -1,3 +1,5 @@
+% Shan: This is the default value as of May 12 2026
+
 Kp=0.0016
 PROP=120
 MIN_POSITION=-15
