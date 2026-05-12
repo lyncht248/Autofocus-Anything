@@ -501,12 +501,15 @@ void autofocus::run() {
         }
         
         // (Shan) Use PID module directly to calculate movement, no interpolation
-        if (locBestFocusDouble < -30.0 || locBestFocusDouble > 700.0) {
+        if (locBestFocusDouble < 0.0 || locBestFocusDouble > 640.0) {
           // Skip this frame if measurement is invalid
           std::cout << "Invalid focus measurement: " << locBestFocusDouble
                     << ". No movement." << std::endl;
           mmToMove = 0.0; // No movement for invalid LoBF
+          bNewMoveRel = 1;
+          moved = 0;
         } else {
+          logger->info("[autofocus::run] PID calculation is called"); // debugging
           // Valid locBestFocusDouble, proceed with PID calculation
           double errorMagnitude = abs(desiredLocBestFocus - locBestFocusDouble);
           double totalPdSignal;
