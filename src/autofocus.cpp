@@ -505,68 +505,69 @@ void autofocus::run() {
           // Skip this frame if measurement is invalid
           std::cout << "Invalid focus measurement: " << locBestFocusDouble
                     << ". No movement." << std::endl;
-          continue; 
-        }
-        double errorMagnitude = abs(desiredLocBestFocus - locBestFocusDouble);
-        double totalPdSignal;
-        if (errorMagnitude <= 3.0) { // no movement if within tolerance
-          totalPdSignal = 0.0;
-        }
-        else if (errorMagnitude >= 150) { // Increased Kd for large errors
-          double effectiveKd = Kd;
-          effectiveKd = Kd + Kd * (errorMagnitude - 150) * (2.5 - 1) / (330 - 150); // Scale Kd from 1x to 2.5x between 150 and 330 error
-          double effectiveKp = Kp;
-          // effectiveKp = Kp + Kp * (errorMagnitude - 30) * (1 - 0.3) / (100 - 30); // Trying: Scale Kp from 0.3x to 1x between 30 and 100 error
+          mmToMove = 0.0; // No movement for invalid LoBF
+        } else {
+          // Valid locBestFocusDouble, proceed with PID calculation
+          double errorMagnitude = abs(desiredLocBestFocus - locBestFocusDouble);
+          double totalPdSignal;
+          if (errorMagnitude <= 3.0) { // no movement if within tolerance
+            totalPdSignal = 0.0;
+          }
+          else if (errorMagnitude >= 150) { // Increased Kd for large errors
+            double effectiveKd = Kd;
+            effectiveKd = Kd + Kd * (errorMagnitude - 150) * (2.5 - 1) / (330 - 150); // Scale Kd from 1x to 2.5x between 150 and 330 error
+            double effectiveKp = Kp;
+            // effectiveKp = Kp + Kp * (errorMagnitude - 30) * (1 - 0.3) / (100 - 30); // Trying: Scale Kp from 0.3x to 1x between 30 and 100 error
 
-          PID pid(dt, max, min, effectiveKp, effectiveKd, Ki);
-          totalPdSignal = pid.calculate(desiredLocBestFocus, locBestFocusDouble) * -1.0;
+            PID pid(dt, max, min, effectiveKp, effectiveKd, Ki);
+            totalPdSignal = pid.calculate(desiredLocBestFocus, locBestFocusDouble) * -1.0;
+          }
+          else{
+            totalPdSignal = pid.calculate(desiredLocBestFocus, locBestFocusDouble) * -1.0;
+          }
+          // Apply limits
+          if ( mmToMove > max)
+            mmToMove = max;
+          else if (mmToMove < min)
+            mmToMove = min;
+          bNewMoveRel = 1;
+          moved = (std::abs(mmToMove) > 1e-12);
+
+          // --- BLINK DETECTION --- TODO: try removing 'moved' variable
+          // double blickThreshold = 50.0; // Threshold for detecting a blink based on focus change
+          // if (moved == 0 && blink == 0 &&
+          //     abs(static_cast<int>(std::round(locBestFocusDouble)) - previous) >
+          //         (blickThreshold) &&
+          //     bBlinking) { 
+          //   // if the location of best focus changes by more than
+          //   // 50 pixels with no move, it is a blink, set blick to 1
+          //   if (bAutofocusLogFlag)
+          //     logger->info("[autofocus::run] Frame ignored; blink detected");
+          //   std::cout << "Blink detected" << std::endl;
+          //   blink = 1;
+          // } else if (blink == 1) {
+          //   // When blink is 1, ignore a certain number of frames (blinkframes)
+          //   if (bAutofocusLogFlag)
+          //     logger->info("[autofocus::run] Frame ignored; blink detected");
+          //   blinkframes--;
+          //   if (blinkframes == 0) {
+          //     blinkframes = 15; // resets blinkframes
+          //     blink = 0;
+          //   }
+          // } else {
+          //     // No blink detected, proceed as normal
+          //     // Use the double precision PD signal - NO CASTING!
+          //     mmToMove = totalPdSignal;
+          //     bNewMoveRel = 1;
+          //     moved = 1;
+          //     // std::cout << "mmToMove: " << mmToMove << "\n";
+          // }
+          // --- End of blink detection ---
+          mmToMove = totalPdSignal; // Comment this line if blink detection is on 
+
         }
-        else{
-          totalPdSignal = pid.calculate(desiredLocBestFocus, locBestFocusDouble) * -1.0;
-        }
-        // Apply limits
-        if ( mmToMove > max)
-          mmToMove = max;
-        else if (mmToMove < min)
-          mmToMove = min;
-        bNewMoveRel = 1;
-        moved = (std::abs(mmToMove) > 1e-12);
 
-        // // BLINK DETECTION. TODO: try removing 'moved' variable
-        // double blickThreshold = 50.0; // Threshold for detecting a blink based on focus change
-        // if (moved == 0 && blink == 0 &&
-        //     abs(static_cast<int>(std::round(locBestFocusDouble)) - previous) >
-        //         (blickThreshold) &&
-        //     bBlinking) { 
-        //   // if the location of best focus changes by more than
-        //   // 50 pixels with no move, it is a blink, set blick to 1
-        //   if (bAutofocusLogFlag)
-        //     logger->info("[autofocus::run] Frame ignored; blink detected");
-        //   std::cout << "Blink detected" << std::endl;
-        //   blink = 1;
-        // } else if (blink == 1) {
-        //   // When blink is 1, ignore a certain number of frames (blinkframes)
-        //   if (bAutofocusLogFlag)
-        //     logger->info("[autofocus::run] Frame ignored; blink detected");
-        //   blinkframes--;
-        //   if (blinkframes == 0) {
-        //     blinkframes = 15; // resets blinkframes
-        //     blink = 0;
-        //   }
-        // } else {
-        //     // No blink detected, proceed as normal
-        //     // Use the double precision PD signal - NO CASTING!
-        //     mmToMove = totalPdSignal;
-        //     bNewMoveRel = 1;
-        //     moved = 1;
-        //     // std::cout << "mmToMove: " << mmToMove << "\n";
-        // }
-
-        mmToMove = totalPdSignal;
-
-        // End of blink detection
         previous = static_cast<int>(std::round(locBestFocusDouble));
-
         // Periodically report frame drop rate
         if (framesProcessed % 300 ==
             0) { // Every 5 seconds at 60fps
@@ -1774,13 +1775,16 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
 
   // if SNR < 30, use previous best focus
   if (SNR < 30.0 && lastValidB) {
-    if (lastValidB < -30.0 || lastValidB > 700.0) {
-      std::cout << "Low SNR detected (" << SNR << "), but no valid last focus position. No lens motion." << std::endl;
-      return -50.0; // -50 indicates no movement
-    } else {
-      std::cout << "Low SNR detected (" << SNR << "), using last valid best focus: " << lastValidB << std::endl;
-      return lastValidB;
-    }
+    std::cout << "Low SNR detected (" << SNR << "), No motion." << std::endl;
+    return -50.0; // -50 indicates no movement
+
+    // if (lastValidB < -30.0 || lastValidB > 700.0) {
+    //   std::cout << "Low SNR detected (" << SNR << "), but no valid last focus position. No lens motion." << std::endl;
+    //   return -50.0; // -50 indicates no movement
+    // } else {
+    //   std::cout << "Low SNR detected (" << SNR << "), using last valid best focus: " << lastValidB << std::endl;
+    //   return lastValidB;
+    // }
   }
   auto snrEnd = std::chrono::high_resolution_clock::now();
 
