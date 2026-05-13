@@ -13,7 +13,7 @@
 #include <stdexcept>
 
 bool bLensLogFlag = 0;
-bool bLensLogFlagSave = 0; // Saves position of lens every time lens moves - ONLY WORKS WHEN bLensLogFlag = 1
+bool bLensLogFlagSave = 1; // Saves position of lens every time lens moves - ONLY WORKS WHEN bLensLogFlag = 1
                           // Currently only saves when autofocus is on (saves mmToMoveTo)
 
                           // if you want to save live lens position from hardware, change 
@@ -52,7 +52,7 @@ lens::lens()
       logFile.open(logFilePath, std::ios::out);
       if (logFile.is_open()) {
           // Write header row
-          logFile << "timestamp_ms, Lens Position_mm" << std::endl;
+          logFile << "timestamp_ms,LensPosition_mm" << std::endl;
           if (bLensLogFlag)
               logger->info("[lens::lens] CSV log file initialized at {}", logFilePath); 
           } else { logger->error("[lens::lens] Failed to open log file at {}", logFilePath);
@@ -147,9 +147,9 @@ bool lens::initialize() {
   // send each command in settings_default.txt to lens and ensure it is
   // successful
 
-  axis->sendCommand("INFO", 0); // no streaming EPOS, only upon request. This
+  // axis->sendCommand("INFO", 0); // no streaming EPOS, only upon request. This
                                 // means axis->getEPOS() will not work.
-  // axis->sendCommand("INFO", 3); // EPOS, DPOS, STAT being streamed
+  axis->sendCommand("INFO", 3); // EPOS, DPOS, STAT being streamed
   // axis->sendCommand("INFO", 7); // EPOS, STAT being streamed
 
   // axis->sendCommand("POLI", 97);
@@ -403,7 +403,7 @@ void lens::logLivePositionToCSV() {
       //         << "." << std::setfill('0') << std::setw(3) << ms.count() << ","
       //         << livePosition << std::endl;
 
-      logFile << timestamp_ms << "," << livePosition << ","<< std::endl;
+      logFile << timestamp_ms << "," << livePosition << std::endl;
       
     }
   }
@@ -509,7 +509,19 @@ void lens::lens_thread() {
     }
 
     // Log
-    logLivePositionToCSV();
+    // logLivePositionToCSV();
+
+    if (bLensLogFlagSave) {
+      if (logFile.is_open()) {
+        auto timestamp_ms =
+                  std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::system_clock::now().time_since_epoch())
+                      .count();
+        double livePosition = getLensPosition();
+
+        logFile << timestamp_ms << "," << livePosition << std::endl;
+      }
+    }
 
 
     // Small sleep to prevent busy-waiting
