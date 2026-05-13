@@ -52,7 +52,7 @@ lens::lens()
       logFile.open(logFilePath, std::ios::out);
       if (logFile.is_open()) {
           // Write header row
-          logFile << "timestamp, Lens Position" << std::endl;
+          logFile << "timestamp_ms, Lens Position_mm" << std::endl;
           if (bLensLogFlag)
               logger->info("[lens::lens] CSV log file initialized at {}", logFilePath); 
           } else { logger->error("[lens::lens] Failed to open log file at {}", logFilePath);
@@ -363,30 +363,6 @@ void lens::mov_abs(double mmToMoveTo) {
       // Update the current lens location
       currentLensLoc = mmToMoveTo;
 
-
-      if (bLensLogFlag) {
-        // Write new lens position to csv file
-        if (bLensLogFlagSave) {        
-          if (logFile.is_open()) {
-          
-            // // Timestamp in human readable form
-            // auto now = std::chrono::system_clock::now();
-            // auto now_time_t = std::chrono::system_clock::to_time_t(now);
-            // auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-
-            // logFile << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S")
-            //         << "." << std::setfill('0') << std::setw(3) << ms.count() << ","
-            //         << mmToMoveTo << std::endl;
-
-            auto timestamp_ms =
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch())
-                    .count();
-            logFile << timestamp_ms << "," << mmToMoveTo << std::endl;
-          }
-        }
-      }
-
       // If lens is went out of bounds, ensure error message is persistent
       // (avoids flickering)
       if (outOfBoundsOnceOnly > 0) {
@@ -412,16 +388,23 @@ void lens::logLivePositionToCSV() {
   if (bLensLogFlagSave) {
     if (logFile.is_open()) {
       
-      // Timestamp in human readable form
-      auto now = std::chrono::system_clock::now();
-      auto now_time_t = std::chrono::system_clock::to_time_t(now);
-      auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+      // // Timestamp in human readable form
+      // auto now = std::chrono::system_clock::now();
+      // auto now_time_t = std::chrono::system_clock::to_time_t(now);
+      // auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
       
+      auto timestamp_ms =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch())
+                    .count();
       double livePosition = getLensPosition();
 
-      logFile << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S")
-              << "." << std::setfill('0') << std::setw(3) << ms.count() << ","
-              << livePosition << std::endl;
+      // logFile << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S")
+      //         << "." << std::setfill('0') << std::setw(3) << ms.count() << ","
+      //         << livePosition << std::endl;
+
+      logFile << timestamp_ms << "," << livePosition << ","<< std::endl;
+      
     }
   }
 }
@@ -526,7 +509,7 @@ void lens::lens_thread() {
     }
 
     // Log
-    // logLivePositionToCSV();
+    logLivePositionToCSV();
 
 
     // Small sleep to prevent busy-waiting
