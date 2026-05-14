@@ -654,6 +654,24 @@ MainWindow::MainWindow()
     PTO2Label.set_tooltip_text(
         "Backup position tolerance for when stage cannot settle with PTOL before timeout, range [0, 255]");
 
+    // Spin button for POLI
+    Gtk::Label POLILabel("POLI:");
+    Gtk::SpinButton POLISpin;
+    POLISpin.set_range(0.0, 200);           // Adjust range as needed
+    POLISpin.set_value(settings.getPOLI()); // Read POLI value from settings
+    POLISpin.set_increments(1, 2); // Enable +/- buttons with step increments
+    POLISpin.set_digits(0);         // Allow 0 decimal place for POLI
+    POLILabel.set_tooltip_text("Delay between EPOS samples (ms), default value: 97");
+
+    // Spin button for DLAY
+    Gtk::Label DLAYLabel("DLAY:");
+    Gtk::SpinButton DLAYSpin;
+    DLAYSpin.set_range(0.0, 50);           // Adjust range as needed
+    DLAYSpin.set_value(settings.getDLAY()); // Read DLAY value from settings
+    DLAYSpin.set_increments(1, 2); // Enable +/- buttons with step increments
+    DLAYSpin.set_digits(0);         // Allow 0 decimal place for DLAY
+    DLAYLabel.set_tooltip_text("default value: 10");
+
     // Create horizontal boxes for layout
     Gtk::Box *returnPosBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
     returnPosBox->pack_start(returnPositionLabel, Gtk::PACK_SHRINK);
@@ -750,6 +768,22 @@ MainWindow::MainWindow()
     pto2Box->pack_start(PTO2Spin, Gtk::PACK_EXPAND_WIDGET);
     settingsBox->pack_start(*pto2Box, Gtk::PACK_SHRINK);
 
+    // Timing Control Section
+    Gtk::Label *timingTitle = Gtk::manage(new Gtk::Label("<b>Timing Control</b>"));
+    timingTitle->set_use_markup(true);
+    timingTitle->set_margin_top(15);
+    settingsBox->pack_start(*timingTitle, Gtk::PACK_SHRINK);
+
+    Gtk::Box *poliBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    poliBox->pack_start(POLILabel, Gtk::PACK_SHRINK);
+    poliBox->pack_start(POLISpin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*poliBox, Gtk::PACK_SHRINK);
+
+    Gtk::Box *dlayBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    dlayBox->pack_start(DLAYLabel, Gtk::PACK_SHRINK);
+    dlayBox->pack_start(DLAYSpin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*dlayBox, Gtk::PACK_SHRINK);
+
     // Add scrolled window to dialog
     scrolledWindow->add(*settingsBox);
     contentArea->pack_start(*scrolledWindow, Gtk::PACK_EXPAND_WIDGET);
@@ -778,6 +812,8 @@ MainWindow::MainWindow()
       settings.setMASS(MASSSpin.get_value());
       settings.setPTOL(PTOLSpin.get_value());
       settings.setPTO2(PTO2Spin.get_value());
+      settings.setPOLI(POLISpin.get_value());
+      settings.setDLAY(DLAYSpin.get_value());
 
       // Save settings to file
       settings.save();

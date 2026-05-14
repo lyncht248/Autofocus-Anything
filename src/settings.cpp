@@ -189,6 +189,22 @@ double Settings::getPTO2() const {
   return it->second;
 }
 
+double Settings::getPOLI() const {
+  auto it = settings.find("POLI");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: POLI");
+  }
+  return it->second;
+}
+
+double Settings::getDLAY() const {
+  auto it = settings.find("DLAY");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: DLAY");
+  }
+  return it->second;
+}
+
 void Settings::set(const std::string &key, double value) {
   settings[key] = value;
 }
@@ -215,3 +231,5 @@ void Settings::setDECE(double value) { set("DECE", value); }
 void Settings::setMASS(double value) { set("MASS", value); }
 void Settings::setPTOL(double value) { set("PTOL", value); }
 void Settings::setPTO2(double value) { set("PTO2", value); }
+void Settings::setPOLI(double value) { set("POLI", value); }
+void Settings::setDLAY(double value) { set("DLAY", value); }

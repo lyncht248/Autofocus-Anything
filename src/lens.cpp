@@ -153,9 +153,18 @@ bool lens::initialize() {
   // axis->sendCommand("INFO", 7); // EPOS, STAT being streamed
 
   // axis->sendCommand("POLI", 97);
-  axis->sendCommand("POLI", 40); // ms delay between EPOS samples. Dropping this
+  // axis->sendCommand("POLI", 40); // ms delay between EPOS samples. Dropping this
                                  // too low interrupts DPOS updates !!
 
+  axis->sendCommand("HFRQ", 89000);
+  axis->sendCommand("LFRQ", 83000);
+
+   // Any parameters specified in general_settings.txt is initialised here
+  // Now include: FREQ, FRQ2, PROP, PRO2, SSPD, ACCE, DECE, MASS, PTOL, PTO2, POLI, DLAY
+  reloadSettings();
+
+  // axis->sendCommand("HLIM", 0);
+  //  axis->sendCommand("HLIM", 0); // Set a soft limit of 0mm
   // axis->sendCommand("FREQ", 87000);
   // axis->sendCommand("FRQ2", 85000);
   // axis->sendCommand("HFRQ", 89000);
@@ -163,27 +172,19 @@ bool lens::initialize() {
 
   // Increasing the frequencies to reduce judder. Above 90.5kHz, the lens locks
   // up.
-  //axis->sendCommand("FREQ", 90500);
- // axis->sendCommand("FRQ2", 88000);
-  axis->sendCommand("FREQ", FREQ);
-  axis->sendCommand("FRQ2", FRQ2);
-
-
-
-  axis->sendCommand("HFRQ", 89000);
-  axis->sendCommand("LFRQ", 83000);
-  // axis->sendCommand("HLIM", 0);
-  //  axis->sendCommand("HLIM", 0); // Set a soft limit of 0mm
+  // axis->sendCommand("FREQ", 90500);
+  // axis->sendCommand("FRQ2", 88000);
+  // axis->sendCommand("FREQ", FREQ);
+  // axis->sendCommand("FRQ2", FRQ2);
 
   // These are the proportional gains for the controller. When we turn the Freq
   // up, we need to turn these down a bit axis->sendCommand("PROP",120);
   // axis->sendCommand("PRO2",40);
 
-
   //axis->sendCommand("PROP", 70);
   //axis->sendCommand("PRO2", 30);
-  axis->sendCommand("PROP", PROP);
-  axis->sendCommand("PRO2", PRO2);
+  // axis->sendCommand("PROP", PROP);
+  // axis->sendCommand("PRO2", PRO2);
 
   // axis->sendCommand("MPRO",250);
   // axis->sendCommand("INTF",15);
@@ -229,7 +230,7 @@ bool lens::initialize() {
   // axis->sendCommand("FILA",1);
   // axis->sendCommand("FILP",1);
   // axis->sendCommand("COMP",0);
-  axis->sendCommand("DLAY",1);
+  // axis->sendCommand("DLAY",10);
   // axis->sendCommand("DTIM",0);
   // axis->sendCommand("ECHO",0);
   // axis->sendCommand("INDA",1);
@@ -254,7 +255,7 @@ bool lens::initialize() {
   // axis->sendCommand("BLCK",0);
 
   // set speed to 250mm/s
-  axis->setSpeed(250_mm);
+  // axis->setSpeed(250_mm);
 
   // wait 0.5s
   usleep(500000);
@@ -577,6 +578,8 @@ void lens::reloadSettings() {
     MASS = settings.getMASS();
     PTOL = settings.getPTOL();
     PTO2 = settings.getPTO2();
+    POLI = settings.getPOLI();
+    DLAY = settings.getDLAY();
 
     axis->sendCommand("FREQ", FREQ);
     axis->sendCommand("FRQ2", FRQ2);
@@ -588,11 +591,12 @@ void lens::reloadSettings() {
     axis->sendCommand("MASS", MASS);
     axis->sendCommand("PTOL", PTOL);
     axis->sendCommand("PTO2", PTO2);
-
+    axis->sendCommand("POLI", POLI);
+    axis->sendCommand("DLAY", DLAY);
 
     if (bLensLogFlag) {
-      logger->info("[lens::reloadSettings] Settings reloaded - returnPosition: {}mm, FREQ: {}Hz, FRQ2: {}Hz, PROP: {}, PRO2: {}, SSPD: {}, ACCE: {}, DECE: {}, MASS: {}, PTOL: {}, PTO2: {}",
-                   returnPosition, FREQ, FRQ2, PROP, PRO2, SSPD, ACCE, DECE, MASS, PTOL, PTO2);
+      logger->info("[lens::reloadSettings] Settings reloaded - returnPosition: {}mm, FREQ: {}Hz, FRQ2: {}Hz, PROP: {}, PRO2: {}, SSPD: {}, ACCE: {}, DECE: {}, MASS: {}, PTOL: {}, PTO2: {}, POLI: {}, DLAY: {}",
+                   returnPosition, FREQ, FRQ2, PROP, PRO2, SSPD, ACCE, DECE, MASS, PTOL, PTO2, POLI, DLAY);
     }
   } catch (const std::exception &e) {
     if (bLensLogFlag) {

@@ -196,6 +196,8 @@ private:
   double MASS;  ///< Mass setting for the lens controller, configurable via settings
   double PTOL;     ///< Position tolerance for the lens controller, configurable via settings
   double PTO2;     ///< Secondary position tolerance for the lens controller, configurable via settings
+  double POLI;
+  double DLAY;
 
   std::ofstream logFile; ///< File stream for position logging
   const std::string outputDir = "../output"; ///< Directory for log files

@@ -36,6 +36,8 @@ public:
     double getMASS() const;
     double getPTOL() const;
     double getPTO2() const;
+    double getPOLI() const;
+    double getDLAY() const;
 
     // Setters for specific settings
     void setReturnPosition(double value);
@@ -54,7 +56,8 @@ public:
     void setMASS(double value);
     void setPTOL(double value);
     void setPTO2(double value);
-
+    void setPOLI(double value);
+    void setDLAY(double value);
 
 private:
     std::string filePath;

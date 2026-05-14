@@ -1,4 +1,4 @@
-% Shan: This is the default values for the extended list of parameters, May 18 2026
+% Shan: This is the default values for the extended list of parameters, May 14 2026
 MAX_POSITION=-0
 PTOL=2
 SSPD=250000
@@ -15,3 +15,5 @@ Kd=1.5e-05
 PROP=120
 MIN_POSITION=-15
 returnPosition=-10.74
+POLI=40
+DLAY=1
