@@ -90,6 +90,7 @@ bool bNewMoveRel = 0;
 int desiredLocBestFocus;
 
 std::atomic<double> mmToMove = 0.0;
+std::atomic<long> mmToMoveTimestamp = 0; // Timestamp for when mmToMove was last updated
 int increment = 0; // For saving sharpness curves (text files)
 int increment2 = 0; // For saving images (png files)
 
@@ -569,6 +570,7 @@ void autofocus::run() {
 
         // Skipping blink detection
         mmToMove = totalPdSignal;
+        mmToMoveTimestamp = std::chrono::system_clock::now().time_since_epoch().count();
         bNewMoveRel = 1;
 
         // // BLINK DETECTION. TODO: try removing 'moved' variable

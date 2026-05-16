@@ -74,6 +74,12 @@ void Axis::setDPOS(Distance d) {
   // }
 }
 
+void Axis::setSTEP(Distance d) {
+  int STEP = d / stage_->getEncoderResolution();
+  sendCommand_("STEP", STEP);
+  was_valid_STEP_ = true;
+}
+
 void Axis::step(Distance d) {
   Distance new_DPOS = 0_nm;
 

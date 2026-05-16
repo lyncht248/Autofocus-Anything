@@ -34,6 +34,7 @@ extern bool bResetLens;
 extern bool bNewMoveRel;
 extern int desiredLocBestFocus;
 extern std::atomic<double> mmToMove;
+extern std::atomic<long> mmToMoveTimestamp; // Timestamp for when mmToMove was last updated
 
 /**
  * @class autofocus

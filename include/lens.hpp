@@ -143,8 +143,6 @@ public:
    */
   void reloadSettings();
 
-  void logLivePositionToCSV();
-
 private:
   /**
    * @brief Thread function for lens control
@@ -166,6 +164,7 @@ private:
   Axis *axis;         ///< Pointer to the axis object for lens control
 
   double currentLensLoc; ///< Current position of the lens in mm
+  double targetLensLoc;  ///< Target position of the lens in mm
   double returnPosition; ///< Return position in mm, configurable via settings
                          ///< text file default = -9.1
 

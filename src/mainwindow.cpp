@@ -670,7 +670,7 @@ MainWindow::MainWindow()
     DLAYSpin.set_value(settings.getDLAY()); // Read DLAY value from settings
     DLAYSpin.set_increments(1, 2); // Enable +/- buttons with step increments
     DLAYSpin.set_digits(0);         // Allow 0 decimal place for DLAY
-    DLAYLabel.set_tooltip_text("default value: 10");
+    DLAYLabel.set_tooltip_text("Delay between actuator reaches target and raising the flag (ms), default value: 1");
 
     // Create horizontal boxes for layout
     Gtk::Box *returnPosBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));

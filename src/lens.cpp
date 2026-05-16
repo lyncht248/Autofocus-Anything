@@ -13,13 +13,12 @@
 #include <stdexcept>
 
 bool bLensLogFlag = 0;
-bool bLensLogFlagSave = 1; // Saves position of lens every time lens moves - ONLY WORKS WHEN bLensLogFlag = 1
+bool bLensLogFlagSave = 0; // Saves position of lens every time lens moves - ONLY WORKS WHEN bLensLogFlag = 1
                           // Currently only saves when autofocus is on (saves mmToMoveTo)
 
                           // if you want to save live lens position from hardware, change 
                           // axis->sendCommand("INFO", 0); 
                           // to axis->sendCommand("INFO", 3); in lens::initialize()
-                          // and uncomment logLivePositionToCSV() call in lens::lens_thread()
 
                           
 lens::lens()
@@ -52,10 +51,11 @@ lens::lens()
       logFile.open(logFilePath, std::ios::out);
       if (logFile.is_open()) {
           // Write header row
-          logFile << "timestamp_ms,LensPosition_mm" << std::endl;
+          logFile << "timestamp_ms,LensPosition_mm,targetLensLoc_mm" << std::endl;
           if (bLensLogFlag)
-              logger->info("[lens::lens] CSV log file initialized at {}", logFilePath); 
-          } else { logger->error("[lens::lens] Failed to open log file at {}", logFilePath);
+              logger->info("[lens::lens] CSV log file initialized at {}", logFilePath);
+      } else {
+          logger->error("[lens::lens] Failed to open log file at {}", logFilePath);
       }
   }
   //*/
@@ -147,9 +147,9 @@ bool lens::initialize() {
   // send each command in settings_default.txt to lens and ensure it is
   // successful
 
-  // axis->sendCommand("INFO", 0); // no streaming EPOS, only upon request. This
+  axis->sendCommand("INFO", 0); // no streaming EPOS, only upon request. This
                                 // means axis->getEPOS() will not work.
-  axis->sendCommand("INFO", 3); // EPOS, DPOS, STAT being streamed
+  // axis->sendCommand("INFO", 3); // EPOS, DPOS, STAT being streamed
   // axis->sendCommand("INFO", 7); // EPOS, STAT being streamed
 
   // axis->sendCommand("POLI", 97);
@@ -270,6 +270,7 @@ bool lens::initialize() {
 
   axis->setDPOS(Distance(returnPosition, Distance::MM));
   currentLensLoc = returnPosition;
+  targetLensLoc = returnPosition;
 
   // wait for 0.5s
   usleep(500000);
@@ -287,45 +288,28 @@ bool lens::initialize() {
   return true;
 }
 
+
 void lens::mov_rel(double mmToMove) {
-  double newLensLoc = currentLensLoc + mmToMove;
-  if (newLensLoc > MIN_POSITION && newLensLoc < MAX_POSITION) {
-    try {
-      // Convert mm to Distance object
-      Distance newLensLocString(newLensLoc, Distance::MM);
+  // Shan's version: use STEP to make relative movements
+  // Todo: How to determine when lens is out of bound
+  try {
+    Distance stepString(mmToMove, Distance::MM);
+    axis->setSTEP(stepString);
 
-      axis->setDPOS(newLensLocString);
+    if (bLensLogFlag) {
+      // We can keep the logging but remove the timestamp variable
+      logger->info("[lens::mov_rel] Requested relative move: {}mm",
+                    mmToMove);
+    }
 
-      // Get the actual position of the lens from the controller
-      Distance epos = axis->getEPOS();
-      double actualPos = epos(Distance::MM);
-
-      if (bLensLogFlag) {
-        // We can keep the logging but remove the timestamp variable
-        logger->info("[lens::mov_rel] Requested move: {}mm to position {}mm, "
-                     "Actual position: {}mm",
-                     mmToMove, newLensLoc, actualPos);
-      }
-
-      currentLensLoc =
-          newLensLoc; // Using this makes for smoother control even though the
-                      // actual position is not being used
-      // currentLensLoc = actualPos; // Using this makes for more oscillations
-      // and poor control
-
-      // If lens is went out of bounds, ensure error message is persistent
-      // (avoids flickering)
-      if (outOfBoundsOnceOnly > 0) {
+    if (outOfBoundsOnceOnly > 0) {
         outOfBoundsOnceOnly--;
       } else if (outOfBoundsOnceOnly == 0) {
-
         NotificationCenter::instance().postNotification("lensInBounds");
       }
-    } catch (const std::exception &e) {
-      logger->error("[lens::mov_rel] Movement error: " + std::string(e.what()));
-    }
-  } else {
-    logger->error("[lens::mov_rel] Lens is out of bounds!");
+
+  } catch (const std::exception &e) {
+    logger->error("[lens::mov_rel] Cannot make movement: {}mm", mmToMove);
     if (outOfBoundsOnceOnly == 0) {
       NotificationCenter::instance().postNotification("outOfBoundsError");
       outOfBoundsOnceOnly = 10;
@@ -343,9 +327,9 @@ void lens::mov_abs(double mmToMoveTo) {
       // Set the new position
       axis->setDPOS(newLensLocDistance);
 
-      // Get the actual position of the lens from the controller
-      Distance epos = axis->getEPOS();
-      double actualPos = epos(Distance::MM);
+      // // Get the actual position of the lens from the controller
+      // Distance epos = axis->getEPOS();
+      // double actualPos = epos(Distance::MM);
 
       if (bLensLogFlag) {
         auto now = std::chrono::high_resolution_clock::now();
@@ -357,12 +341,11 @@ void lens::mov_abs(double mmToMoveTo) {
         logger->info("[lens::mov_abs] Moved to absolute position: {}mm, "
                      "Timestamp: {:.3f}ms",
                      mmToMoveTo, timestamp_ms);
-
-        
       }
 
-      // Update the current lens location
-      currentLensLoc = mmToMoveTo;
+      // // Update the current lens location
+      // currentLensLoc = mmToMoveTo;
+      // currentLensLoc = actualPos; // Shan: this is moved to the other loop
 
       // If lens is went out of bounds, ensure error message is persistent
       // (avoids flickering)
@@ -384,32 +367,6 @@ void lens::mov_abs(double mmToMoveTo) {
   }
 }
 
-// Log current lens position
-void lens::logLivePositionToCSV() {
-  if (bLensLogFlagSave) {
-    if (logFile.is_open()) {
-      
-      // // Timestamp in human readable form
-      // auto now = std::chrono::system_clock::now();
-      // auto now_time_t = std::chrono::system_clock::to_time_t(now);
-      // auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-      
-      auto timestamp_ms =
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch())
-                    .count();
-      double livePosition = getLensPosition();
-
-      // logFile << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S")
-      //         << "." << std::setfill('0') << std::setw(3) << ms.count() << ","
-      //         << livePosition << std::endl;
-
-      logFile << timestamp_ms << "," << livePosition << std::endl;
-      
-    }
-  }
-}
-
 void lens::returnToStart() {
   try {
     std::cout << "returning to start position: " << returnPosition << "mm"
@@ -422,27 +379,6 @@ void lens::returnToStart() {
   } catch (const std::exception &e) {
     logger->error("[lens::returnToStart] Error: " + std::string(e.what()));
   }
-
-
-  // Log the return to start position, save lens position to CSV 
-  // if (bLensLogFlag) {
-  //   if (bLensLogFlagSave) {
-  //     if (logFile.is_open()) {
-      
-  //       // Timestamp in human readable form
-  //       auto now = std::chrono::system_clock::now();
-  //       auto now_time_t = std::chrono::system_clock::to_time_t(now);
-  //       auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-        
-  //       Distance epos = axis->getEPOS();
-  //       double actualPos = epos(Distance::MM);
-
-  //       logFile << std::put_time(std::localtime(&now_time_t), "%Y-%m-%d %H:%M:%S")
-  //               << "." << std::setfill('0') << std::setw(3) << ms.count() << ","
-  //               << returnPosition << "," << actualPos << std::endl;
-  //     }
-  //   }
-  // }
 }
 
 void lens::setReturnPosition(double position) {
@@ -487,43 +423,65 @@ lens::~lens() {
 }
 
 void lens::lens_thread() {
+
   if (bLensLogFlag)
     logger->info("[lens::lens_thread] Lens thread started");
   std::cout << "lens thread started" << std::endl;
   while (!stop_thread.load()) {
+    // Main loop
     if (bResetLens) {
       if (bLensLogFlag)
         logger->info("[lens::lens_thread] Resetting lens to start position");
       returnToStart();
+
       if (bLensLogFlag)
         logger->info("[lens::lens_thread] Lens reset to start position");
       bResetLens = 0;
     }
+    
+    // Old version
+    // if (bNewMoveRel) {
+    //   // if(bLensLogFlag) logger->info("[lens::lens_thread] Moving lens to new
+    //   // position");
+    //   mov_abs(mmToMove + currentLensLoc);
+    //   // if(bLensLogFlag) logger->info("[lens::lens_thread] Lens moved to new
+    //   // position");
+    //   bNewMoveRel = 0;
+    // }
 
-    if (bNewMoveRel) {
-      // if(bLensLogFlag) logger->info("[lens::lens_thread] Moving lens to new
-      // position");
-      mov_abs(mmToMove + currentLensLoc);
-      // if(bLensLogFlag) logger->info("[lens::lens_thread] Lens moved to new
-      // position");
+    // Shan testing: continuous control
+
+    // Method 1: Direct abs movement control (INFO=3 required)
+    // auto timestamp_ms =
+    //            std::chrono::duration_cast<std::chrono::microseconds>(
+    //                std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+    // double currentLensLoc = getLensPosition(); // Update current lens position from encoder
+    // if (bNewMoveRel){
+    //   // Read mmToMove when autofocus updates it
+
+    //   // Simple calculation- disregard time difference
+    //   targetLensLoc = mmToMove + currentLensLoc;
+
+    //   bNewMoveRel = 0; // Signals that the new autofocus calculation has been read
+    //   mov_abs(targetLensLoc);
+    // }
+
+    // Method 2: Relative movement control (INFO=0 compatible)
+    if (bNewMoveRel){
+      mov_rel(mmToMove);
       bNewMoveRel = 0;
     }
 
-    // Log
-    // logLivePositionToCSV();
-
     if (bLensLogFlagSave) {
       if (logFile.is_open()) {
-        auto timestamp_ms =
-                  std::chrono::duration_cast<std::chrono::milliseconds>(
-                      std::chrono::system_clock::now().time_since_epoch())
-                      .count();
-        double livePosition = getLensPosition();
+        // auto timestamp_ms =
+        //           std::chrono::duration_cast<std::chrono::milliseconds>(
+        //               std::chrono::system_clock::now().time_since_epoch()).count();
+        // double livePosition = getLensPosition();
 
-        logFile << timestamp_ms << "," << livePosition << std::endl;
+        // logFile << timestamp_ms << "," << currentLensLoc << "," << targetLensLoc << std::endl;
       }
     }
-
 
     // Small sleep to prevent busy-waiting
     usleep(1000); // 1ms

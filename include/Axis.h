@@ -26,13 +26,16 @@ class Axis
             data_["STAT"] = 0;
             not_settings_command_= { "DPOS", "EPOS", "HOME", "ZERO", "RSET", "INDX", "STEP", "MOVE", "STOP", "CONT" };
             was_valid_DPOS_ = false; // Initialize at false because when the stage starts, DPOS was not valid.
+            was_valid_STEP_ = false;
             is_logging_ = false;
         }
 
         void findIndex();
         void setDPOS(Distance d);
+        void setSTEP(Distance d);
         Distance getDPOS() { return Distance(data_["DPOS"] * stage_->getEncoderResolution(), Distance::NM); }
         Distance getEPOS() { return Distance(data_["EPOS"] * stage_->getEncoderResolution(), Distance::NM); }
+        
         void step(Distance d);
 
         void startLogging();
@@ -85,6 +88,7 @@ class Axis
         int def_poli_value_;
         int update_nb_;
         bool was_valid_DPOS_;
+        bool was_valid_STEP_;
         std::unordered_set<std::string> not_settings_command_;
         bool is_logging_;
 
