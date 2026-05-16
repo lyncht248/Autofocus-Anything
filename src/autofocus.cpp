@@ -540,7 +540,7 @@ void autofocus::run() {
         // }
         
         // Apply schedule here of needed to get effective gains
-        double effectiveKp = Kp;
+        double effectiveKp = Kp * pScaleFactor;
         double effectiveKd = Kd;
 
         double pSignal = effectiveKp * currentError * pScaleFactor;
