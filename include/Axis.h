@@ -52,6 +52,7 @@ class Axis
         void setPTOL(int value) { setSetting("PTOL", value); }
         void setPTO2(int value) { setSetting("PTO2", value); }
 
+        long getSTAT() { return data_["STAT"]; }
         bool isForceZero() { return (data_["STAT"] & (1 << 4)); }
         bool isMotorOn() { return (data_["STAT"] & (1 << 5)); }
         bool isClosedLoop() { return (data_["STAT"] & (1 << 6)); }

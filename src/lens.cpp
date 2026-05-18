@@ -429,6 +429,17 @@ void lens::lens_thread() {
   std::cout << "lens thread started" << std::endl;
   while (!stop_thread.load()) {
     // Main loop
+
+    // Print STAT in binary (debugging)
+    // long stat_value = axis->getSTAT();
+    // std::cout << "STAT (binary): ";
+    // for (int i = 23; i >= 0; i--) {
+    //     std::cout << ((stat_value >> i) & 1);
+    //     if (i % 4 == 0) std::cout << " ";  // Add space every 4 bits for readability
+    // }
+    // std::cout << std::endl;
+    // std::cout << "  Motor On: " << axis->isMotorOn() << "  Position Reached: " << axis->isPositionReached() << std::endl;
+
     if (bResetLens) {
       if (bLensLogFlag)
         logger->info("[lens::lens_thread] Resetting lens to start position");
@@ -468,6 +479,16 @@ void lens::lens_thread() {
 
     // Method 2: Relative movement control (INFO=0 compatible)
     if (bNewMoveRel){
+      // Print STAT in binary (debugging)
+      // long stat_value = axis->getSTAT();
+      // std::cout << "STAT (binary): ";
+      // for (int i = 23; i >= 0; i--) {
+      //     std::cout << ((stat_value >> i) & 1);
+      //     if (i % 4 == 0) std::cout << " ";  // Add space every 4 bits for readability
+      // }
+      // std::cout << std::endl;
+      // std::cout << "  Motor On: " << axis->isMotorOn() << "  Position Reached: " << axis->isPositionReached() << std::endl;
+
       mov_rel(mmToMove);
       bNewMoveRel = 0;
     }
