@@ -390,6 +390,38 @@ TEST_F(LensTest, RelativeMovementAt60HzTest) {
     EXPECT_GT(positions.size(), 0);
 }
 
+TEST_F(LensTest, SpeedChangeDuringMovementTest){
+    // Initialize the lens controller
+    ASSERT_TRUE(lensController->initialize());
+    
+    // Sleep to ensure initialization is complete
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    
+    // Move to starting position
+    double startPosition = -12.0;
+    lensController->setDesiredLensPosition(startPosition);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    
+    // Verify we're at the starting position
+    // double currentPos = lensController->getLensPosition();
+    // EXPECT_NEAR(startPosition, currentPos, 0.2);
+    
+    // Start moving relative
+    std::cout << "Starting movement in 3 seconds..." << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+    lensController->setSSPD(1000); // Slow initial speed
+    lensController->mov_rel(8.0); // Move towards -4.0 mm
+    std::this_thread::sleep_for(std::chrono::milliseconds(2000)); // Let it start moving
+    
+    // Change speed while moving
+    lensController->setSSPD(20000); // Increase speed significantly
+    std::this_thread::sleep_for(std::chrono::milliseconds(2000)); // Wait for movement to complete
+    
+    // Verify we reached the target position faster due to speed change
+    // currentPos = lensController->getLensPosition();
+    // EXPECT_NEAR(-4.0, currentPos, 0.2);
+}
+
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

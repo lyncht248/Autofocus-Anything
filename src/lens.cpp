@@ -357,8 +357,8 @@ void lens::mov_abs(double mmToMoveTo) {
       }
 
       // // Update the current lens location
-      // currentLensLoc = mmToMoveTo;
-      // currentLensLoc = actualPos; // Shan: this is moved to the other loop
+      currentLensLoc = mmToMoveTo; // Shan: update or estimate this in the other loop?
+      // currentLensLoc = actualPos; 
 
       // If lens is went out of bounds, ensure error message is persistent
       // (avoids flickering)
@@ -459,6 +459,7 @@ void lens::lens_thread() {
     if (bResetLens) {
       if (bLensLogFlag)
         logger->info("[lens::lens_thread] Resetting lens to start position");
+      setSSPD(100000); // Reset speed
       returnToStart();
 
       if (bLensLogFlag)
@@ -480,37 +481,20 @@ void lens::lens_thread() {
 
     // Shan testing: continuous control
 
-    // Method 1: Direct abs movement control (INFO=3 required)
-    // auto timestamp_ms =
-    //            std::chrono::duration_cast<std::chrono::microseconds>(
-    //                std::chrono::high_resolution_clock::now().time_since_epoch()).count();
-    // double currentLensLoc = getLensPosition(); // Update current lens position from encoder
-    // if (bNewMoveRel){
-    //   // Read mmToMove when autofocus updates it
-
-    //   // Simple calculation- disregard time difference
-    //   targetLensLoc = mmToMove + currentLensLoc;
-
-    //   bNewMoveRel = 0; // Signals that the new autofocus calculation has been read
-    //   mov_abs(targetLensLoc);
-    // }
-
-    // Method 2: Relative movement control (INFO=0 compatible)
+    // Speed-based control (INFO=0 compatible)
     if (bNewMoveRel){
-      // Print STAT in binary (debugging)
-      // long stat_value = axis->getSTAT();
-      // std::cout << "STAT (binary): ";
-      // for (int i = 23; i >= 0; i--) {
-      //     std::cout << ((stat_value >> i) & 1);
-      //     if (i % 4 == 0) std::cout << " ";  // Add space every 4 bits for readability
-      // }
-      // std::cout << std::endl;
-      // std::cout << "  Motor On: " << axis->isMotorOn() << "  Position Reached: " << axis->isPositionReached() << std::endl;
+
       double nextSpeed = estimateSpeedRequired(mmToMove, currentSpeed);
       currentSpeed = nextSpeed; // Update current speed for next iteration
       setSSPD(nextSpeed);
 
+      // relative movement
       mov_rel(mmToMove);
+
+      // absolute movement
+      // targetLensLoc = mmToMove + currentLensLoc;
+      // mov_abs(targetLensLoc);
+
       bNewMoveRel = 0;
     }
 
@@ -578,6 +562,12 @@ double lens::estimateSpeedRequired(double mmToMove, double currentSpeed){
                      (ALPHA * baseSpeed + BETA * currentSpeed) : 
                      baseSpeed;
   
+  // (Actual) Alpha-beta control
+  // currentLensLoc = currentLensLoc + ALPHA * mmToMove;
+  // double nextSpeed =  (currentSpeed >= 0) ? 
+  //                     (currentSpeed + BETA * baseSpeed):
+  //                     baseSpeed;
+
   // Clamp to valid range
   if (nextSpeed > MAX_SPEED) return MAX_SPEED;
   if (nextSpeed < MIN_SPEED) return MIN_SPEED;

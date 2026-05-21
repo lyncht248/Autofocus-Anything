@@ -674,19 +674,19 @@ MainWindow::MainWindow()
     
     Gtk::Label ALPHALabel("ALPHA:");
     Gtk::SpinButton ALPHASpin;
-    ALPHASpin.set_range(0.0, 1.0);           // Adjust range as needed
+    ALPHASpin.set_range(0.0, 2.0);           // Adjust range as needed
     ALPHASpin.set_value(settings.getALPHA()); // Read ALPHA value from settings
-    ALPHASpin.set_increments(0.1, 0.2); // Enable +/- buttons with step increments
-    ALPHASpin.set_digits(1);         // Allow 1 decimal place for ALPHA
-    ALPHALabel.set_tooltip_text("Alpha in speed-based controller, range (0,1)");
+    ALPHASpin.set_increments(0.01, 0.02); // Enable +/- buttons with step increments
+    ALPHASpin.set_digits(2);         // Allow 2 decimal places for ALPHA
+    ALPHALabel.set_tooltip_text("Coefficient for signal input in speed-based controller, range (0,2)");
 
     Gtk::Label BETALabel("BETA:");
     Gtk::SpinButton BETASpin;
     BETASpin.set_range(0.0, 2.0);           // Adjust range as needed
     BETASpin.set_value(settings.getBETA()); // Read BETA value from settings
-    BETASpin.set_increments(0.1, 0.2); // Enable +/- buttons with step increments
-    BETASpin.set_digits(1);         // Allow 1 decimal place for BETA
-    BETALabel.set_tooltip_text("Beta in speed-based controller, range (0,2)");
+    BETASpin.set_increments(0.02, 0.04); // Enable +/- buttons with step increments
+    BETASpin.set_digits(2);         // Allow 2 decimal places for BETA
+    BETALabel.set_tooltip_text("Coefficient for previous speed in speed-based controller, range (0,2)");
 
     // Create horizontal boxes for layout
     Gtk::Box *returnPosBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
@@ -801,7 +801,7 @@ MainWindow::MainWindow()
     settingsBox->pack_start(*dlayBox, Gtk::PACK_SHRINK);
 
     // Alpha-beta speed-based control Section
-    Gtk::Label *alphaBetaTitle = Gtk::manage(new Gtk::Label("<b>Alpha-Beta Speed Control</b>"));
+    Gtk::Label *alphaBetaTitle = Gtk::manage(new Gtk::Label("<b>Adaptive Speed Control</b>"));
     alphaBetaTitle->set_use_markup(true);
     alphaBetaTitle->set_margin_top(15);
     settingsBox->pack_start(*alphaBetaTitle, Gtk::PACK_SHRINK);
