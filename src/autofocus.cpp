@@ -1915,11 +1915,12 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
 
 
   // std::cout << "Status: " << status << ", iterations: " << lm.nfev() << std::endl;
-  // std::cout << "Eigen LM fitted parameters: A=" << A << ", B=" << B << ", C=" << C << std::endl;
 
   // return B and C to original range
   B = (B + 0.5) * n; // Convert back to original range
   C = C * n; // Scale C back to original range
+
+  // std::cout << "Eigen LM fitted parameters: A=" << A << ", B=" << B << ", C=" << C << std::endl;
     
   // If B less than -30 or greater than 700, use previous value and log warning
   if (B < -30.0 || B > 700.0) {

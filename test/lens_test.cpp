@@ -187,6 +187,209 @@ TEST_F(LensTest, DPOSStreamingTest) {
     EXPECT_NEAR(newPosition, desiredPos, 0.1);
 }
 
+/**
+ * @brief Test one comment for 5mm movement
+ */
+TEST_F(LensTest, RelativeMovementOneCommandTest) {
+    // Initialize the lens controller
+    ASSERT_TRUE(lensController->initialize());
+    
+    // Sleep to ensure initialization is complete
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+
+    int numcycles = 10;
+    int speedStart = 1000;
+    int speedIncrement = 1000;
+
+    // For each cycle increase speed
+    for (int i = 0; i < numcycles; i++) {
+        lensController->setSSPD(speedStart + i * speedIncrement);
+        // Move to starting position (-10.0 mm)
+        double startPosition = -10.0;
+        lensController->setDesiredLensPosition(startPosition);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+
+        // Verify we're at the starting position
+        double currentPos = lensController->getLensPosition();
+        EXPECT_NEAR(startPosition, currentPos, 0.2);
+
+        // Move 5mm relative
+        lensController->mov_rel(5.0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+
+        // Verify new position
+        currentPos = lensController->getLensPosition();
+        EXPECT_NEAR(-5.0, currentPos, 0.2);
+        
+        // Move back
+        lensController->mov_rel(-5.0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+
+        // Verify back to start
+        currentPos = lensController->getLensPosition();
+        EXPECT_NEAR(startPosition, currentPos, 0.2);
+    }
+
+    // Test with higher speeds
+    numcycles = 10;
+    speedStart = 10000;
+    speedIncrement = 20000;
+
+    // For each cycle increase speed
+    for (int i = 0; i < numcycles; i++) {
+        lensController->setSSPD(speedStart + i * speedIncrement);
+        // Move to starting position (-10.0 mm)
+        double startPosition = -10.0;
+        lensController->setDesiredLensPosition(startPosition);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+
+        // Verify we're at the starting position
+        double currentPos = lensController->getLensPosition();
+        EXPECT_NEAR(startPosition, currentPos, 0.2);
+
+        // Move 5mm relative
+        lensController->mov_rel(5.0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+
+        // Verify new position
+        currentPos = lensController->getLensPosition();
+        EXPECT_NEAR(-5.0, currentPos, 0.2);
+        
+        // Move back
+        lensController->mov_rel(-5.0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+
+        // Verify back to start
+        currentPos = lensController->getLensPosition();
+        EXPECT_NEAR(startPosition, currentPos, 0.2);
+    }
+}
+
+TEST_F(LensTest, RelativeMovementAt60HzDiffSpeedTest) {
+    // Initialize the lens controller
+    ASSERT_TRUE(lensController->initialize());
+    
+    // Sleep to ensure initialization is complete
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    
+    // Move to starting position (-10.0 mm)
+    double startPosition = -10.0;
+    lensController->setDesiredLensPosition(startPosition);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    
+    // Verify we're at the starting position
+    double currentPos = lensController->getLensPosition();
+    EXPECT_NEAR(startPosition, currentPos, 0.2);
+    
+    // 60Hz means 16.67ms per cycle
+    const int frequencyHz = 60;
+    const int cyclePeriodMs = 1000 / frequencyHz;  // ~16.67ms
+    const double stepSize = 0.1;  // Move 0.1mm per step
+    const double minPosition = -10.0;
+    const double maxPosition = -5.0;
+    
+    // Run for 10 seconds at 60Hz
+    const int totalCycles = frequencyHz * 5;  // 600 cycles
+    
+    int numcycles = 10;
+    int speedStart = 1000;
+    int speedIncrement = 1000;
+
+    // For each cycle increase speed
+    for (int i = 0; i < numcycles; i++) {
+        lensController->setSSPD(speedStart + i * speedIncrement);
+
+        bool movingUp = true;  // Start moving up (positive direction)
+        std::vector<double> positions;
+        
+        for (int i = 0; i < totalCycles; ++i) {
+            // Call mov_rel with appropriate direction
+            if (movingUp) {
+                lensController->mov_rel(stepSize);
+            } else {
+                lensController->mov_rel(-stepSize);
+            }
+            
+            // Record current position
+            currentPos = lensController->getLensPosition();
+            positions.push_back(currentPos);
+            
+            // Change direction at boundaries
+            if (currentPos >= maxPosition) {
+                movingUp = false;
+            } else if (currentPos <= minPosition) {
+                movingUp = true;
+            }
+            
+            // Sleep to maintain 60Hz frequency
+            std::this_thread::sleep_for(std::chrono::milliseconds(cyclePeriodMs));
+        }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
+}
+
+/**
+ * @brief Test relative movement at 60Hz
+ * 
+ * Tests continuous relative movement using mov_rel(0.1) at 60Hz frequency.
+ */
+TEST_F(LensTest, RelativeMovementAt60HzTest) {
+    // Initialize the lens controller
+    ASSERT_TRUE(lensController->initialize());
+    
+    // Sleep to ensure initialization is complete
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    
+    // Move to starting position (-10.0 mm)
+    double startPosition = -10.0;
+    lensController->setDesiredLensPosition(startPosition);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    
+    // Verify we're at the starting position
+    double currentPos = lensController->getLensPosition();
+    EXPECT_NEAR(startPosition, currentPos, 0.2);
+    
+    // 60Hz means 16.67ms per cycle
+    const int frequencyHz = 60;
+    const int cyclePeriodMs = 1000 / frequencyHz;  // ~16.67ms
+    const double stepSize = 0.1;  // Move 0.1mm per step
+    const double minPosition = -10.0;
+    const double maxPosition = -5.0;
+    
+    // Run for 10 seconds at 60Hz
+    const int totalCycles = frequencyHz * 10;  // 600 cycles
+    
+    bool movingUp = true;  // Start moving up (positive direction)
+    std::vector<double> positions;
+    
+    for (int i = 0; i < totalCycles; ++i) {
+        // Call mov_rel with appropriate direction
+        if (movingUp) {
+            lensController->mov_rel(stepSize);
+        } else {
+            lensController->mov_rel(-stepSize);
+        }
+        
+        // Record current position
+        currentPos = lensController->getLensPosition();
+        positions.push_back(currentPos);
+        
+        // Change direction at boundaries
+        if (currentPos >= maxPosition) {
+            movingUp = false;
+        } else if (currentPos <= minPosition) {
+            movingUp = true;
+        }
+        
+        // Sleep to maintain 60Hz frequency
+        std::this_thread::sleep_for(std::chrono::milliseconds(cyclePeriodMs));
+    }
+    
+    // Verify test completed successfully
+    EXPECT_GT(positions.size(), 0);
+}
+
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

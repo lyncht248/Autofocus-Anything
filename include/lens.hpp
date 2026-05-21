@@ -143,6 +143,8 @@ public:
    */
   void reloadSettings();
 
+  void setSSPD(int sspd);
+
 private:
   /**
    * @brief Thread function for lens control

@@ -288,6 +288,17 @@ bool lens::initialize() {
   return true;
 }
 
+void lens::setSSPD(int sspd) {
+  // Set speed, the input is in um/s, range [0, 250000]
+  try {
+    Distance speedString(sspd, Distance::MU);
+    axis->setSpeed(speedString);
+    if (bLensLogFlag)
+      logger->info("[lens::setSSPD] SSPD set to {}", sspd);
+  } catch (const std::exception &e) {
+    logger->error("[lens::setSSPD] Error: " + std::string(e.what()));
+  }
+}
 
 void lens::mov_rel(double mmToMove) {
   // Shan's version: use STEP to make relative movements
