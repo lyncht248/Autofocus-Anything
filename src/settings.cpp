@@ -205,6 +205,22 @@ double Settings::getDLAY() const {
   return it->second;
 }
 
+double Settings::getALPHA() const {
+  auto it = settings.find("ALPHA");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: ALPHA");
+  }
+  return it->second;
+}
+
+double Settings::getBETA() const {
+  auto it = settings.find("BETA");
+  if (it == settings.end()) {
+    throw std::runtime_error("Setting not found: ALPHA");
+  }
+  return it->second;
+}
+
 void Settings::set(const std::string &key, double value) {
   settings[key] = value;
 }
@@ -233,3 +249,5 @@ void Settings::setPTOL(double value) { set("PTOL", value); }
 void Settings::setPTO2(double value) { set("PTO2", value); }
 void Settings::setPOLI(double value) { set("POLI", value); }
 void Settings::setDLAY(double value) { set("DLAY", value); }
+void Settings::setALPHA(double value){ set("ALPHA", value);}
+void Settings::setBETA(double value) { set("BETA", value); }

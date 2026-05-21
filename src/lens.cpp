@@ -39,6 +39,8 @@ lens::lens()
     MASS = settings.getMASS();
     PTOL = settings.getPTOL();
     PTO2 = settings.getPTO2();
+    ALPHA = settings.getALPHA();
+    BETA = settings.getBETA();
   } catch (const std::exception &e) {
     std::cerr << "[lens::lens] Error loading settings: " << e.what()
               << std::endl;
@@ -288,7 +290,7 @@ bool lens::initialize() {
   return true;
 }
 
-void lens::setSSPD(int sspd) {
+void lens::setSSPD(double sspd) {
   // Set speed, the input is in um/s, range [0, 250000]
   try {
     Distance speedString(sspd, Distance::MU);
@@ -436,8 +438,11 @@ lens::~lens() {
 void lens::lens_thread() {
 
   if (bLensLogFlag)
-    logger->info("[lens::lens_thread] Lens thread started");
+  logger->info("[lens::lens_thread] Lens thread started");
   std::cout << "lens thread started" << std::endl;
+
+  currentSpeed = -1; // Initialize to invalid speed, ignored in first loop
+
   while (!stop_thread.load()) {
     // Main loop
 
@@ -459,6 +464,8 @@ void lens::lens_thread() {
       if (bLensLogFlag)
         logger->info("[lens::lens_thread] Lens reset to start position");
       bResetLens = 0;
+
+      currentSpeed = -1; // Reset current speed
     }
     
     // Old version
@@ -499,6 +506,9 @@ void lens::lens_thread() {
       // }
       // std::cout << std::endl;
       // std::cout << "  Motor On: " << axis->isMotorOn() << "  Position Reached: " << axis->isPositionReached() << std::endl;
+      double nextSpeed = estimateSpeedRequired(mmToMove, currentSpeed);
+      currentSpeed = nextSpeed; // Update current speed for next iteration
+      setSSPD(nextSpeed);
 
       mov_rel(mmToMove);
       bNewMoveRel = 0;
@@ -549,6 +559,31 @@ double lens::getLensPosition() {
 
 const Settings &lens::getSettings() const { return settings; }
 
+double lens::estimateSpeedRequired(double mmToMove, double currentSpeed){
+  // currentSpeed in um/s, mmToMove in mm
+  // Optimized for speed: pre-calculated constants, minimal branching
+  
+  // Constants (could be moved to class member if called very frequently)
+  static constexpr double oneover_DT = 60.0;  // 60Hz control loop
+  static constexpr double MAX_SPEED = 250000.0;
+  static constexpr double MIN_SPEED = 100.0;
+  static constexpr double MM_TO_UM_PER_DT = 1000.0 * oneover_DT;  // 1000 / dt
+
+  // Calculate base speed from movement distance
+  double baseSpeed = std::abs(mmToMove) * MM_TO_UM_PER_DT;
+  
+  // Blend with current speed if valid (currentSpeed >= 0)
+  // Otherwise use only baseSpeed (initial case: currentSpeed == -1)
+  double nextSpeed = (currentSpeed >= 0) ? 
+                     (ALPHA * baseSpeed + BETA * currentSpeed) : 
+                     baseSpeed;
+  
+  // Clamp to valid range
+  if (nextSpeed > MAX_SPEED) return MAX_SPEED;
+  if (nextSpeed < MIN_SPEED) return MIN_SPEED;
+  return nextSpeed;
+}
+
 void lens::reloadSettings() {
   try {
     // Reload settings from file
@@ -570,6 +605,8 @@ void lens::reloadSettings() {
     PTO2 = settings.getPTO2();
     POLI = settings.getPOLI();
     DLAY = settings.getDLAY();
+    ALPHA = settings.getALPHA();
+    BETA = settings.getBETA();
 
     axis->sendCommand("FREQ", FREQ);
     axis->sendCommand("FRQ2", FRQ2);

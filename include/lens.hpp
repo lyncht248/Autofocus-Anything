@@ -143,7 +143,20 @@ public:
    */
   void reloadSettings();
 
-  void setSSPD(int sspd);
+  /**
+   * @brief Estimates the required speed for a given movement
+   *
+   * This method estimates the speed required to move a certain distance based
+   * on the current speed. It uses a alpha-beta controller approach and clamps the
+   * result to defined minimum and maximum speeds.
+   *
+   * @param mmToMove Distance to move in mm
+   * @param currentSpeed Current speed in um/s (use -1 for initial estimation)
+   * @return Estimated speed in um/s
+   */
+  double estimateSpeedRequired(double mmToMove, double currentSpeed);
+
+  void setSSPD(double sspd);
 
 private:
   /**
@@ -199,6 +212,9 @@ private:
   double PTO2;     ///< Secondary position tolerance for the lens controller, configurable via settings
   double POLI;
   double DLAY;
+  double ALPHA; /// <alpha in alpha-beta controller for speed
+  double BETA;  /// <beta in alpha-beta controller for speed
+  double currentSpeed; ///< Current speed of the lens in um/s
 
   std::ofstream logFile; ///< File stream for position logging
   const std::string outputDir = "../output"; ///< Directory for log files

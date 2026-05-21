@@ -38,6 +38,8 @@ public:
     double getPTO2() const;
     double getPOLI() const;
     double getDLAY() const;
+    double getALPHA() const;
+    double getBETA() const;
 
     // Setters for specific settings
     void setReturnPosition(double value);
@@ -58,6 +60,8 @@ public:
     void setPTO2(double value);
     void setPOLI(double value);
     void setDLAY(double value);
+    void setALPHA(double value);
+    void setBETA(double value);
 
 private:
     std::string filePath;

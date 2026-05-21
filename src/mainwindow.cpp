@@ -671,6 +671,22 @@ MainWindow::MainWindow()
     DLAYSpin.set_increments(1, 2); // Enable +/- buttons with step increments
     DLAYSpin.set_digits(0);         // Allow 0 decimal place for DLAY
     DLAYLabel.set_tooltip_text("Delay between actuator reaches target and raising the flag (ms), default value: 1");
+    
+    Gtk::Label ALPHALabel("ALPHA:");
+    Gtk::SpinButton ALPHASpin;
+    ALPHASpin.set_range(0.0, 1.0);           // Adjust range as needed
+    ALPHASpin.set_value(settings.getALPHA()); // Read ALPHA value from settings
+    ALPHASpin.set_increments(0.1, 0.2); // Enable +/- buttons with step increments
+    ALPHASpin.set_digits(1);         // Allow 1 decimal place for ALPHA
+    ALPHALabel.set_tooltip_text("Alpha in speed-based controller, range (0,1)");
+
+    Gtk::Label BETALabel("BETA:");
+    Gtk::SpinButton BETASpin;
+    BETASpin.set_range(0.0, 2.0);           // Adjust range as needed
+    BETASpin.set_value(settings.getBETA()); // Read BETA value from settings
+    BETASpin.set_increments(0.1, 0.2); // Enable +/- buttons with step increments
+    BETASpin.set_digits(1);         // Allow 1 decimal place for BETA
+    BETALabel.set_tooltip_text("Beta in speed-based controller, range (0,2)");
 
     // Create horizontal boxes for layout
     Gtk::Box *returnPosBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
@@ -784,6 +800,22 @@ MainWindow::MainWindow()
     dlayBox->pack_start(DLAYSpin, Gtk::PACK_EXPAND_WIDGET);
     settingsBox->pack_start(*dlayBox, Gtk::PACK_SHRINK);
 
+    // Alpha-beta speed-based control Section
+    Gtk::Label *alphaBetaTitle = Gtk::manage(new Gtk::Label("<b>Alpha-Beta Speed Control</b>"));
+    alphaBetaTitle->set_use_markup(true);
+    alphaBetaTitle->set_margin_top(15);
+    settingsBox->pack_start(*alphaBetaTitle, Gtk::PACK_SHRINK);
+
+    Gtk::Box *alphaBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    alphaBox->pack_start(ALPHALabel, Gtk::PACK_SHRINK);
+    alphaBox->pack_start(ALPHASpin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*alphaBox, Gtk::PACK_SHRINK);
+
+    Gtk::Box *betaBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
+    betaBox->pack_start(BETALabel, Gtk::PACK_SHRINK);
+    betaBox->pack_start(BETASpin, Gtk::PACK_EXPAND_WIDGET);
+    settingsBox->pack_start(*betaBox, Gtk::PACK_SHRINK);
+
     // Add scrolled window to dialog
     scrolledWindow->add(*settingsBox);
     contentArea->pack_start(*scrolledWindow, Gtk::PACK_EXPAND_WIDGET);
@@ -814,6 +846,8 @@ MainWindow::MainWindow()
       settings.setPTO2(PTO2Spin.get_value());
       settings.setPOLI(POLISpin.get_value());
       settings.setDLAY(DLAYSpin.get_value());
+      settings.setALPHA(ALPHASpin.get_value());
+      settings.setBETA(BETASpin.get_value());
 
       // Save settings to file
       settings.save();
