@@ -420,6 +420,8 @@ void autofocus::run() {
         double locBestFocusDouble = computeBestFocusEigenLM(
             image, imHeight, imWidth); //  returns double
 
+        // std::cout << "LoBF: " << locBestFocusDouble << std::endl;
+
         // double locBestFocusDouble = computeBestFocusGSL(
         //     image, imHeight, imWidth); //  returns double
 
@@ -637,6 +639,10 @@ void autofocus::run() {
         // usleep(10); // No frame available - sleep briefly to reduce busy-waiting CPU usage
       }
     } else {
+      // Send a zero movement command to stop SCAN
+      mmToMove = 0.0;
+      bNewMoveRel = 1;
+      
       // Reset counter when autofocus is not active
       imgcount = 0;
 

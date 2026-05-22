@@ -398,8 +398,9 @@ TEST_F(LensTest, SpeedChangeDuringMovementTest){
     std::this_thread::sleep_for(std::chrono::seconds(3));
     
     // Move to starting position
-    double startPosition = -12.0;
-    lensController->setDesiredLensPosition(startPosition);
+    double startPosition = -10.0;
+    // lensController->setDesiredLensPosition(startPosition);
+
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     
     // Verify we're at the starting position
@@ -409,13 +410,21 @@ TEST_F(LensTest, SpeedChangeDuringMovementTest){
     // Start moving relative
     std::cout << "Starting movement in 3 seconds..." << std::endl;
     std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-    lensController->setSSPD(1000); // Slow initial speed
-    lensController->mov_rel(8.0); // Move towards -4.0 mm
-    std::this_thread::sleep_for(std::chrono::milliseconds(2000)); // Let it start moving
+    lensController->setSSPD(500); // Slow initial speed
+    lensController->mov_scan(-1);
+    // lensController->mov_rel(8.0); // Move towards -2.0 mm
+    // lensController->setDesiredLensPosition(-2);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5000)); // Let it start moving
     
     // Change speed while moving
-    lensController->setSSPD(20000); // Increase speed significantly
-    std::this_thread::sleep_for(std::chrono::milliseconds(2000)); // Wait for movement to complete
+    std::cout << "Changing Movement direction" << std::endl;
+    lensController->setSSPD(2000);
+    lensController->mov_scan(1);
+    // lensController->mov_rel(-4.0);
+    // lensController->setDesiredLensPosition(-13);
+    
+    std::this_thread::sleep_for(std::chrono::milliseconds(3000)); // Wait for movement to complete
+    lensController->mov_scan(0); // Stop movement
     
     // Verify we reached the target position faster due to speed change
     // currentPos = lensController->getLensPosition();

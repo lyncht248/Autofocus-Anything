@@ -302,6 +302,15 @@ void lens::setSSPD(double sspd) {
   }
 }
 
+void lens::mov_scan(int direction) {
+  try{
+    axis->startScan(direction);
+
+  } catch (const std::exception &e) {
+    logger->error("[lens::mov_scan] Error: " + std::string(e.what()));
+  }
+}
+
 void lens::mov_rel(double mmToMove) {
   // Shan's version: use STEP to make relative movements
   // Todo: How to determine when lens is out of bound
@@ -357,7 +366,7 @@ void lens::mov_abs(double mmToMoveTo) {
       }
 
       // // Update the current lens location
-      currentLensLoc = mmToMoveTo; // Shan: update or estimate this in the other loop?
+      // currentLensLoc = mmToMoveTo; // Shan: update or estimate this in the other loop
       // currentLensLoc = actualPos; 
 
       // If lens is went out of bounds, ensure error message is persistent
@@ -483,17 +492,38 @@ void lens::lens_thread() {
 
     // Speed-based control (INFO=0 compatible)
     if (bNewMoveRel){
+      // Calculate first before send signals
+      double nextSpeed = updateSpeed(mmToMove, currentSpeed);
 
-      double nextSpeed = estimateSpeedRequired(mmToMove, currentSpeed);
+      // double mmToMoveExtended = 1.2 * mmToMove; // Extend range to prevent deceleration
+      // targetLensLoc = mmToMoveExtended + currentLensLoc;
+
+      // Check if speed is valid and same sign as movement
+      // if ((currentSpeed >= 0 && mmToMove >= 0) || (currentSpeed < 0 && mmToMove < 0)) {
+      //   // Moving in same direction, change speed first (not sure how much this matters)
+      //   setSSPD(std::abs(nextSpeed));
+      //   mov_abs(targetLensLoc);
+      // } else {
+      //   // Moving to opposite direction, command movement first
+      //   mov_abs(targetLensLoc);
+      //   setSSPD(std::abs(nextSpeed));
+      // }
+
+      setSSPD(std::abs(nextSpeed));
+      double movScanThreshold = 0.0001;
+      if (mmToMove > movScanThreshold) {
+        mov_scan(1); // Move in positive direction
+      } else if (mmToMove < -movScanThreshold) {
+        mov_scan(-1); // Move in negative direction
+      } else {
+        mov_scan(0); // If movement is very small, stop the lens
+      }
+
+      // Velocity update
       currentSpeed = nextSpeed; // Update current speed for next iteration
-      setSSPD(nextSpeed);
 
-      // relative movement
-      mov_rel(mmToMove);
-
-      // absolute movement
-      // targetLensLoc = mmToMove + currentLensLoc;
-      // mov_abs(targetLensLoc);
+      // // Location update (alpha)
+      // currentLensLoc += ALPHA * currentSpeed / 600000;
 
       bNewMoveRel = 0;
     }
@@ -543,35 +573,28 @@ double lens::getLensPosition() {
 
 const Settings &lens::getSettings() const { return settings; }
 
-double lens::estimateSpeedRequired(double mmToMove, double currentSpeed){
+double lens::updateSpeed(double mmToMove, double currentSpeed){
   // currentSpeed in um/s, mmToMove in mm
-  // Optimized for speed: pre-calculated constants, minimal branching
   
   // Constants (could be moved to class member if called very frequently)
   static constexpr double oneover_DT = 60.0;  // 60Hz control loop
   static constexpr double MAX_SPEED = 250000.0;
-  static constexpr double MIN_SPEED = 100.0;
+  static constexpr double MIN_SPEED = 10.0;
   static constexpr double MM_TO_UM_PER_DT = 1000.0 * oneover_DT;  // 1000 / dt
 
-  // Calculate base speed from movement distance
-  double baseSpeed = std::abs(mmToMove) * MM_TO_UM_PER_DT;
-  
-  // Blend with current speed if valid (currentSpeed >= 0)
-  // Otherwise use only baseSpeed (initial case: currentSpeed == -1)
-  double nextSpeed = (currentSpeed >= 0) ? 
-                     (ALPHA * baseSpeed + BETA * currentSpeed) : 
-                     baseSpeed;
-  
-  // (Actual) Alpha-beta control
-  // currentLensLoc = currentLensLoc + ALPHA * mmToMove;
-  // double nextSpeed =  (currentSpeed >= 0) ? 
-  //                     (currentSpeed + BETA * baseSpeed):
-  //                     baseSpeed;
-
-  // Clamp to valid range
+  // Method 1: Proportional control blended with current speed (alpha-beta style)
+  double nextSpeed = ALPHA * mmToMove * MM_TO_UM_PER_DT + BETA * currentSpeed;
   if (nextSpeed > MAX_SPEED) return MAX_SPEED;
-  if (nextSpeed < MIN_SPEED) return MIN_SPEED;
+  if (nextSpeed < -MAX_SPEED) return -MAX_SPEED;
+  if (std::abs(nextSpeed) < MIN_SPEED) {
+    return (nextSpeed >= 0) ? MIN_SPEED : -MIN_SPEED;
+  }
   return nextSpeed;
+
+  // Method 2: Alpha-beta control
+  // double nextSpeed = (currentSpeed + BETA * mmToMove * MM_TO_UM_PER_DT);
+  // if (nextSpeed > MAX_SPEED) return MAX_SPEED;
+  // return nextSpeed;
 }
 
 void lens::reloadSettings() {

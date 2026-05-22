@@ -111,6 +111,10 @@ public:
    */
   int getInfoMode();
 
+
+  void mov_scan(int direction);
+
+
   /**
    * @brief Moves the lens by a relative amount, with bounds checking
    *
@@ -154,7 +158,7 @@ public:
    * @param currentSpeed Current speed in um/s (use -1 for initial estimation)
    * @return Estimated speed in um/s
    */
-  double estimateSpeedRequired(double mmToMove, double currentSpeed);
+  double updateSpeed(double mmToMove, double currentSpeed);
 
   void setSSPD(double sspd);
 
