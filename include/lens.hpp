@@ -216,8 +216,8 @@ private:
   double PTO2;     ///< Secondary position tolerance for the lens controller, configurable via settings
   double POLI;
   double DLAY;
-  double ALPHA; /// <alpha in alpha-beta controller for speed
-  double BETA;  /// <beta in alpha-beta controller for speed
+  double ALPHA; /// <proportional gain used in speed controller
+  double CDELAY;  /// <estimated delay for speed controller
   double currentSpeed; ///< Current speed of the lens in um/s
 
   std::ofstream logFile; ///< File stream for position logging

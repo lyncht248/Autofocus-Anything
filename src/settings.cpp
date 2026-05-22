@@ -213,8 +213,8 @@ double Settings::getALPHA() const {
   return it->second;
 }
 
-double Settings::getBETA() const {
-  auto it = settings.find("BETA");
+double Settings::getCDELAY() const {
+  auto it = settings.find("CDELAY");
   if (it == settings.end()) {
     throw std::runtime_error("Setting not found: ALPHA");
   }
@@ -250,4 +250,4 @@ void Settings::setPTO2(double value) { set("PTO2", value); }
 void Settings::setPOLI(double value) { set("POLI", value); }
 void Settings::setDLAY(double value) { set("DLAY", value); }
 void Settings::setALPHA(double value){ set("ALPHA", value);}
-void Settings::setBETA(double value) { set("BETA", value); }
+void Settings::setCDELAY(double value) { set("CDELAY", value); }

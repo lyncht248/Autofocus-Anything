@@ -40,7 +40,7 @@ lens::lens()
     PTOL = settings.getPTOL();
     PTO2 = settings.getPTO2();
     ALPHA = settings.getALPHA();
-    BETA = settings.getBETA();
+    CDELAY = settings.getCDELAY();
   } catch (const std::exception &e) {
     std::cerr << "[lens::lens] Error loading settings: " << e.what()
               << std::endl;
@@ -495,20 +495,6 @@ void lens::lens_thread() {
       // Calculate first before send signals
       double nextSpeed = updateSpeed(mmToMove, currentSpeed);
 
-      // double mmToMoveExtended = 1.2 * mmToMove; // Extend range to prevent deceleration
-      // targetLensLoc = mmToMoveExtended + currentLensLoc;
-
-      // Check if speed is valid and same sign as movement
-      // if ((currentSpeed >= 0 && mmToMove >= 0) || (currentSpeed < 0 && mmToMove < 0)) {
-      //   // Moving in same direction, change speed first (not sure how much this matters)
-      //   setSSPD(std::abs(nextSpeed));
-      //   mov_abs(targetLensLoc);
-      // } else {
-      //   // Moving to opposite direction, command movement first
-      //   mov_abs(targetLensLoc);
-      //   setSSPD(std::abs(nextSpeed));
-      // }
-
       setSSPD(std::abs(nextSpeed));
       double movScanThreshold = 0.0001;
       if (mmToMove > movScanThreshold) {
@@ -522,22 +508,19 @@ void lens::lens_thread() {
       // Velocity update
       currentSpeed = nextSpeed; // Update current speed for next iteration
 
-      // // Location update (alpha)
-      // currentLensLoc += ALPHA * currentSpeed / 600000;
-
       bNewMoveRel = 0;
     }
 
-    if (bLensLogFlagSave) {
-      if (logFile.is_open()) {
-        // auto timestamp_ms =
-        //           std::chrono::duration_cast<std::chrono::milliseconds>(
-        //               std::chrono::system_clock::now().time_since_epoch()).count();
-        // double livePosition = getLensPosition();
+    // if (bLensLogFlagSave) {
+    //   if (logFile.is_open()) {
+    //     auto timestamp_ms =
+    //               std::chrono::duration_cast<std::chrono::milliseconds>(
+    //                   std::chrono::system_clock::now().time_since_epoch()).count();
+    //     double livePosition = getLensPosition();
 
-        // logFile << timestamp_ms << "," << currentLensLoc << "," << targetLensLoc << std::endl;
-      }
-    }
+    //     logFile << timestamp_ms << "," << currentLensLoc << "," << targetLensLoc << std::endl;
+    //   }
+    // }
 
     // Small sleep to prevent busy-waiting
     usleep(1000); // 1ms
@@ -577,25 +560,28 @@ double lens::updateSpeed(double mmToMove, double currentSpeed){
   // currentSpeed in um/s, mmToMove in mm
   
   // Constants (could be moved to class member if called very frequently)
-  static constexpr double oneover_DT = 60.0;  // 60Hz control loop
+  static constexpr double CONTROL_FREQ = 60.0;  // 60Hz control loop
   static constexpr double MAX_SPEED = 250000.0;
   static constexpr double MIN_SPEED = 10.0;
-  static constexpr double MM_TO_UM_PER_DT = 1000.0 * oneover_DT;  // 1000 / dt
+  static constexpr double MM_TO_UM_PER_DT = 1000.0 * CONTROL_FREQ;  // 1000 / dt
 
-  // Method 1: Proportional control blended with current speed (alpha-beta style)
-  double nextSpeed = ALPHA * mmToMove * MM_TO_UM_PER_DT + BETA * currentSpeed;
+  // Method 1: Proportional control
+  // double nextSpeed = ALPHA * mmToMove * MM_TO_UM_PER_DT;
+
+  // Method 2: Consider delay
+  double MM_TO_UM_PER_DT_EFF = 1000.0 / (1/CONTROL_FREQ - CDELAY/1000.0);
+  double V1_FACTOR = -(CDELAY/1000) / (1/CONTROL_FREQ - CDELAY/1000.0); // nb:negative
+  double nextSpeed = ALPHA * mmToMove * MM_TO_UM_PER_DT_EFF + V1_FACTOR * currentSpeed;
+
+  // Clamp speed to limits
   if (nextSpeed > MAX_SPEED) return MAX_SPEED;
   if (nextSpeed < -MAX_SPEED) return -MAX_SPEED;
   if (std::abs(nextSpeed) < MIN_SPEED) {
     return (nextSpeed >= 0) ? MIN_SPEED : -MIN_SPEED;
   }
   return nextSpeed;
+} 
 
-  // Method 2: Alpha-beta control
-  // double nextSpeed = (currentSpeed + BETA * mmToMove * MM_TO_UM_PER_DT);
-  // if (nextSpeed > MAX_SPEED) return MAX_SPEED;
-  // return nextSpeed;
-}
 
 void lens::reloadSettings() {
   try {
@@ -619,7 +605,7 @@ void lens::reloadSettings() {
     POLI = settings.getPOLI();
     DLAY = settings.getDLAY();
     ALPHA = settings.getALPHA();
-    BETA = settings.getBETA();
+    CDELAY = settings.getCDELAY();
 
     axis->sendCommand("FREQ", FREQ);
     axis->sendCommand("FRQ2", FRQ2);

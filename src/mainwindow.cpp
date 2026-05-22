@@ -680,13 +680,13 @@ MainWindow::MainWindow()
     ALPHASpin.set_digits(2);         // Allow 2 decimal places for ALPHA
     ALPHALabel.set_tooltip_text("Coefficient for signal input in speed-based controller, range (0,2)");
 
-    Gtk::Label BETALabel("BETA:");
-    Gtk::SpinButton BETASpin;
-    BETASpin.set_range(0.0, 2.0);           // Adjust range as needed
-    BETASpin.set_value(settings.getBETA()); // Read BETA value from settings
-    BETASpin.set_increments(0.02, 0.04); // Enable +/- buttons with step increments
-    BETASpin.set_digits(2);         // Allow 2 decimal places for BETA
-    BETALabel.set_tooltip_text("Coefficient for previous speed in speed-based controller, range (0,2)");
+    Gtk::Label CDELAYLabel("CDELAY:");
+    Gtk::SpinButton CDELAYSpin;
+    CDELAYSpin.set_range(0.0, 60.0);           // Adjust range as needed
+    CDELAYSpin.set_value(settings.getCDELAY()); // Read CDELAY value from settings
+    CDELAYSpin.set_increments(1, 2); // Enable +/- buttons with step increments
+    CDELAYSpin.set_digits(1);         // Allow 1 decimal place for CDELAY
+    CDELAYLabel.set_tooltip_text("Estimated delay for speed-based controller in ms, range (0,60)");
 
     // Create horizontal boxes for layout
     Gtk::Box *returnPosBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
@@ -812,8 +812,8 @@ MainWindow::MainWindow()
     settingsBox->pack_start(*alphaBox, Gtk::PACK_SHRINK);
 
     Gtk::Box *betaBox = Gtk::manage(new Gtk::Box(Gtk::Orientation::ORIENTATION_HORIZONTAL, 5));
-    betaBox->pack_start(BETALabel, Gtk::PACK_SHRINK);
-    betaBox->pack_start(BETASpin, Gtk::PACK_EXPAND_WIDGET);
+    betaBox->pack_start(CDELAYLabel, Gtk::PACK_SHRINK);
+    betaBox->pack_start(CDELAYSpin, Gtk::PACK_EXPAND_WIDGET);
     settingsBox->pack_start(*betaBox, Gtk::PACK_SHRINK);
 
     // Add scrolled window to dialog
@@ -847,7 +847,7 @@ MainWindow::MainWindow()
       settings.setPOLI(POLISpin.get_value());
       settings.setDLAY(DLAYSpin.get_value());
       settings.setALPHA(ALPHASpin.get_value());
-      settings.setBETA(BETASpin.get_value());
+      settings.setCDELAY(CDELAYSpin.get_value());
 
       // Save settings to file
       settings.save();

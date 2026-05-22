@@ -39,7 +39,7 @@ public:
     double getPOLI() const;
     double getDLAY() const;
     double getALPHA() const;
-    double getBETA() const;
+    double getCDELAY() const;
 
     // Setters for specific settings
     void setReturnPosition(double value);
@@ -61,7 +61,7 @@ public:
     void setPOLI(double value);
     void setDLAY(double value);
     void setALPHA(double value);
-    void setBETA(double value);
+    void setCDELAY(double value);
 
 private:
     std::string filePath;
