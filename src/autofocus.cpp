@@ -64,7 +64,7 @@ const long img_size = 640 * 480; // Replace with actual image size
 bool bSaveImages = 0; // Saves images from the tilted camera to output folder. WARNING: will
                       // produce enormous number of images and slow down the system!
 bool bSaveSharpnessCurves = 0; // Saves text files with the sharpness curve data, similar to above
-bool bTrackFocusHistory = 1; // Tracks history of fitted focus positions
+bool bTrackFocusHistory = 0; // Tracks history of fitted focus positions
 bool bSaveGaussianFitLog = 0; // Tracks the performance of the Gaussian fitting
 bool bRunContinuous = 0;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
 
