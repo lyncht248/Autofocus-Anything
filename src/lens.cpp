@@ -149,14 +149,14 @@ bool lens::initialize() {
   // send each command in settings_default.txt to lens and ensure it is
   // successful
 
-  axis->sendCommand("INFO", 0); // no streaming EPOS, only upon request. This
+  // axis->sendCommand("INFO", 0); // no streaming EPOS, only upon request. This
                                 // means axis->getEPOS() will not work.
   // axis->sendCommand("INFO", 3); // EPOS, DPOS, STAT being streamed
-  // axis->sendCommand("INFO", 7); // EPOS, STAT being streamed
+  axis->sendCommand("INFO", 7); // EPOS, STAT being streamed
 
   // axis->sendCommand("POLI", 97);
   // axis->sendCommand("POLI", 40); // ms delay between EPOS samples. Dropping this
-                                 // too low interrupts DPOS updates !!
+                                 // too low interrupts DPOS updates !! The minimum POLI is about 21ms for INFO=7
 
   axis->sendCommand("HFRQ", 89000);
   axis->sendCommand("LFRQ", 83000);
@@ -271,6 +271,8 @@ bool lens::initialize() {
   usleep(500000);
 
   axis->setDPOS(Distance(returnPosition, Distance::MM));
+  updateEPOSCounter = 0;
+  updateEPOSInterval = 1; // Update every 1 iteration of the lens thread loop (~16.7ms)
   currentLensLoc = returnPosition;
   targetLensLoc = returnPosition;
 
@@ -508,6 +510,32 @@ void lens::lens_thread() {
       // Velocity update
       currentSpeed = nextSpeed; // Update current speed for next iteration
 
+
+      // Check EPOS to detect lens reaching ends of the range.
+      updateEPOSCounter++;
+      if (updateEPOSCounter >= updateEPOSInterval) {
+        updateEPOSCounter = 0;
+        try {
+          Distance epos = axis->getEPOS();
+          auto epos_mm = epos(Distance::MM);
+
+          if (epos_mm < MIN_POSITION + 0.5 || epos_mm > MAX_POSITION - 0.5) {
+            logger->error("[lens::mov_abs] Target position {}mm is close to the end!", epos_mm);
+            if (outOfBoundsOnceOnly == 0) {
+              NotificationCenter::instance().postNotification("outOfBoundsError");
+              outOfBoundsOnceOnly = 5; // Prevent spamming notifications
+            }
+          } else {
+            if (outOfBoundsOnceOnly > 0) {
+              outOfBoundsOnceOnly--;
+            } else if (outOfBoundsOnceOnly == 0) {
+              NotificationCenter::instance().postNotification("lensInBounds");
+            }
+          }
+        } catch (const std::exception &e) {
+          logger->error("[lens::lens_thread] Error reading EPOS: " + std::string(e.what()));
+        }
+
       bNewMoveRel = 0;
     }
 
@@ -524,9 +552,9 @@ void lens::lens_thread() {
 
     // Small sleep to prevent busy-waiting
     usleep(1000); // 1ms
+    }
   }
 }
-
 // set DPOS using axis
 void lens::setDesiredLensPosition(double mmDesiredPosition) {
   // Convert mm to Distance object

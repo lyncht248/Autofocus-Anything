@@ -661,7 +661,7 @@ MainWindow::MainWindow()
     POLISpin.set_value(settings.getPOLI()); // Read POLI value from settings
     POLISpin.set_increments(1, 2); // Enable +/- buttons with step increments
     POLISpin.set_digits(0);         // Allow 0 decimal place for POLI
-    POLILabel.set_tooltip_text("Delay between EPOS samples (ms), default value: 97");
+    POLILabel.set_tooltip_text("Delay between EPOS samples (ms), minimal value: 21 for INFO=7, default value: 97");
 
     // Spin button for DLAY
     Gtk::Label DLAYLabel("DLAY:");

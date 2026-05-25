@@ -224,6 +224,9 @@ private:
   const std::string outputDir = "../output"; ///< Directory for log files
   const std::string logFilePath =
       outputDir + "/lens_positions.csv"; ///< Path to lens position log file
+
+  int updateEPOSCounter; ///< Counter to track when to check EPOS for position updates
+  int updateEPOSInterval; ///< Interval for checking EPOS in number of loop iterations
 };
 
 #endif // LENS_H
