@@ -13,12 +13,7 @@
 #include <stdexcept>
 
 bool bLensLogFlag = 0;
-bool bLensLogFlagSave = 0; // Saves position of lens every time lens moves - ONLY WORKS WHEN bLensLogFlag = 1
-                          // Currently only saves when autofocus is on (saves mmToMoveTo)
-
-                          // if you want to save live lens position from hardware, change 
-                          // axis->sendCommand("INFO", 0); 
-                          // to axis->sendCommand("INFO", 3); in lens::initialize()
+bool bLensLogFlagSave = 0; // Saves position of lens every time it moves
 
                           
 lens::lens()
@@ -53,7 +48,7 @@ lens::lens()
       logFile.open(logFilePath, std::ios::out);
       if (logFile.is_open()) {
           // Write header row
-          logFile << "timestamp_ms,LensPosition_mm,targetLensLoc_mm" << std::endl;
+          logFile << "timestamp_ms,LensPosition_mm" << std::endl;
           if (bLensLogFlag)
               logger->info("[lens::lens] CSV log file initialized at {}", logFilePath);
       } else {
@@ -272,7 +267,7 @@ bool lens::initialize() {
 
   axis->setDPOS(Distance(returnPosition, Distance::MM));
   updateEPOSCounter = 0;
-  updateEPOSInterval = 1; // Update every 1 iteration of the lens thread loop (~16.7ms)
+  updateEPOSInterval = 1; // Update EPOS every 1 iteration of the lens thread loop (~16.7ms)
   currentLensLoc = returnPosition;
   targetLensLoc = returnPosition;
 
@@ -479,76 +474,61 @@ void lens::lens_thread() {
 
       currentSpeed = -1; // Reset current speed
     }
-    
-    // Old version
-    // if (bNewMoveRel) {
-    //   // if(bLensLogFlag) logger->info("[lens::lens_thread] Moving lens to new
-    //   // position");
-    //   mov_abs(mmToMove + currentLensLoc);
-    //   // if(bLensLogFlag) logger->info("[lens::lens_thread] Lens moved to new
-    //   // position");
-    //   bNewMoveRel = 0;
-    // }
 
-    // Shan testing: continuous control
-
-    // Speed-based control (INFO=0 compatible)
+    // Speed-based control
     if (bNewMoveRel){
       // Calculate first before send signals
       double nextSpeed = updateSpeed(mmToMove, currentSpeed);
 
-      setSSPD(std::abs(nextSpeed));
-      double movScanThreshold = 0.0001;
-      if (mmToMove > movScanThreshold) {
-        mov_scan(1); // Move in positive direction
-      } else if (mmToMove < -movScanThreshold) {
-        mov_scan(-1); // Move in negative direction
-      } else {
-        mov_scan(0); // If movement is very small, stop the lens
+      // Check if lens would be out of range
+      if ((currentLensLoc + mmToMove) <= MIN_POSITION || (currentLensLoc + mmToMove) >= MAX_POSITION) {
+        logger->error("[lens::mov_abs] Target position {}mm is out of bounds!", currentLensLoc + mmToMove);
+        NotificationCenter::instance().postNotification("outOfBoundsError");
+        nextSpeed = 0; // Stop the lens if it would go out of bounds
+      }
+      else {
+          NotificationCenter::instance().postNotification("lensInBounds");
       }
 
-      // Velocity update
+      // Set actuator speed and movement direction
+      setSSPD(std::abs(nextSpeed));
+      double movScanThreshold = 0.001; // Threshold for movement (mm)
+      if (nextSpeed == 0 || std::abs(mmToMove) < movScanThreshold) {
+        mov_scan(0); // Stop the lens
+      } else if (mmToMove > 0) {
+        mov_scan(1); // Move in positive direction
+      } else if (mmToMove < 0) {
+        mov_scan(-1); // Move in negative direction
+      } else {
+        logger->error("[lens::lens_thread] Error setting movement direction");
+      }
+      // Update velocity
       currentSpeed = nextSpeed; // Update current speed for next iteration
 
-
-      // Check EPOS to detect lens reaching ends of the range.
+      // Update EPOS (INFO=7 required)
       updateEPOSCounter++;
       if (updateEPOSCounter >= updateEPOSInterval) {
         updateEPOSCounter = 0;
         try {
           Distance epos = axis->getEPOS();
-          auto epos_mm = epos(Distance::MM);
-
-          if (epos_mm < MIN_POSITION + 0.5 || epos_mm > MAX_POSITION - 0.5) {
-            logger->error("[lens::mov_abs] Target position {}mm is close to the end!", epos_mm);
-            if (outOfBoundsOnceOnly == 0) {
-              NotificationCenter::instance().postNotification("outOfBoundsError");
-              outOfBoundsOnceOnly = 5; // Prevent spamming notifications
-            }
-          } else {
-            if (outOfBoundsOnceOnly > 0) {
-              outOfBoundsOnceOnly--;
-            } else if (outOfBoundsOnceOnly == 0) {
-              NotificationCenter::instance().postNotification("lensInBounds");
-            }
-          }
+          currentLensLoc = epos(Distance::MM);
         } catch (const std::exception &e) {
           logger->error("[lens::lens_thread] Error reading EPOS: " + std::string(e.what()));
         }
-
+      
+      // Mark that the new movement is processed
       bNewMoveRel = 0;
+
+      
+      if (bLensLogFlagSave) {
+        if (logFile.is_open()) {
+          auto timestamp_ms =
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch()).count();
+          logFile << timestamp_ms << "," << currentLensLoc << std::endl;
+        }
+      }
     }
-
-    // if (bLensLogFlagSave) {
-    //   if (logFile.is_open()) {
-    //     auto timestamp_ms =
-    //               std::chrono::duration_cast<std::chrono::milliseconds>(
-    //                   std::chrono::system_clock::now().time_since_epoch()).count();
-    //     double livePosition = getLensPosition();
-
-    //     logFile << timestamp_ms << "," << currentLensLoc << "," << targetLensLoc << std::endl;
-    //   }
-    // }
 
     // Small sleep to prevent busy-waiting
     usleep(1000); // 1ms
