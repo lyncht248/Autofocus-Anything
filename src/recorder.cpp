@@ -136,11 +136,9 @@ void Recorder::saveFrames(const std::string &location)
 		{
 			emitOperationComplete(Operation::RECOP_SAVE, false);
 			mutex.unlock();
-			mutex.unlock();
 			return;
 		}
 	}
-	mutex.unlock();
 	mutex.unlock();
 
 	// Metadata CSV file
