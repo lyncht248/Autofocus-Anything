@@ -162,14 +162,9 @@ public:
    * 
    * Saves data after all processing steps.
    *
-   * @param resized Resized image (1/2).
-   * @param sharpness_float Image after Roberts Cross operation.
-   * @param columnMeans Mean sharpness values for each column.
-   * @param sharpnessCurve Sharpness curve data.
-   * @param increment Increment value for file naming.
    */
-  void SaveSharpnessTxt(const cv::Mat &resized, const std::vector<double>& x_values,
-    const std::vector<double>& y_values, double A, double B, double C, int& niter, int& increment);
+  void SaveSharpnessTxt(const std::vector<double>& x_values,
+    const std::vector<double>& raw_y_values, const std::vector<double>& y_values, double A, double B, double C);
 
 
     /**

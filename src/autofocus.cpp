@@ -1823,8 +1823,7 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
     noise = std::sqrt(varNoise);
   }
 
-  // SNR
-  double SNR = (noise > 0.0) ? (signal / noise) : 0.0;
+  double SNR = (noise > 0.0) ? (signal / noise) : 0.0;   // SNR
   // std::cout << "SNR:" << SNR << std::endl;
 
   // if SNR < SNR_threshold, use previous best focus
@@ -1833,7 +1832,6 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
       std::cout << "Low SNR detected (" << SNR << "), using last valid best focus: " << lastValidB << std::endl;
       return lastValidB;
   } 
-  
   auto snrEnd = std::chrono::high_resolution_clock::now();
 
 
@@ -1961,8 +1959,7 @@ autofocus::computeBestFocusEigenLM(cv::Mat image, int imgHeight,
   }
 
   if (bSaveSharpnessCurves) {
-    // Implement this
-    lastSharpnessCurve = y_values;
+    SaveSharpnessTxt(x_values, raw_y_values, y_values, A, B, C);
   }
 
   auto endTime = std::chrono::high_resolution_clock::now();
@@ -2292,15 +2289,17 @@ void autofocus::SaveImagesPnG(cv::Mat &image, double locBestFocusDouble, double 
 // Helper function to save sharpness curves as text files
 // input: resized image, image after roberts cross (sharpness_float),
 //        column means vector, sharpness curve vector, increment counter
-void autofocus::SaveSharpnessTxt(const cv::Mat &resized,  const std::vector<double>& x_values, const std::vector<double>& y_values, double A, double B, double C, int& niter, int& increment) {
+void autofocus::SaveSharpnessTxt(const std::vector<double>& x_values, const std::vector<double>& raw_y_values, const std::vector<double>& y_values, double A, double B, double C) {
     std::string fileName = "SHARPNESS_CURVE_" + std::to_string(increment);
     std::string TextFile1 = "../output/SharpnessCurves/" + fileName + "_x_values.txt";
     std::string TextFile2 = "../output/SharpnessCurves/" + fileName + "_y_values.txt";
     std::string TextFile3 = "../output/SharpnessCurves/" + fileName + "_fit_params.txt";
+    std::string TextFile4 = "../output/SharpnessCurves/" + fileName + "_raw_y_values.txt";
 
     std::ofstream outputFile1(TextFile1);
     std::ofstream outputFile2(TextFile2);
     std::ofstream outputFile3(TextFile3);
+    std::ofstream outputFile4(TextFile4);
 
     for (const auto& val : x_values) {
         outputFile1 << val << "\n";
@@ -2308,17 +2307,17 @@ void autofocus::SaveSharpnessTxt(const cv::Mat &resized,  const std::vector<doub
     for (const auto& val : y_values) {
         outputFile2 << val << "\n";
     }
+    for (const auto& val : raw_y_values) {
+        outputFile4 << val << "\n";
+    }
     outputFile3 << "A: " << A << "\n";
     outputFile3 << "B: " << B << "\n";
     outputFile3 << "C: " << C << "\n";
-    outputFile3 << "Niter: " << niter << "\n";
-
   
-
-
     outputFile1.close();
     outputFile2.close();
     outputFile3.close();
+    outputFile4.close();
 
     increment++;
 
