@@ -336,6 +336,8 @@ void lens::mov_rel(double mmToMove) {
   }
 }
 
+
+// This is a test
 void lens::mov_abs(double mmToMoveTo) {
   // Check if the target position is within bounds
   if (mmToMoveTo > MIN_POSITION && mmToMoveTo < MAX_POSITION) {
