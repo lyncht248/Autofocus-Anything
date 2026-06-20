@@ -835,6 +835,7 @@ void autofocus::setPGain(double gain) {
     logger->info("[autofocus::setPGain] P gain set to: {}", gain);
   }
 }
+// This is a test
 
 double autofocus::getPGain() const { return Kp; }
 
