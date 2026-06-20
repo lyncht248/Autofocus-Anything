@@ -142,7 +142,7 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
       cv::Mat resized;
       cv::resize(image, resized, cv::Size(), scale, scale);
 
-      currentFocus = focusController->computeBestFocusGSL(resized, resized.rows,
+      currentFocus = focusController->computeBestFocusEigenLM(resized, resized.rows,
                                                        resized.cols);
 
       std::cout << "Current best focus location: " << currentFocus << " pixels";
@@ -232,7 +232,7 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
         cv::Mat resized;
         cv::resize(image, resized, cv::Size(), scale, scale);
 
-        int focus = focusController->computeBestFocusGSL(resized, resized.rows,
+        int focus = focusController->computeBestFocusEigenLM(resized, resized.rows,
                                                       resized.cols);
 
         // Add this measurement to our average
@@ -312,7 +312,7 @@ TEST_F(AutofocusTest, GenerateMmPixelLookupTable) {
         cv::Mat resized;
         cv::resize(image, resized, cv::Size(), scale, scale);
 
-        int focus = focusController->computeBestFocusGSL(resized, resized.rows,
+        int focus = focusController->computeBestFocusEigenLM(resized, resized.rows,
                                                       resized.cols);
 
         // Add this measurement to our average

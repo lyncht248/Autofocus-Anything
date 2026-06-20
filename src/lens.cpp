@@ -308,86 +308,6 @@ void lens::mov_scan(int direction) {
   }
 }
 
-void lens::mov_rel(double mmToMove) {
-  // Shan's version: use STEP to make relative movements
-  // Todo: How to determine when lens is out of bound
-  try {
-    Distance stepString(mmToMove, Distance::MM);
-    axis->setSTEP(stepString);
-
-    if (bLensLogFlag) {
-      // We can keep the logging but remove the timestamp variable
-      logger->info("[lens::mov_rel] Requested relative move: {}mm",
-                    mmToMove);
-    }
-
-    if (outOfBoundsOnceOnly > 0) {
-        outOfBoundsOnceOnly--;
-      } else if (outOfBoundsOnceOnly == 0) {
-        NotificationCenter::instance().postNotification("lensInBounds");
-      }
-
-  } catch (const std::exception &e) {
-    logger->error("[lens::mov_rel] Cannot make movement: {}mm", mmToMove);
-    if (outOfBoundsOnceOnly == 0) {
-      NotificationCenter::instance().postNotification("outOfBoundsError");
-      outOfBoundsOnceOnly = 10;
-    }
-  }
-}
-
-
-// This is a test
-void lens::mov_abs(double mmToMoveTo) {
-  // Check if the target position is within bounds
-  if (mmToMoveTo > MIN_POSITION && mmToMoveTo < MAX_POSITION) {
-    try {
-      // Convert mm to Distance object
-      Distance newLensLocDistance(mmToMoveTo, Distance::MM);
-
-      // Set the new position
-      axis->setDPOS(newLensLocDistance);
-
-      // // Get the actual position of the lens from the controller
-      // Distance epos = axis->getEPOS();
-      // double actualPos = epos(Distance::MM);
-
-      if (bLensLogFlag) {
-        auto now = std::chrono::high_resolution_clock::now();
-        auto timestamp_ms =
-            std::chrono::duration_cast<std::chrono::microseconds>(
-                now.time_since_epoch())
-                .count() /
-            1000.0;
-        logger->info("[lens::mov_abs] Moved to absolute position: {}mm, "
-                     "Timestamp: {:.3f}ms",
-                     mmToMoveTo, timestamp_ms);
-      }
-
-      // // Update the current lens location
-      // currentLensLoc = mmToMoveTo; // Shan: update or estimate this in the other loop
-      // currentLensLoc = actualPos; 
-
-      // If lens is went out of bounds, ensure error message is persistent
-      // (avoids flickering)
-      if (outOfBoundsOnceOnly > 0) {
-        outOfBoundsOnceOnly--;
-      } else if (outOfBoundsOnceOnly == 0) {
-        NotificationCenter::instance().postNotification("lensInBounds");
-      }
-    } catch (const std::exception &e) {
-      logger->error("[lens::mov_abs] Movement error: " + std::string(e.what()));
-    }
-  } else {
-    logger->error("[lens::mov_abs] Target position {}mm is out of bounds!",
-                  mmToMoveTo);
-    if (outOfBoundsOnceOnly == 0) {
-      NotificationCenter::instance().postNotification("outOfBoundsError");
-      outOfBoundsOnceOnly = 10;
-    }
-  }
-}
-
 void lens::returnToStart() {
   try {
     std::cout << "returning to start position: " << returnPosition << "mm"
@@ -479,12 +399,14 @@ void lens::lens_thread() {
 
     // Speed-based control
     if (bNewMoveRel){
+      // Shan: Implement low-pass filter on speed in updateSpeed()?
+
       // Calculate first before send signals
       double nextSpeed = updateSpeed(mmToMove, currentSpeed);
 
       // Check if lens would be out of range
       if ((currentLensLoc + mmToMove) <= MIN_POSITION || (currentLensLoc + mmToMove) >= MAX_POSITION) {
-        logger->error("[lens::mov_abs] Target position {}mm is out of bounds!", currentLensLoc + mmToMove);
+        logger->error("[lens::lens_thread] Target position {}mm is out of bounds!", currentLensLoc + mmToMove);
         NotificationCenter::instance().postNotification("outOfBoundsError");
         nextSpeed = 0; // Stop the lens if it would go out of bounds
       }
@@ -537,6 +459,7 @@ void lens::lens_thread() {
     }
   }
 }
+
 // set DPOS using axis
 void lens::setDesiredLensPosition(double mmDesiredPosition) {
   // Convert mm to Distance object
@@ -580,8 +503,10 @@ double lens::updateSpeed(double mmToMove, double currentSpeed){
 
   // Method 2: Consider delay
   double MM_TO_UM_PER_DT_EFF = 1000.0 / (1/CONTROL_FREQ - CDELAY/1000.0);
+
   double V1_FACTOR = -(CDELAY/1000) / (1/CONTROL_FREQ - CDELAY/1000.0); // nb:negative
   double nextSpeed = ALPHA * mmToMove * MM_TO_UM_PER_DT_EFF + V1_FACTOR * currentSpeed;
+  // Shan: ALPHA and CDELAY can be finetuned but they are not necessarily necessary
 
   // Clamp speed to limits
   if (nextSpeed > MAX_SPEED) return MAX_SPEED;

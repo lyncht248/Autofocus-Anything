@@ -95,17 +95,6 @@ public:
   void reloadSettings();
 
 
-
-  /**
-   * @brief Computes the best focus position using the GSL library (Non-linear least squares).
-   *
-   * @param image Input image.
-   * @param imgHeight Height of the image.
-   * @param imgWidth Width of the image.
-   * @return Best focus position.
-   */
-  double computeBestFocusGSL(cv::Mat image, int imgHeight, int imgWidth);
-
   /**
    * @brief Computes the best focus position using the Eigen Levenberg-Marquardt algorithm.
    * 
@@ -115,22 +104,8 @@ public:
    * @param imgHeight Height of the image.
    * @param imgWidth Width of the image.
    * @return Best focus position.
-
   */
-
   double computeBestFocusEigenLM(cv::Mat image, int imgHeight, int imgWidth);
-
-
-  /**
-   * @brief Computes the best focus position using an iterative algorithm for Gaussian fitting.
-   *
-   * @param image Input image.
-   * @param imgHeight Height of the image.
-   * @param imgWidth Width of the image.
-   * @return Best focus position.
-   */
-  double computeBestFocusGaussian(cv::Mat image, int imgHeight, int imgWidth);
-
 
 
   /**
@@ -155,7 +130,7 @@ public:
    */
   double getPGain() const;
 
-
+  double low_pass_filter(double totalPdSignal, double previoustotalPdSignal);
 
   /**
    * @brief Saves sharpness curve data to a text file.

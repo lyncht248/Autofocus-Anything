@@ -106,7 +106,7 @@ int main(int argc, char **argv) {
                 cv::Mat resized;
                 cv::resize(image, resized, cv::Size(), scale, scale);
                 
-                int focusPosition = focusController.computeBestFocusGSL(resized, resized.rows, resized.cols);
+                int focusPosition = focusController.computeBestFocusEigenLM(resized, resized.rows, resized.cols);
                 
                 // Update the focus position that the main thread can read
                 std::lock_guard<std::mutex> lock(focusMutex);
@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
             cv::Mat resized;
             cv::resize(image, resized, cv::Size(), scale, scale);
             
-            currentFocus = focusController.computeBestFocusGSL(resized, resized.rows, resized.cols);
+            currentFocus = focusController.computeBestFocusEigenLM(resized, resized.rows, resized.cols);
             std::cout << "Current focus: " << currentFocus << " pixels" << std::endl;
             
             if (std::abs(currentFocus - targetInitialFocus) < 20) {

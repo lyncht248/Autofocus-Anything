@@ -64,10 +64,9 @@ const long img_size = 640 * 480; // Replace with actual image size
 bool bSaveImages = 0; // Saves images from the tilted camera to output folder. WARNING: will
                       // produce enormous number of images and slow down the system!
 bool bSaveSharpnessCurves = 0; // Saves text files with the sharpness curve data, similar to above
-bool bTrackFocusHistory = 0; // Tracks history of fitted focus positions
 bool bSaveGaussianFitLog = 0; // Tracks the performance of the Gaussian fitting
-bool bRunContinuous = 0;          // Runs autofocus method all the time (not just FindFocus/HoldFocus)
-
+bool bRunContinuous = 0;      // Runs autofocus method all the time (not just FindFocus/HoldFocus)
+bool bTrackFocusHistory = 1; // Tracks history of fitted focus positions
 
 bool bBlinking = 1;
 
@@ -96,6 +95,8 @@ int increment2 = 0; // For saving images (png files)
 
 // Initialise variable to store previous valid B value (see computeBestFocusEigenLM)
 double lastValidB = 0.0;
+
+double previoustotalPdSignal = 0.0;
 
 std::vector<double> lastSharpnessCurve;
 std::vector<double> lastMovAvgCurve;
@@ -319,6 +320,7 @@ autofocus::~autofocus() {
   }
 }
 
+
 void autofocus::run() {
   auto t1 = std::chrono::steady_clock::now();
   usleep(10000); // 10ms
@@ -333,7 +335,6 @@ void autofocus::run() {
   logger->info("[autofocus::run] Starting camera capture thread");
   tiltedcam1.startCaptureThread();
 
-  int moved = 1;
   int previous = desiredLocBestFocus; // TODO: should be in a mutex
   int tol = 6;          // Tolerance zone where no movement is made
   int blink = 0;        // Becomes 1 when a blink is detected
@@ -376,7 +377,6 @@ void autofocus::run() {
 
   while (!stop_thread.load()) {
 
-    // Sophia - debugging
     if (bRunContinuous) {
       // Check if we have a new frame
       if (tiltedcam1.getLatestFrame(img_calc_buf, img_size)) {
@@ -388,18 +388,13 @@ void autofocus::run() {
         // Convert to OpenCV Mat - use reduced resolution for all processing
         cv::Mat image(imHeight, imWidth, CV_8UC1, img_calc_buf);
 
-        // double locBestFocusDouble = computeBestFocusGSL(
-        //     image, imHeight, imWidth); //  returns double
-
         double locBestFocusDouble = computeBestFocusEigenLM(
             image, imHeight, imWidth); //  returns double
 
-        // std::cout << "locBestFocus (GSL): " << locBestFocusDouble << std::endl;
         // std::cout << "locBestFocus (EigenLM): " << locBestFocusEigenLM << std::endl;
 
         // Store the current measured focus position globally
         currentMeasuredFocus.store(locBestFocusDouble);
-        
       }
     }
 
@@ -414,16 +409,10 @@ void autofocus::run() {
         // Convert to OpenCV Mat - use reduced resolution for all processing
         cv::Mat image(imHeight, imWidth, CV_8UC1, img_calc_buf);
 
-        // double locBestFocusDouble = computeBestFocusReduced(
-        //     image, imHeight, imWidth); //  returns double
-
         double locBestFocusDouble = computeBestFocusEigenLM(
             image, imHeight, imWidth); //  returns double
 
         // std::cout << "LoBF: " << locBestFocusDouble << std::endl;
-
-        // double locBestFocusDouble = computeBestFocusGSL(
-        //     image, imHeight, imWidth); //  returns double
 
         // Store the current measured focus position globally
         currentMeasuredFocus.store(locBestFocusDouble);
@@ -509,7 +498,7 @@ void autofocus::run() {
         // moved = (std::abs(mmToMove) > 1e-12);
         
 
-        // Calculate PID manually
+        // Calculate PD manually
         // Filter the measurement for derivative term only
         if (isFirstFrame) {
           filteredLocBestFocus = static_cast<int>(
@@ -527,25 +516,7 @@ void autofocus::run() {
             desiredLocBestFocus -
             locBestFocusDouble; // Use double for higher precision
 
-        // Scale P gain based on error magnitude
-        double errorMagnitude = abs(currentError);
-        double pScaleFactor = 1.0;
-
-        // if (errorMagnitude <= 3.0) {
-        //   pScaleFactor = 0.13;
-        // } else if (errorMagnitude >= 100.0) {
-        //   pScaleFactor = 1.0;
-        // } else {
-        //   // Linear interpolation between 3 pixels (0.1x) and 100 pixels (1.0x)
-        //   pScaleFactor =
-        //       0.13 + (errorMagnitude - 3.0) * (1.0 - 0.13) / (100.0 - 3.0);
-        // }
-        
-        // Apply schedule here of needed to get effective gains
-        double effectiveKp = Kp * pScaleFactor;
-        double effectiveKd = Kd;
-
-        double pSignal = effectiveKp * currentError * pScaleFactor;
+        double pSignal = Kp * currentError;
 
         // Calculate derivative using filtered measurement
         double filteredCurrentError =
@@ -555,7 +526,7 @@ void autofocus::run() {
         double rawDerivative =
             (filteredCurrentError - filteredPreviousError) / dt;
         // double dSignal = Kd * rawDerivative;
-        double dSignal = effectiveKd * rawDerivative;
+        double dSignal = Kd * rawDerivative;
 
         // Total PD signal
         double totalPdSignal = (pSignal + dSignal) * -1.0;
@@ -569,9 +540,14 @@ void autofocus::run() {
         // Store for next iteration
         // previousError = currentError; not actually used
         filteredPreviousError = filteredCurrentError;
+        
+        // Shan: Implement a low-pass filter here?
+        double filteredSignal = low_pass_filter(totalPdSignal, previoustotalPdSignal);
+        double previoustotalPdSignal = filteredSignal;
 
         // Skipping blink detection
-        mmToMove = totalPdSignal;
+        // mmToMove = totalPdSignal;
+        mmToMove = filteredSignal;
         mmToMoveTimestamp = std::chrono::system_clock::now().time_since_epoch().count();
         bNewMoveRel = 1;
 
@@ -652,408 +628,6 @@ void autofocus::run() {
   }
   tiltedcam1.stopCaptureThread();
 }
-
-
-double autofocus::computeBestFocusGaussian(cv::Mat image, int imgHeight,
-                                           int imgWidth) {
-              
-  auto startTime = std::chrono::high_resolution_clock::now();
-
-  // Resize to 1/2 x 1/2
-  auto resizeStart = std::chrono::high_resolution_clock::now();
-  cv::Mat resized;
-  cv::resize(image, resized, cv::Size(), 0.5, 0.5);
-  auto resizeEnd = std::chrono::high_resolution_clock::now();
-
-  // Roberts Cross gradients -> sharpness image (float)
-  auto robertsStart = std::chrono::high_resolution_clock::now();
-  cv::Mat img_x, img_y;
-  // cv::filter2D(resized, img_x, CV_32F, roberts_kernelx);
-  // cv::filter2D(resized, img_y, CV_32F, roberts_kernely);
-  cv::filter2D(resized, img_x, CV_16S, roberts_kernelx);
-  cv::filter2D(resized, img_y, CV_16S, roberts_kernely);
-  cv::Mat img_x_squared, img_y_squared, sum_xy;
-  cv::multiply(img_x, img_x, img_x_squared);
-  cv::multiply(img_y, img_y, img_y_squared);
-  cv::add(img_x_squared, img_y_squared, sum_xy);
-  cv::Mat sharpness_float;
-  sum_xy.convertTo(sharpness_float, CV_32F);
-  auto robertsEnd = std::chrono::high_resolution_clock::now();
-
-  // Print largest value in sharpness_float for debugging
-  // std::cout << "Max sharpness value: ";
-  // double minVal, maxVal;
-  // cv::minMaxLoc(sharpness_float, &minVal, &maxVal);
-  // std::cout << maxVal << std::endl;
-
- 
-
-
-  // Column means
-  auto columnStart = std::chrono::high_resolution_clock::now();
-  cv::Mat columnMeansMatrix;
-  cv::reduce(sharpness_float, columnMeansMatrix, 0, cv::REDUCE_AVG, CV_64F);
-  std::vector<double> columnMeans;
-  columnMeansMatrix.copyTo(columnMeans);
-  auto columnEnd = std::chrono::high_resolution_clock::now();
-
-
-  // std::cout << "Max column mean value : ";
-  // double minColVal, maxColVal;
-  // cv::Mat columnMeansMat(columnMeans);
-  // cv::minMaxLoc(columnMeansMat, &minColVal, &maxColVal);
-  // std::cout << maxColVal << std::endl;
-
-  // Compute offset
-  auto offsetStart = std::chrono::high_resolution_clock::now();
-  const int offsetWindow = 50;
-  double offset_left = 0.0, offset_right = 0.0;
-  if (columnMeans.size() >= offsetWindow) {
-      offset_left = std::accumulate(columnMeans.begin(), columnMeans.begin() + offsetWindow, 0.0) / offsetWindow;
-      offset_right = std::accumulate(columnMeans.end() - offsetWindow, columnMeans.end(), 0.0) / offsetWindow;
-  } else if (!columnMeans.empty()) {
-      offset_left = std::accumulate(columnMeans.begin(), columnMeans.end(), 0.0) / columnMeans.size();
-      offset_right = std::accumulate(columnMeans.begin(), columnMeans.end(), 0.0) / columnMeans.size();
-  } else {
-      offset_left = 0.0; // or handle empty case as needed
-      offset_right = 0.0;
-  }
-
-  // Choose smallest offset and subtract, omitting negative values
-  double offset = std::min(offset_left, offset_right);
-  // std::vector<double> sharpnesscurve;
-  // sharpnesscurve.reserve(columnMeans.size());
-  // for (const double& v : columnMeans) {
-  //   double val = v - offset;
-  //   if (val >= 0.0) {
-  //     sharpnesscurve.push_back(val);
-  //   }
-  // }
-
-  std::vector<std::pair<double, double>> xy_pairs;
-  xy_pairs.reserve(columnMeans.size());
-  for (size_t i = 0; i < columnMeans.size(); ++i) {
-    double x = static_cast<double>(i);
-    double y = columnMeans[i] - offset;
-    if (y >= 0.0) {
-      xy_pairs.emplace_back(x, y);
-    }
-  }
-
-  auto offsetEnd = std::chrono::high_resolution_clock::now();
-
-  
-
-  // Rescale x to range [-0.5, 0.5], (and maybe y to [0, 1]?)
-  auto rescaleStart = std::chrono::high_resolution_clock::now();
-  // std::vector<double> y_values;
-  // y_values.reserve(xy_pairs.size());
-  // for (const auto& p : xy_pairs) {
-  //     y_values.push_back(p.second);
-  // }
-  double max_sharpness = xy_pairs.empty() ? 1.0 :
-      std::max_element(xy_pairs.begin(), xy_pairs.end(),
-          [](const std::pair<double, double>& a, const std::pair<double, double>& b) {
-              return a.second < b.second;
-          })->second;
-
-  // std::cout << "Max sharpness after offset: " << max_sharpness << std::endl;
-  // std::cout << "Offset value subtracted: " << offset << std::endl;
-
-  int N = static_cast<int>(xy_pairs.size());
-
-  std::vector<double> x_values(N);
-
-  // Rescale y to [0,1]
-  for (int i = 0; i < N; ++i) {
-    xy_pairs[i].second /= max_sharpness; // y in [0, 1]
-  }
-
-
-  // Save values for plotting
-  if (bSaveImages) {
-    lastSharpnessCurve.clear();
-    lastXIndices.clear();
-    for (const auto& p : xy_pairs) {
-      lastSharpnessCurve.push_back(p.second);
-      lastXIndices.push_back(p.first);
-    }
-  }
-
-  // Rescale x in [-0.5, 0.5]
-  for (int i = 0; i < N; ++i) {
-    xy_pairs[i].first = static_cast<double>(i) / (N - 1) - 0.5; // x in [-0.5, 0.5]
-  }
-
-  auto rescaleEnd = std::chrono::high_resolution_clock::now();
-
-
-  // Print min and max x value
-  // std::cout << "X range after rescaling: ";
-  // if (!xy_pairs.empty()) {
-  //   double min_x = xy_pairs.front().first;
-  //   double max_x = xy_pairs.back().first;
-  //   std::cout << min_x << " to " << max_x << std::endl;
-  // }
-
-  // Max sharpness
-  // std::cout << "Max sharpness after offset and rescale: ";
-  // double max_sharpness_final = xy_pairs.empty() ? 0.0 :
-  //     std::max_element(xy_pairs.begin(), xy_pairs.end(),
-  //         [](const std::pair<double, double>& a, const std::pair<double, double>& b) {
-  //             return a.second < b.second;
-  //         })->second;
-  // std::cout << max_sharpness_final << std::endl;
-
-  // Iterative Gaussian fit (weighted least squares)
-  auto gaussianFitStart = std::chrono::high_resolution_clock::now();
-
-  int maxIterations = 10;
-
-  // List to store mu values
-  std::vector<double> muValues;
-  double mu_prev = std::numeric_limits<double>::quiet_NaN();
-
-
-  double coeff_a = 0.0, coeff_b = 0.0, coeff_c = 0.0;
-
-  for (int iter = 0; iter < maxIterations; ++iter) {
-
-    double a11 = 0.0, a12 = 0.0, a13 = 0.0;
-    double a21 = 0.0, a22 = 0.0, a23 = 0.0;
-    double a31 = 0.0, a32 = 0.0, a33 = 0.0;
-    double b_11 = 0.0, b_12 = 0.0, b_13 = 0.0;
-
-    
-
-    for (int i = 0; i < N; ++i) {
-
-      double ln_y = std::log(xy_pairs[i].second);
-      // Not normalized
-      // double x = static_cast<double>(i);
-
-      // Normalized to [-0.5, 0.5]
-      double x_val = xy_pairs[i].first;
-
-      double y;
-
-      if (iter == 0) {
-        y = xy_pairs[i].second;
-      } else {
-        y = std::exp(coeff_a + coeff_b * x_val + coeff_c * x_val * x_val);
-      }
-
-      
-      double y2 = y * y;
-      double x2 = x_val * x_val;
-      double x3 = x2 * x_val;
-      double x4 = x2 * x2;
-
-      a11 += y2;
-      a12 += x_val * y2;
-      a13 += x2 * y2;
-      a23 += x3 * y2;
-      a33 += x4 * y2;
-
-      b_11 += y2 * ln_y;
-      b_12 += x_val * y2 * ln_y;
-      b_13 += x2 * y2 * ln_y;
-    }
-  
-
-    a21 = a12; // Symmetry
-    a31 = a13; // Symmetry
-    a22 = a13; // Symmetry
-    a32 = a23; // Symmetry
-
-
-    // Define A and b
-    cv::Mat A = (cv::Mat_<double>(3, 3) << a11, a12, a13, 
-                  a21, a22, a23,
-                  a31, a32, a33);
-
-    cv::Mat b = (cv::Mat_<double>(3, 1) << b_11, b_12, b_13);
-
-    // // Calculate inverse
-    // cv::Mat A_inv;
-    // cv::invert(A, A_inv, cv::DECOMP_LU);
-    // cv::Mat x = A_inv * b;
-    // double coeff_a = x.at<double>(0, 0);
-    // double coeff_b = x.at<double>(1, 0);
-    // double coeff_c = x.at<double>(2, 0);
-    // double mu = -coeff_b / (2 * coeff_c);
-    // muValues.push_back(mu);
-
-    // // // or hard-code inverse
-    // double det = cv::determinant(A);
-
-    // double det =
-    //     a11 * (a22 * a33 - a23 * a32)
-    //   - a12 * (a21 * a33 - a23 * a31)
-    //   + a13 * (a21 * a32 - a22 * a31);
-
-    // cv::Mat A_inv = (1.0 / det) * (cv::Mat_<double>(3, 3) <<
-    //     (a22 * a33 - a23 * a32),
-    //     (a13 * a32 - a12 * a33),
-    //     (a12 * a23 - a13 * a22),
-
-    //     (a23 * a31 - a21 * a33),
-    //     (a11 * a33 - a13 * a31),
-    //     (a13 * a21 - a11 * a23),
-
-    //     (a21 * a32 - a22 * a31),
-    //     (a12 * a31 - a11 * a32),
-    //     (a11 * a22 - a12 * a21)
-    // );
-    // cv::Mat x;
-    // x = A_inv * b;
-    // double coeff_a = x.at<double>(0, 0);
-    // double coeff_b = x.at<double>(1, 0);
-    // double coeff_c = x.at<double>(2, 0);
-    // double mu = -coeff_b / (2 * coeff_c);
-    // muValues.push_back(mu);
-
-    // or Solve for parameters
-    cv::Mat x;
-    cv::solve(A, b, x, cv::DECOMP_NORMAL);
-
-    double coeff_a = x.at<double>(0, 0);
-    double coeff_b = x.at<double>(1, 0);
-    double coeff_c = x.at<double>(2, 0);
-    double mu = -coeff_b / (2 * coeff_c);
-
-    // Scale back to original index to save
-    double mu_index = (mu + 0.5) * (N - 1);
-    muValues.push_back(mu_index);
-
-    // Early stopping: check relative change in mu
-    // if (iter > 0 && std::abs(mu - mu_prev) / std::abs(mu_prev) < 0.001) {
-    //   //std::cout << "Early stopping at iteration " << iter << std::endl;
-    //   break; // Change less than 0.1%, stop early
-    // }
-    mu_prev = mu;
-
-
-  }
-  auto gaussianFitEnd = std::chrono::high_resolution_clock::now();
-
-
-  //Print min and max x value after rescaling
-  // std::cout << "X range after rescaling back: ";
-  // if (!xy_pairs.empty()) {
-  //   double min_x = xy_pairs.front().first; 
-  //   double max_x = xy_pairs.back().first;
-  //   std::cout << min_x << " to " << max_x << std::endl;
-  // }
-
-
-  auto estEnd = std::chrono::high_resolution_clock::now();
-
-
-  // --- Timing log unchanged footprint
-  // ---
-  auto totalTime =
-      std::chrono::duration_cast<std::chrono::microseconds>(estEnd - startTime);
-  auto resizeTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      resizeEnd - resizeStart);
-  auto robertsTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      robertsEnd - robertsStart);
-  auto columnTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      columnEnd - columnStart);
-  auto offsetTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      offsetEnd - offsetStart);
-  auto rescaleTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      rescaleEnd - rescaleStart);
-  auto gaussianFitTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      gaussianFitEnd - gaussianFitStart);
-  
-  try {
-    std::ofstream iterativeBenchmarkFile("../output/focus_benchmark_iterative.csv",
-                                       std::ios::app);
-    if (iterativeBenchmarkFile.is_open() && iterativeBenchmarkFile.good()) {
-      auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           std::chrono::system_clock::now().time_since_epoch())
-                           .count();
-      // keep CSV header compatibility: write estimator time in the
-      // "com_time_us" column
-      iterativeBenchmarkFile << timestamp << "," << totalTime.count() << ","
-                          << resizeTime.count() << "," << robertsTime.count()
-                          << "," << columnTime.count() << ","
-                          << offsetTime.count() << "," << rescaleTime.count() << ","
-                          << gaussianFitTime.count() << ",";
-
-      // Write all mu values for each iteration, separated by semicolon
-      for (size_t i = 0; i < muValues.size(); ++i) {
-          iterativeBenchmarkFile << muValues[i];
-          if (i < muValues.size() - 1) iterativeBenchmarkFile << ";";
-      }
-      iterativeBenchmarkFile << std::endl;
-    }
-  } catch (...) { /* ignore */
-  }
-
-
-  //std::cout << "Mu values over iterations: ";
-  // for (const auto& mu : muValues) {
-  //     std::cout << mu << " ";
-  // }
-  // std::cout << std::endl;
-
-
-    if (bSaveSharpnessCurves) {
-
-    // UNCOMMENT TO SAVE TXT FILES
-    std::string FileName = "TESTING_GAUSSIAN_" + std::to_string(increment2);
-    std::string TextFile1 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_resized.txt";
-    std::string TextFile2 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_robertscross.txt";
-    // std::string TextFile3 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_reduced_robertscross.txt";
-    // std::string TextFile4 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_column_means.txt";
-    // std::string TextFile5 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_reduced_column_means.txt";
-    // std::string TextFile6 = "../output/SharpnessCurves_steps_Gaussian/" + FileName + "_sharpnesscurve.txt";
-    std::ofstream outputFile1(TextFile1);
-    std::ofstream outputFile2(TextFile2);
-    // std::ofstream outputFile3(TextFile3);
-    // std::ofstream outputFile4(TextFile4);
-    // std::ofstream outputFile5(TextFile5);
-    // std::ofstream outputFile6(TextFile6);
-
-
-    std::ostream_iterator<double> output_iterator(outputFile1, ", ");
-    for (int i = 0; i < resized.rows; ++i) {
-      const uchar* row_ptr = resized.ptr<uchar>(i);
-      for (int j = 0; j < resized.cols; ++j) {
-        outputFile1 << static_cast<double>(row_ptr[j]) << ", ";
-      }
-    }
-    outputFile1 << "\n";
-
-    std::ostream_iterator<double> output_iterator2(outputFile2, ", ");
-    for (int i = 0; i < sharpness_float.rows; ++i) {
-      const float* row_ptr = sharpness_float.ptr<float>(i);
-      for (int j = 0; j < sharpness_float.cols; ++j) {
-        outputFile2 << static_cast<double>(row_ptr[j]) << ", ";
-      }
-    }
-    outputFile2 << "\n";
-
-    outputFile1.close();
-    outputFile2.close();
-
-    // SaveSharpnessTxt(resized, sharpness_float, columnMeans, lastSharpnessCurve, increment2);
-    increment2++;
-  }
-
-
-  return muValues.back();
-
-
-} 
-
-
-
-
-
-
 
 
 
@@ -1264,6 +838,13 @@ void autofocus::setPGain(double gain) {
 
 double autofocus::getPGain() const { return Kp; }
 
+double autofocus::low_pass_filter(double totalPdSignal, double previoustotalPdSignal){
+
+  double filtered_signal = 1*totalPdSignal + 0*previoustotalPdSignal;
+
+  // std::cout << "original_signal:" << totalPdSignal << "   filtered_signal:" << filtered_signal << std::endl;
+  return filtered_signal;
+}
 
 struct data {
   double *t;
@@ -1440,194 +1021,6 @@ solve_system(gsl_vector *x, gsl_multifit_nlinear_fdf *fdf,
   return n_iter;
 }
 
-double
-autofocus::computeBestFocusGSL(cv::Mat image, int imgHeight,
-                                          int imgWidth) {
-  auto startTime = std::chrono::high_resolution_clock::now();
-
-  // Resize to 1/2 x 1/2
-  // auto resizeStart = std::chrono::high_resolution_clock::now();
-  // cv::Mat resized;
-  // cv::resize(image, resized, cv::Size(), 0.5, 0.5);
-  // auto resizeEnd = std::chrono::high_resolution_clock::now();
-  // auto resizeStart = std::chrono::high_resolution_clock::now();
-  // cv::Mat resized;
-  // cv::resize(image, resized, cv::Size(), 0.5, 0.5);
-  // auto resizeEnd = std::chrono::high_resolution_clock::now();
-
-  // Gaussian blur
-  auto gauussianStart = std::chrono::high_resolution_clock::now();
-  cv::Mat blurred;
-  cv::GaussianBlur(image, blurred, cv::Size(3, 3), 0, 0, cv::BORDER_DEFAULT);
-  auto gaussianEnd = std::chrono::high_resolution_clock::now();
-
-  // Roberts Cross gradients -> sharpness image (float)
-  auto robertsStart = std::chrono::high_resolution_clock::now();
-  // cv::filter2D(image, img_x_preallocated, CV_16S, roberts_kernelx);
-  // cv::filter2D(image, img_y_preallocated, CV_16S, roberts_kernely);
-  cv::filter2D(blurred, img_x_preallocated, CV_16S, roberts_kernelx);
-  cv::filter2D(blurred, img_y_preallocated, CV_16S, roberts_kernely);
-  cv::multiply(img_x_preallocated, img_x_preallocated, img_x_squared_preallocated);
-  cv::multiply(img_y_preallocated, img_y_preallocated, img_y_squared_preallocated);
-  cv::add(img_x_squared_preallocated, img_y_squared_preallocated, sum_xy_preallocated);
-  auto robertsEnd = std::chrono::high_resolution_clock::now();
-
-  // Column means
-  auto columnStart = std::chrono::high_resolution_clock::now();
-  cv::Mat columnMeansMatrix, columnMeansBlurred;
-  cv::reduce(sum_xy_preallocated, columnMeansMatrix, 0, cv::REDUCE_AVG, CV_32F);
-  // Use the Mat data directly with pointer(no copy)
-  int cols = columnMeansMatrix.cols;
-  const float* colPtr = cols > 0 ? columnMeansMatrix.ptr<float>(0) : nullptr;
-  auto columnEnd = std::chrono::high_resolution_clock::now();
-
-  // Compute offset
-  auto offsetStart = std::chrono::high_resolution_clock::now();
-  const int offsetWindow = 50;
-  double offset_left = 0.0, offset_right = 0.0;
-  if (cols > 0 && colPtr) {
-      int w = std::min(offsetWindow, cols);
-      // Use OpenCV's optimized sum on column subranges (columnMeansMatrix is CV_32F)
-      cv::Mat left = columnMeansMatrix.colRange(0, w);
-      cv::Mat right = columnMeansMatrix.colRange(cols - w, cols);
-      double leftSum = cv::sum(left)[0];
-      double rightSum = cv::sum(right)[0];
-      offset_left = leftSum / static_cast<double>(w);
-      offset_right = rightSum / static_cast<double>(w);
-  } else {
-      offset_left = 0.0;
-      offset_right = 0.0;
-  }
-  double offset = std::min(offset_left, offset_right);
-
-  // Build x_values / y_values converting floats to doubles as needed
-  std::vector<double> x_values;
-  std::vector<double> y_values;
-  x_values.reserve(cols);
-  y_values.reserve(cols);
-  for (int i = 0; i < cols; ++i) {
-      double adjusted_value = (colPtr ? static_cast<double>(colPtr[i]) : 0.0) - offset;
-      y_values.push_back(adjusted_value);
-      x_values.push_back(static_cast<double>(i));
-  }
-  // Move the x_values
-  const size_t n = y_values.size();
-  std::transform(x_values.begin(), x_values.end(), x_values.begin(),
-               [n](double x) { return (x / n) - 0.5; });
-
-  // Find the max value and its location as initial guess
-  // double y_max = *std::max_element(y_values.begin(), y_values.end());
-  auto maxIt = std::max_element(y_values.begin(), y_values.end());
-  double y_max = *maxIt;
-  size_t idx = std::distance(y_values.begin(), maxIt);
-  double x_at_y_max = x_values[idx];
-
-  auto offsetEnd = std::chrono::high_resolution_clock::now();
-
-  // Gaussian Fitting using GSL
-  auto fittingStart = std::chrono::high_resolution_clock::now();
-  // Construct data for GSL fitting
-  struct data fit_data = { x_values.data(), y_values.data(), y_values.size() };
-
-  // const size_t n = y_values.size();
-  const size_t p = 3; // number of parameters: a, b, c
-  gsl_vector *f = gsl_vector_alloc(n);
-  gsl_vector *x = gsl_vector_alloc(p);
-  gsl_multifit_nlinear_fdf fdf;
-  gsl_multifit_nlinear_parameters fdf_params =
-    gsl_multifit_nlinear_default_parameters();
-  
-  /* define function to be minimized */
-  fdf.f = func_f;
-  fdf.df = func_df;
-  fdf.fvv = func_fvv;
-  fdf.n = n;
-  fdf.p = p;
-  fdf.params = &fit_data;
-
-  /* initial guess for parameters */
-  gsl_vector_set(x, 0, y_max);
-  gsl_vector_set(x, 1, x_at_y_max); // Use x at max y as initial guess for mean
-  gsl_vector_set(x, 2, 0.25);
-
-  fdf_params.trs = gsl_multifit_nlinear_trs_lmaccel;
-  int niter = solve_system(x, &fdf, &fdf_params);
-
-  // std::cout << "GSL initial params: a=" << y_max << ", b=" << n / 2.0 << ", c=" << n / 4.0 << std::endl;
-
-  // std::cout << "GSL size of x,y: " << x_values.size() << ", " << y_values.size() << std::endl;
-
-  double A = gsl_vector_get(x, 0);
-  double B = gsl_vector_get(x, 1);
-  double C = gsl_vector_get(x, 2);
-  // double D = gsl_vector_get(x, 3);
-  // printf("Fitted parameters: A=%.4f, B=%.4f, C=%.4f\n", A, B, C);
-  gsl_vector_free(f);
-  gsl_vector_free(x);
-
-  B += 0.5; // Rescale back
-  B *= n;
-  C *= n;
-
-  B = std::clamp(B, -30.0, 700.0); // Clamp B to valid range
-
-  auto fittingEnd = std::chrono::high_resolution_clock::now();
-
-  // Visualise
-  if (bSaveImages) {
-    lastSharpnessCurve = y_values;
-    double locBestFocusDouble = B; // Mean from GSL fit
-    SaveImagesPnG(image, locBestFocusDouble, A, C, 0, increment2);
-    increment2++;
-
-  }
-
-  auto endTime = std::chrono::high_resolution_clock::now();
-
-   // --- Timing log unchanged footprint, writing "com_time_us" as estimator time
-  // ---
-  auto totalTime =
-      std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
-  // auto resizeTime = std::chrono::duration_cast<std::chrono::microseconds>(
-  //     resizeEnd - resizeStart);
-  auto gaussianTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      gaussianEnd - gauussianStart);
-  auto robertsTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      robertsEnd - robertsStart);
-  auto columnTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      columnEnd - columnStart);
-  auto offsetTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      offsetEnd - offsetStart);
-  auto fittingTime = std::chrono::duration_cast<std::chrono::microseconds>(
-      fittingEnd - fittingStart);
-
-  try {
-    std::ofstream GSLBenchmarkFile("../output/focus_benchmark_GSL.csv",
-                                       std::ios::app);
-    if (GSLBenchmarkFile.is_open() && GSLBenchmarkFile.good()) {
-      auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           std::chrono::system_clock::now().time_since_epoch())
-                           .count();
-      // keep CSV header compatibility: write estimator time in the
-      // "com_time_us" column
-      GSLBenchmarkFile << timestamp << "," << totalTime.count() << ","
-                           << gaussianTime.count() << ","
-                           << robertsTime.count() << "," 
-                           << columnTime.count() << ","
-                           << offsetTime.count() << "," 
-                           << fittingTime.count() << ","
-                           << std::endl;
-      GSLBenchmarkFile.close();
-    }
-  } catch (...) { /* ignore */
-  }
-
-
-  return B; // Return the mean (best focus position)
-}
-
-
-
 // Functor used in Eigen LM (see below) 
 struct LMFunctor : Eigen::DenseFunctor<double> {
   const std::vector<double>& x_values;
@@ -1714,11 +1107,6 @@ struct LMFunctor : Eigen::DenseFunctor<double> {
         return 0;
     }
 };
-
-
-
-
-
 
 
 
