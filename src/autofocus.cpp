@@ -50,6 +50,25 @@
 
 #include "settings.hpp"
 
+// ---- First-order low-pass (exponential moving average) ----
+class FirstOrderLPF {
+public:
+  FirstOrderLPF(double fc, double fs) {       // fc = cutoff (Hz), fs = sample rate (Hz)
+    double dt = 1.0 / fs;
+    double w  = 2.0 * 3.14159265358979 * fc;
+    alpha_ = (w * dt) / (w * dt + 1.0);
+  }
+  double filter(double x) {
+    if (!init_) { y_ = x; init_ = true; return y_; }
+    y_ = y_ + alpha_ * (x - y_);
+    return y_;
+  }
+  void reset() { init_ = false; y_ = 0.0; }
+private:
+  double alpha_ = 0.0, y_ = 0.0;
+  bool init_ = false;
+};
+
 // Global variables
 
 // 0.0057 mm per pixel is the average!!!!
@@ -371,6 +390,11 @@ void autofocus::run() {
   PID pid(dt, max, min, Kp, Kd, Ki);
   std::cout << "[autofocus::run] INITIALIZED PID with Kp=" << Kp << ", Kd=" << Kd << ", Ki=" << Ki << std::endl;
 
+  // ---- Low-pass filters to reject high-frequency vibration ----
+  const double fs = 60.0;   // sample rate = camera fps
+  const double fc = 10.5;    // cutoff (Hz): pass real focus drift, block vibration
+  FirstOrderLPF  lpf1(fc, fs);      // Butterworth (zeta = 0.707)
+
   if (bAutofocusLogFlag) {
     logger->info("[autofocus::run] while thread loop about to start");
   }
@@ -437,6 +461,7 @@ void autofocus::run() {
         // If imgcount==1, then the user has just turned on FindFocus or
         // HoldFocus
         if (imgcount == 1) {
+          lpf1.reset(); // Reset low-pass filter when starting autofocus
           if (bHoldFocus) {
             std::cout << "bHoldfocus is set to 1" << std::endl;
             // Shan testing:
@@ -540,14 +565,20 @@ void autofocus::run() {
         // Store for next iteration
         // previousError = currentError; not actually used
         filteredPreviousError = filteredCurrentError;
-        
-        // Shan: Implement a low-pass filter here?
-        double filteredSignal = low_pass_filter(totalPdSignal, previoustotalPdSignal);
-        double previoustotalPdSignal = filteredSignal;
+
+        // Alex: Implement a low-pass filter here?
+        // Low-pass the COMMAND to reject vibration before sending to lens ----
+        double filtered1 = lpf1.filter(totalPdSignal);   
+        totalPdSignal = filtered1;
+
+        // Re-apply limits (filtering can overshoot the clamp slightly)
+        if (totalPdSignal > max) totalPdSignal = max;
+        else if (totalPdSignal < min) totalPdSignal = min;
+
 
         // Skipping blink detection
         // mmToMove = totalPdSignal;
-        mmToMove = filteredSignal;
+        mmToMove = totalPdSignal;
         mmToMoveTimestamp = std::chrono::system_clock::now().time_since_epoch().count();
         bNewMoveRel = 1;
 
@@ -841,7 +872,7 @@ double autofocus::getPGain() const { return Kp; }
 
 double autofocus::low_pass_filter(double totalPdSignal, double previoustotalPdSignal){
 
-  double filtered_signal = 1*totalPdSignal + 0*previoustotalPdSignal;
+  double filtered_signal = 0.9*totalPdSignal + 0.1*previoustotalPdSignal;
 
   // std::cout << "original_signal:" << totalPdSignal << "   filtered_signal:" << filtered_signal << std::endl;
   return filtered_signal;
